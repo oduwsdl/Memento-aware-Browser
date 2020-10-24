@@ -14,7 +14,7 @@ const uint32_t kPipeElementMaxSize = 0x1000u;
 const uint32_t kPipeCapacityMaxSize = 0x100000u;
 const uint32_t kPipeActionMaxSize = 0x100000u;
 
-Context::Context() : message_(0, 0, 0, 0, nullptr) {}
+Context::Context() = default;
 
 Context::~Context() = default;
 
@@ -22,49 +22,68 @@ Context::Storage::Storage() = default;
 
 Context::Storage::~Storage() = default;
 
-void Context::StartTestcase(
-    TestcaseBase* testcase,
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
-  testcase_ = testcase;
-  task_runner_ = task_runner;
+void Context::StartTestcase() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void Context::EndTestcase() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Some fuzzers need to destroy the fuzzer thread along with their testcase,
+  // so we need to detach the sequence checker here so that it will be attached
+  // to the new sequence for the next testcase.
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+  // We need to destroy all Remotes/Receivers before we start destroying other
+  // objects (like callbacks).
+  for (const TypeId& interface_type_id : interface_type_ids_) {
+    auto instances_iter = instances_.find(interface_type_id);
+    if (instances_iter != instances_.end()) {
+      instances_iter->second.clear();
+    }
+  }
+  interface_type_ids_.clear();
   instances_.clear();
-  testcase_ = nullptr;
 }
 
-bool Context::IsFinished() {
-  if (testcase_) {
-    return testcase_->IsFinished();
+void Context::StartDeserialization() {
+  rollback_.clear();
+}
+
+void Context::EndDeserialization(Rollback rollback) {
+  if (rollback == Rollback::kRollback) {
+    for (const auto& entry : rollback_) {
+      RemoveInstance(entry.first, entry.second);
+    }
   }
-  return true;
+  rollback_.clear();
 }
 
-void Context::NextAction() {
-  // fprintf(stderr, "NextAction\n");
-  CHECK(task_runner_->RunsTasksInCurrentSequence());
-  if (testcase_) {
-    testcase_->NextAction();
+void Context::RemoveInstance(TypeId type_id, uint32_t id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  auto instances_iter = instances_.find(type_id);
+  if (instances_iter != instances_.end()) {
+    auto& instance_map = instances_iter->second;
+
+    // normalize id to [0, max_id]
+    if (instance_map.size() > 0 && instance_map.rbegin()->first < id) {
+      id = id % (instance_map.rbegin()->first + 1);
+    }
+
+    // choose the first valid entry after id
+    auto instance = instance_map.lower_bound(id);
+    if (instance == instance_map.end()) {
+      mojolpmdbg("failed!\n");
+      return;
+    }
+
+    instance_map.erase(instance);
+  } else {
+    mojolpmdbg("failed!\n");
   }
 }
-
-void Context::PostNextAction() {
-  if (task_runner_) {
-    task_runner_->PostTask(FROM_HERE, base::BindOnce(&Context::NextAction,
-                                                     base::Unretained(this)));
-  }
-}
-
-Context* g_context = nullptr;
 
 Context* GetContext() {
-  DCHECK(g_context);
-  return g_context;
-}
-
-void SetContext(Context* context) {
-  g_context = context;
+  static base::NoDestructor<Context> context;
+  return context.get();
 }
 
 bool FromProto(const bool& input, bool& output) {

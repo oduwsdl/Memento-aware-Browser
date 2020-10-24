@@ -17,8 +17,6 @@ namespace media {
 
 VideoFrameMetadata::VideoFrameMetadata() = default;
 
-VideoFrameMetadata::~VideoFrameMetadata() = default;
-
 VideoFrameMetadata::VideoFrameMetadata(const VideoFrameMetadata& other) =
     default;
 
@@ -33,13 +31,12 @@ void VideoFrameMetadata::MergeMetadataFrom(
   MERGE_FIELD(capture_end_time, metadata_source);
   MERGE_FIELD(capture_counter, metadata_source);
   MERGE_FIELD(capture_update_rect, metadata_source);
-  MERGE_FIELD(copy_required, metadata_source);
+  MERGE_FIELD(copy_mode, metadata_source);
   MERGE_FIELD(end_of_stream, metadata_source);
   MERGE_FIELD(frame_duration, metadata_source);
   MERGE_FIELD(frame_rate, metadata_source);
   MERGE_FIELD(interactive_content, metadata_source);
   MERGE_FIELD(reference_time, metadata_source);
-  MERGE_FIELD(resource_utilization, metadata_source);
   MERGE_FIELD(read_lock_fences_enabled, metadata_source);
   MERGE_FIELD(rotation, metadata_source);
   MERGE_FIELD(texture_owner, metadata_source);

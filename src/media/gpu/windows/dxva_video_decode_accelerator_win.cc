@@ -23,7 +23,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -577,7 +576,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
     const gpu::GpuDriverBugWorkarounds& workarounds,
     const gpu::GpuPreferences& gpu_preferences,
     MediaLog* media_log)
-    : client_(NULL),
+    : client_(nullptr),
       dev_manager_reset_token_(0),
       dx11_dev_manager_reset_token_(0),
       egl_config_(NULL),
@@ -595,11 +594,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       enable_low_latency_(gpu_preferences.enable_low_latency_dxva),
       support_share_nv12_textures_(
           gpu_preferences.enable_zero_copy_dxgi_video &&
-          !workarounds.disable_dxgi_zero_copy_video &&
-          /* Sharing will use an array texture, so avoid it if arrays are being
-           * worked around.  https://crbug.com/971952 .
-           */
-          !workarounds.use_single_video_decoder_texture),
+          !workarounds.disable_dxgi_zero_copy_video),
       num_picture_buffers_requested_(support_share_nv12_textures_
                                          ? kNumPictureBuffersForZeroCopy
                                          : kNumPictureBuffers),
@@ -612,8 +607,12 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       use_keyed_mutex_(false),
       using_angle_device_(false),
       using_debug_device_(false),
-      enable_accelerated_vpx_decode_(
-          !workarounds.disable_accelerated_vpx_decode),
+      enable_accelerated_av1_decode_(
+          !workarounds.disable_accelerated_av1_decode),
+      enable_accelerated_vp8_decode_(
+          !workarounds.disable_accelerated_vp8_decode),
+      enable_accelerated_vp9_decode_(
+          !workarounds.disable_accelerated_vp9_decode),
       processing_config_changed_(false),
       use_empty_video_hdr_metadata_(workarounds.use_empty_video_hdr_metadata) {
   weak_ptr_ = weak_this_factory_.GetWeakPtr();
@@ -623,7 +622,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
 }
 
 DXVAVideoDecodeAccelerator::~DXVAVideoDecodeAccelerator() {
-  client_ = NULL;
+  client_ = nullptr;
 }
 
 bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
@@ -756,6 +755,7 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
   if (codec_ == kCodecVP9)
     config_change_detector_.reset(new VP9ConfigChangeDetector());
 
+  processing_config_changed_ = false;
   SetState(kNormal);
 
   UMA_HISTOGRAM_ENUMERATION("Media.DXVAVDA.PictureBufferMechanism",
@@ -972,7 +972,7 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
   }
 
   // Create the display information.
-  display_helper_.emplace(D3D11Device());
+  hdr_metadata_helper_.emplace(D3D11Device());
 
   hr = d3d11_device_context_.As(&video_context_);
   RETURN_ON_HR_FAILURE(hr, "Failed to get video context", false);
@@ -1400,7 +1400,7 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
       return false;
     }
 
-    // Check version of DLL, version 6.1.7140 is blacklisted due to high crash
+    // Check version of DLL, version 6.1.7140 is blocked due to high crash
     // rates in browsers loading that DLL. If that is the version installed we
     // fall back to software decoding. See crbug/403440.
     std::unique_ptr<FileVersionInfo> version_info(
@@ -1409,21 +1409,24 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
                       false);
     base::string16 file_version = version_info->file_version();
     RETURN_ON_FAILURE(file_version.find(L"6.1.7140") == base::string16::npos,
-                      "blacklisted version of msmpeg2vdec.dll 6.1.7140", false);
+                      "blocked version of msmpeg2vdec.dll 6.1.7140", false);
     codec_ = kCodecH264;
     clsid = __uuidof(CMSH264DecoderMFT);
-  } else if (enable_accelerated_vpx_decode_ &&
-             ((profile >= VP9PROFILE_PROFILE0 &&
-               profile <= VP9PROFILE_PROFILE3) ||
-              profile == VP8PROFILE_ANY)) {
+  } else if ((profile >= VP9PROFILE_PROFILE0 &&
+              profile <= VP9PROFILE_PROFILE3) ||
+             profile == VP8PROFILE_ANY) {
     codec_ = profile == VP8PROFILE_ANY ? kCodecVP8 : kCodecVP9;
-    clsid = CLSID_MSVPxDecoder;
-    decoder_dll = ::LoadLibrary(kMSVPxDecoderDLLName);
-    if (decoder_dll)
-      using_ms_vpx_mft_ = true;
+    if ((codec_ == kCodecVP8 && enable_accelerated_vp8_decode_) ||
+        (codec_ == kCodecVP9 && enable_accelerated_vp9_decode_)) {
+      clsid = CLSID_MSVPxDecoder;
+      decoder_dll = ::LoadLibrary(kMSVPxDecoderDLLName);
+      if (decoder_dll)
+        using_ms_vpx_mft_ = true;
+    }
   }
 
-  if (base::FeatureList::IsEnabled(kMediaFoundationAV1Decoding) &&
+  if (enable_accelerated_av1_decode_ &&
+      base::FeatureList::IsEnabled(kMediaFoundationAV1Decoding) &&
       (profile >= AV1PROFILE_MIN && profile <= AV1PROFILE_MAX)) {
     codec_ = kCodecAV1;
     clsid = CLSID_CAV1DecoderMFT;
@@ -1639,25 +1642,27 @@ bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
     RETURN_ON_HR_FAILURE(hr, "Failed to set interlace mode", false);
   }
 
+  Microsoft::WRL::ComPtr<IMFAttributes> out_attributes;
+  hr = decoder_->GetOutputStreamAttributes(0, &out_attributes);
+  RETURN_ON_HR_FAILURE(hr, "Failed to get stream attributes", false);
+
+  // On Intel Gen9 and older devices, textures need to be created with a share
+  // handle or they'll crash in CreateShaderResourceView. crbug.com/1107403
+  // Technically MF_SA_D3D11_SHARED_WITHOUT_MUTEX is only honored by the sample
+  // allocator, not by the media foundation transform, but Microsoft's h.264
+  // transform happens to pass it through.
+  out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, TRUE);
+
   // These bind flags _must_ be set before SetInputType or SetOutputType to
   // ensure that we get the proper surfaces created under the hood.
   if (GetPictureBufferMechanism() == PictureBufferMechanism::BIND) {
-    Microsoft::WRL::ComPtr<IMFAttributes> out_attributes;
-    HRESULT hr = decoder_->GetOutputStreamAttributes(0, &out_attributes);
-    RETURN_ON_HR_FAILURE(hr, "Failed to get stream attributes", false);
     out_attributes->SetUINT32(MF_SA_D3D11_BINDFLAGS,
                               D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_DECODER);
     // TODO(sunnyps): Find if we can always set resource sharing to disabled
     if (gl::DirectCompositionSurfaceWin::IsDecodeSwapChainSupported()) {
       // Decode swap chains do not support shared resources.
       out_attributes->SetUINT32(MF_SA_D3D11_SHARED, FALSE);
-    } else {
-      // For some reason newer Intel drivers need D3D11_BIND_DECODER textures to
-      // be created with a share handle or they'll crash in
-      // CreateShaderResourceView.  Technically MF_SA_D3D11_SHARED_WITHOUT_MUTEX
-      // is only honored by the sample allocator, not by the media foundation
-      // transform, but Microsoft's h.264 transform happens to pass it through.
-      out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, TRUE);
+      out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, FALSE);
     }
   }
 
@@ -1949,7 +1954,7 @@ void DXVAVideoDecodeAccelerator::StopOnError(
 
   if (client_)
     client_->NotifyError(error);
-  client_ = NULL;
+  client_ = nullptr;
 
 #ifdef _DEBUG
   if (using_debug_device_) {
@@ -1985,16 +1990,34 @@ void DXVAVideoDecodeAccelerator::StopOnError(
   }
 }
 
-void DXVAVideoDecodeAccelerator::Invalidate() {
+void DXVAVideoDecodeAccelerator::Invalidate(bool for_config_change) {
+  DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
+
   if (GetState() == kUninitialized)
     return;
 
   // Best effort to make the GL context current.
-  make_context_current_cb_.Run();
+  if (!make_context_current_cb_.Run()) {
+    // TODO(crbug.com/1139489): This may not be the right fix.
+    for (auto& kv : output_picture_buffers_) {
+      if (auto* fence = kv.second->reuse_fence())
+        fence->Invalidate();
+    }
+    for (auto& kv : stale_output_picture_buffers_) {
+      if (auto* fence = kv.second->reuse_fence())
+        fence->Invalidate();
+    }
+
+    // Since this is called by StopOnError() we can't call it directly.
+    DLOG(ERROR) << "Failed to make context current.";
+    for_config_change = false;
+    if (client_) {
+      client_->NotifyError(PLATFORM_FAILURE);
+      client_ = nullptr;
+    }
+  }
 
   StopDecoderThread();
-  weak_this_factory_.InvalidateWeakPtrs();
-  weak_ptr_ = weak_this_factory_.GetWeakPtr();
   pending_output_samples_.clear();
   decoder_.Reset();
   config_change_detector_.reset();
@@ -2004,7 +2027,10 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
   // output picture buffers may need to be recreated in case the video
   // resolution changes. We already handle that in the
   // HandleResolutionChanged() function.
-  if (GetState() != kConfigChange) {
+  if (!for_config_change) {
+    weak_this_factory_.InvalidateWeakPtrs();
+    weak_ptr_ = weak_this_factory_.GetWeakPtr();
+
     output_picture_buffers_.clear();
     stale_output_picture_buffers_.clear();
     // We want to continue processing pending input after detecting a config
@@ -2034,29 +2060,6 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
 }
 
 void DXVAVideoDecodeAccelerator::StopDecoderThread() {
-  // Try to determine what, if any exception last happened before a hang. See
-  // http://crbug.com/613701
-  uint64_t last_process_output_time = g_last_process_output_time;
-  HRESULT last_device_removed_reason = g_last_device_removed_reason;
-  LARGE_INTEGER perf_frequency;
-  ::QueryPerformanceFrequency(&perf_frequency);
-  uint32_t output_array_size = output_array_size_;
-  size_t sample_count;
-  {
-    base::AutoLock lock(decoder_lock_);
-    sample_count = pending_output_samples_.size();
-  }
-  size_t stale_output_picture_buffers_size =
-      stale_output_picture_buffers_.size();
-  PictureBufferMechanism mechanism = GetPictureBufferMechanism();
-
-  base::debug::Alias(&last_process_output_time);
-  base::debug::Alias(&last_device_removed_reason);
-  base::debug::Alias(&perf_frequency.QuadPart);
-  base::debug::Alias(&output_array_size);
-  base::debug::Alias(&sample_count);
-  base::debug::Alias(&stale_output_picture_buffers_size);
-  base::debug::Alias(&mechanism);
   decoder_thread_.Stop();
 }
 
@@ -2202,7 +2205,6 @@ void DXVAVideoDecodeAccelerator::FlushInternal() {
         FROM_HERE, base::BindOnce(&DXVAVideoDecodeAccelerator::NotifyFlushDone,
                                   weak_ptr_));
   } else {
-    processing_config_changed_ = false;
     main_thread_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&DXVAVideoDecodeAccelerator::ConfigChanged,
                                   weak_ptr_, config_));
@@ -2219,7 +2221,8 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
   if (GetState() == kUninitialized)
     return;
 
-  if (OutputSamplesPresent() || !pending_input_buffers_.empty()) {
+  if (OutputSamplesPresent() || !pending_input_buffers_.empty() ||
+      processing_config_changed_) {
     pending_input_buffers_.push_back(sample);
     return;
   }
@@ -2929,13 +2932,13 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
 }
 
 void DXVAVideoDecodeAccelerator::SetDX11ProcessorHDRMetadataIfNeeded() {
-  DCHECK(display_helper_);
+  DCHECK(hdr_metadata_helper_);
 
   // If we don't know the input metadata, then we'll still send the
   // monitor output.
 
   // Do nothing without display metadata.
-  auto dxgi_display_metadata = display_helper_->GetDisplayMetadata();
+  auto dxgi_display_metadata = hdr_metadata_helper_->GetDisplayMetadata();
   if (!dxgi_display_metadata)
     return;
 
@@ -2948,12 +2951,12 @@ void DXVAVideoDecodeAccelerator::SetDX11ProcessorHDRMetadataIfNeeded() {
   // stream metadata.  For the Radeon 5700, at least, this seems to do
   // something sane.  Not setting the metadata crashes intermittently.
   if (config_.hdr_metadata || use_empty_video_hdr_metadata_) {
-    HDRMetadata stream_metadata;
+    gl::HDRMetadata stream_metadata;
     if (config_.hdr_metadata)
       stream_metadata = *config_.hdr_metadata;
 
     DXGI_HDR_METADATA_HDR10 dxgi_stream_metadata =
-        DisplayHelper::HdrMetadataToDXGI(stream_metadata);
+        gl::HDRMetadataHelperWin::HDRMetadataToDXGI(stream_metadata);
 
     video_context2->VideoProcessorSetStreamHDRMetaData(
         d3d11_processor_.Get(), 0, DXGI_HDR_METADATA_TYPE_HDR10,
@@ -3053,9 +3056,7 @@ HRESULT DXVAVideoDecodeAccelerator::CheckConfigChanged(IMFSample* sample,
 
 void DXVAVideoDecodeAccelerator::ConfigChanged(const Config& config) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
-
-  SetState(kConfigChange);
-  Invalidate();
+  Invalidate(/*for_config_change=*/true);
   Initialize(config_, client_);
   decoder_thread_task_runner_->PostTask(
       FROM_HERE,

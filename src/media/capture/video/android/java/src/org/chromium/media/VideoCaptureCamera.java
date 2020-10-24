@@ -189,6 +189,13 @@ public class VideoCaptureCamera
         return VideoCaptureApi.ANDROID_API1;
     }
 
+    static boolean isZoomSupported(int id) {
+        // Workaround for https://crbug.com/1138608: Detecting zoom support requires opening the
+        // camera which can conflict with calls to allocate() and cause the "real" camera open to
+        // fail.
+        return false;
+    }
+
     static int getFacingMode(int id) {
         android.hardware.Camera.CameraInfo cameraInfo = VideoCaptureCamera.getCameraInfo(id);
         if (cameraInfo == null) {

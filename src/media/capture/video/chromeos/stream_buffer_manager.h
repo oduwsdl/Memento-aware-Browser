@@ -64,9 +64,11 @@ class CAPTURE_EXPORT StreamBufferManager final {
   // clockwise degrees that the source frame would be rotated to, and the valid
   // values are 0, 90, 180, and 270.  Returns the VideoCaptureFormat of the
   // returned buffer in |format|.
+  //
+  // TODO(crbug.com/990682): Remove the |rotation| arg when we disable the
+  // camera frame rotation for good.
   base::Optional<Buffer> AcquireBufferForClientById(StreamType stream_type,
                                                     uint64_t buffer_ipc_id,
-                                                    int rotation,
                                                     VideoCaptureFormat* format);
 
   VideoCaptureFormat GetStreamCaptureFormat(StreamType stream_type);
@@ -131,6 +133,8 @@ class CAPTURE_EXPORT StreamBufferManager final {
     cros::mojom::Camera3StreamPtr stream;
     // The dimension of the buffer layout.
     gfx::Size buffer_dimension;
+    // The usage of the buffer.
+    gfx::BufferUsage buffer_usage;
     // The allocated buffer pairs.
     std::map<int, BufferPair> buffers;
     // The free buffers of this stream.  The queue stores keys into the

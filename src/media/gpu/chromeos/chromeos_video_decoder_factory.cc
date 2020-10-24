@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/sequenced_task_runner.h"
+#include "media/base/media_log.h"
 #include "media/base/video_decoder.h"
 #include "media/gpu/buildflags.h"
 #include "media/gpu/chromeos/mailbox_video_frame_converter.h"
@@ -18,50 +19,45 @@
 #endif
 
 #if BUILDFLAG(USE_V4L2_CODEC)
-#include "media/gpu/v4l2/v4l2_slice_video_decoder.h"
+#include "media/gpu/v4l2/v4l2_video_decoder.h"
 #endif
 
 namespace media {
 
 namespace {
 
-// Get a list of the available functions for creating VideoDeocoder.
-base::queue<VideoDecoderPipeline::CreateVDFunc> GetCreateVDFunctions(
-    VideoDecoderPipeline::CreateVDFunc cur_create_vd_func) {
-  static constexpr VideoDecoderPipeline::CreateVDFunc kCreateVDFuncs[] = {
+// Gets a list of the available functions for creating VideoDecoders.
+VideoDecoderPipeline::CreateDecoderFunctions GetCreateDecoderFunctions() {
+  constexpr VideoDecoderPipeline::CreateDecoderFunction kCreateVDFuncs[] = {
 #if BUILDFLAG(USE_VAAPI)
     &VaapiVideoDecoder::Create,
 #endif  // BUILDFLAG(USE_VAAPI)
 
 #if BUILDFLAG(USE_V4L2_CODEC)
-    &V4L2SliceVideoDecoder::Create,
+    &V4L2VideoDecoder::Create,
 #endif  // BUILDFLAG(USE_V4L2_CODEC)
   };
 
-  base::queue<VideoDecoderPipeline::CreateVDFunc> ret;
-  for (const auto& func : kCreateVDFuncs) {
-    if (func != cur_create_vd_func)
-      ret.push(func);
-  }
-  return ret;
+  return VideoDecoderPipeline::CreateDecoderFunctions(
+      kCreateVDFuncs, kCreateVDFuncs + base::size(kCreateVDFuncs));
 }
 
 }  // namespace
 
 // static
-SupportedVideoDecoderConfigs
-ChromeosVideoDecoderFactory::GetSupportedConfigs() {
+SupportedVideoDecoderConfigs ChromeosVideoDecoderFactory::GetSupportedConfigs(
+    const gpu::GpuDriverBugWorkarounds& workarounds) {
   SupportedVideoDecoderConfigs supported_configs;
   SupportedVideoDecoderConfigs configs;
 
 #if BUILDFLAG(USE_VAAPI)
-  configs = VaapiVideoDecoder::GetSupportedConfigs();
+  configs = VaapiVideoDecoder::GetSupportedConfigs(workarounds);
   supported_configs.insert(supported_configs.end(), configs.begin(),
                            configs.end());
 #endif  // BUILDFLAG(USE_VAAPI)
 
 #if BUILDFLAG(USE_V4L2_CODEC)
-  configs = V4L2SliceVideoDecoder::GetSupportedConfigs();
+  configs = V4L2VideoDecoder::GetSupportedConfigs();
   supported_configs.insert(supported_configs.end(), configs.begin(),
                            configs.end());
 #endif  // BUILDFLAG(USE_V4L2_CODEC)
@@ -73,10 +69,12 @@ ChromeosVideoDecoderFactory::GetSupportedConfigs() {
 std::unique_ptr<VideoDecoder> ChromeosVideoDecoderFactory::Create(
     scoped_refptr<base::SequencedTaskRunner> client_task_runner,
     std::unique_ptr<DmabufVideoFramePool> frame_pool,
-    std::unique_ptr<VideoFrameConverter> frame_converter) {
+    std::unique_ptr<VideoFrameConverter> frame_converter,
+    std::unique_ptr<MediaLog> media_log) {
   return VideoDecoderPipeline::Create(
       std::move(client_task_runner), std::move(frame_pool),
-      std::move(frame_converter), base::BindRepeating(&GetCreateVDFunctions));
+      std::move(frame_converter), std::move(media_log),
+      base::BindRepeating(&GetCreateDecoderFunctions));
 }
 
 }  // namespace media

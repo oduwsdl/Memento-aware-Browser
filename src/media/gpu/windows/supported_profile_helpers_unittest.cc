@@ -56,19 +56,18 @@ class SupportedResolutionResolverTest : public ::testing::Test {
  public:
   void SetUp() override {
     gpu_workarounds_.disable_dxgi_zero_copy_video = false;
-    mock_d3d11_device_ = CreateD3D11Mock<NiceMock<D3D11DeviceMock>>();
+    mock_d3d11_device_ = MakeComPtr<NiceMock<D3D11DeviceMock>>();
 
-    mock_dxgi_device_ = CreateD3D11Mock<NiceMock<DXGIDeviceMock>>();
+    mock_dxgi_device_ = MakeComPtr<NiceMock<DXGIDeviceMock>>();
     ON_CALL(*mock_d3d11_device_.Get(), QueryInterface(IID_IDXGIDevice, _))
         .WillByDefault(SetComPointeeAndReturnOk<1>(mock_dxgi_device_.Get()));
 
-    mock_d3d11_video_device_ =
-        CreateD3D11Mock<NiceMock<D3D11VideoDeviceMock>>();
+    mock_d3d11_video_device_ = MakeComPtr<NiceMock<D3D11VideoDeviceMock>>();
     ON_CALL(*mock_d3d11_device_.Get(), QueryInterface(IID_ID3D11VideoDevice, _))
         .WillByDefault(
             SetComPointeeAndReturnOk<1>(mock_d3d11_video_device_.Get()));
 
-    mock_dxgi_adapter_ = CreateD3D11Mock<NiceMock<DXGIAdapterMock>>();
+    mock_dxgi_adapter_ = MakeComPtr<NiceMock<DXGIAdapterMock>>();
     ON_CALL(*mock_dxgi_device_.Get(), GetAdapter(_))
         .WillByDefault(SetComPointeeAndReturnOk<0>(mock_dxgi_adapter_.Get()));
 
@@ -188,7 +187,8 @@ TEST_F(SupportedResolutionResolverTest, HasH264SupportByDefault) {
 TEST_F(SupportedResolutionResolverTest, WorkaroundsDisableVpx) {
   DONT_RUN_ON_WIN_7();
 
-  gpu_workarounds_.disable_accelerated_vpx_decode = true;
+  gpu_workarounds_.disable_accelerated_vp8_decode = true;
+  gpu_workarounds_.disable_accelerated_vp9_decode = true;
   EnableDecoders({D3D11_DECODER_PROFILE_VP8_VLD,
                   D3D11_DECODER_PROFILE_VP9_VLD_PROFILE0,
                   D3D11_DECODER_PROFILE_VP9_VLD_10BIT_PROFILE2});
@@ -219,7 +219,19 @@ TEST_F(SupportedResolutionResolverTest, VP8Supports4k) {
 
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(kMediaFoundationVP8Decoding);
-  TestDecoderSupport(D3D11_DECODER_PROFILE_VP8_VLD, VP8PROFILE_ANY);
+
+  EnableDecoders({D3D11_DECODER_PROFILE_VP8_VLD});
+  SetMaxResolution(D3D11_DECODER_PROFILE_VP8_VLD, kSquare4k);
+
+  const auto supported_resolutions = GetSupportedD3D11VideoDecoderResolutions(
+      mock_d3d11_device_, gpu_workarounds_);
+  auto it = supported_resolutions.find(VP8PROFILE_ANY);
+  ASSERT_NE(it, supported_resolutions.end());
+  EXPECT_EQ(kSquare4k, it->second.max_landscape_resolution);
+  EXPECT_EQ(kSquare4k, it->second.max_portrait_resolution);
+
+  constexpr gfx::Size kMinVp8Resolution = gfx::Size(640, 480);
+  EXPECT_EQ(kMinVp8Resolution, it->second.min_resolution);
 }
 
 TEST_F(SupportedResolutionResolverTest, VP9Profile0Supports8k) {

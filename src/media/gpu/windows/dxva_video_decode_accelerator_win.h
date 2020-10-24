@@ -29,10 +29,10 @@
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/windows/d3d11_com_defs.h"
-#include "media/gpu/windows/display_helper.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gl/hdr_metadata_helper_win.h"
 
 interface IMFSample;
 interface IDirect3DSurface9;
@@ -85,7 +85,6 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
     kResetting,      // upon received Reset(), before ResetDone()
     kStopped,        // upon output EOS received.
     kFlushing,       // upon flush request received.
-    kConfigChange,   // stream configuration change detected.
   };
 
   // Does not take ownership of |client| which must outlive |*this|.
@@ -226,7 +225,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
 
   // Transitions the decoder to the uninitialized state. The decoder will stop
   // accepting requests in this state.
-  void Invalidate();
+  void Invalidate(bool for_config_change = false);
 
   // Stop and join on the decoder thread.
   void StopDecoderThread();
@@ -582,8 +581,12 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   bool using_angle_device_;
   bool using_debug_device_;
 
-  // Enables hardware acceleration for VP9 video decoding.
-  const bool enable_accelerated_vpx_decode_;
+  // Enables hardware acceleration for AV1 video decoding.
+  const bool enable_accelerated_av1_decode_;
+
+  // Enables hardware acceleration for VP8/VP9 video decoding.
+  const bool enable_accelerated_vp8_decode_;
+  const bool enable_accelerated_vp9_decode_;
 
   // The media foundation H.264 decoder has problems handling changes like
   // resolution change, bitrate change etc. If we reinitialize the decoder
@@ -603,7 +606,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   gfx::Rect current_visible_rect_;
   VideoColorSpace current_color_space_;
 
-  base::Optional<DisplayHelper> display_helper_;
+  base::Optional<gl::HDRMetadataHelperWin> hdr_metadata_helper_;
   bool use_empty_video_hdr_metadata_ = false;
 
   // WeakPtrFactory for posting tasks back to |this|.

@@ -106,9 +106,19 @@ class TestVideoConfig {
   static VideoDecoderConfig Large(VideoCodec codec = kCodecVP8);
   static VideoDecoderConfig LargeEncrypted(VideoCodec codec = kCodecVP8);
 
+  // Returns a configuration that is larger in dimensions that Large().
+  static VideoDecoderConfig ExtraLarge(VideoCodec codec = kCodecVP8);
+  static VideoDecoderConfig ExtraLargeEncrypted(VideoCodec codec = kCodecVP8);
+
+  static VideoDecoderConfig Custom(gfx::Size size,
+                                   VideoCodec codec = kCodecVP8);
+  static VideoDecoderConfig CustomEncrypted(gfx::Size size,
+                                            VideoCodec codec = kCodecVP8);
+
   // Returns coded size for Normal and Large config.
   static gfx::Size NormalCodedSize();
   static gfx::Size LargeCodedSize();
+  static gfx::Size ExtraLargeCodedSize();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestVideoConfig);
@@ -120,6 +130,14 @@ class TestAudioConfig {
  public:
   static AudioDecoderConfig Normal();
   static AudioDecoderConfig NormalEncrypted();
+
+  // Returns configurations that have a higher sample rate than Normal()
+  static AudioDecoderConfig HighSampleRate();
+  static AudioDecoderConfig HighSampleRateEncrypted();
+
+  // Returns coded sample rate for Normal and HighSampleRate config.
+  static int NormalSampleRateValue();
+  static int HighSampleRateValue();
 };
 
 // Provides pre-canned AudioParameters objects.
@@ -206,13 +224,19 @@ MATCHER_P(SameStatusCode, status, "") {
   return arg.code() == status.code();
 }
 
-// Compares two an |arg| Status to a StatusCode provided
+// Compares an `arg` Status.code() to a test-supplied StatusCode.
 MATCHER_P(HasStatusCode, status_code, "") {
   return arg.code() == status_code;
 }
 
 MATCHER(IsOkStatus, "") {
   return arg.is_ok();
+}
+
+// True if and only if the Status would be interpreted as an error from a decode
+// callback (not okay, not aborted).
+MATCHER(IsDecodeErrorStatus, "") {
+  return !arg.is_ok() && arg.code() != StatusCode::kAborted;
 }
 
 // Compares two {Audio|Video}DecoderConfigs

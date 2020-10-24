@@ -33,10 +33,6 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
     return input.allow_overlay;
   }
 
-  static bool copy_required(const media::VideoFrameMetadata& input) {
-    return input.copy_required;
-  }
-
   static bool end_of_stream(const media::VideoFrameMetadata& input) {
     return input.end_of_stream;
   }
@@ -71,6 +67,11 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
 
   GENERATE_OPT_SERIALIZATION(int, capture_counter, 0)
 
+  GENERATE_OPT_SERIALIZATION(
+      media::VideoFrameMetadata::CopyMode,
+      copy_mode,
+      media::VideoFrameMetadata::CopyMode::kCopyToNewTexture)
+
   GENERATE_OPT_SERIALIZATION(media::VideoRotation,
                              rotation,
                              media::VideoRotation::VIDEO_ROTATION_0)
@@ -80,7 +81,6 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
   GENERATE_OPT_SERIALIZATION(double, root_scroll_offset_x, 0.0)
   GENERATE_OPT_SERIALIZATION(double, root_scroll_offset_y, 0.0)
   GENERATE_OPT_SERIALIZATION(double, top_controls_visible_height, 0.0)
-  GENERATE_OPT_SERIALIZATION(double, resource_utilization, 0.0)
   GENERATE_OPT_SERIALIZATION(double, frame_rate, 0.0)
   GENERATE_OPT_SERIALIZATION(double, rtp_timestamp, 0.0)
 

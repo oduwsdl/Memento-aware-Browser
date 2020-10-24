@@ -4,9 +4,9 @@
 """Generates C++ source files from a mojom.Module."""
 import os
 import sys
-from mojom_cpp_generator import _NameFormatter as CppNameFormatter
-from mojom_cpp_generator import Generator as CppGenerator
-from mojom_cpp_generator import IsNativeOnlyKind, NamespaceToArray
+from generators.mojom_cpp_generator import _NameFormatter as CppNameFormatter
+from generators.mojom_cpp_generator import Generator as CppGenerator
+from generators.mojom_cpp_generator import IsNativeOnlyKind, NamespaceToArray
 import mojom.generate.generator as generator
 import mojom.generate.module as mojom
 import mojom.generate.pack as pack
@@ -156,16 +156,16 @@ class Generator(CppGenerator):
 
     for interface in self.module.interfaces:
       for method in interface.methods:
-        # NB: intentionally skip the response_parameters here, since they are
-        # not currently referenced in the generated .proto files, so are not
-        # needed as imports.
         for parameter in method.parameters:
           AddKind(parameter.kind)
+        if method.response_parameters:
+          for parameter in method.response_parameters:
+            AddKind(parameter.kind)
 
     import_files = list(
         map(lambda x: '{}.mojolpm.proto'.format(x.path), seen_imports))
     if self.needs_mojolpm_proto:
-      import_files.append('mojolpm.proto')
+      import_files.append('mojo/public/tools/fuzzers/mojolpm.proto')
     import_files.sort()
 
     return import_files
@@ -346,30 +346,10 @@ class Generator(CppGenerator):
         or mojom.IsUnionKind(kind)):
       return self._GetCppProtoNameForKind(
           kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsInterfaceKind(kind):
-      return '%s::Ptr' % self._GetCppProtoNameForKind(
-          kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsInterfaceRequestKind(kind):
-      return '%s::Request' % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsAssociatedInterfaceKind(kind):
-      return '%s::AssociatedPtr' % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsAssociatedInterfaceRequestKind(kind):
-      return '%s::AssociatedRequest' % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsPendingRemoteKind(kind):
-      return "%s::PendingRemote" % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsPendingReceiverKind(kind):
-      return "%s::PendingReceiver" % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsPendingAssociatedRemoteKind(kind):
-      return "%s::PendingAssociatedRemote" % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
-    elif mojom.IsPendingAssociatedReceiverKind(kind):
-      return "%s::PendingAssociatedReceiver" % self._GetCppProtoNameForKind(
-          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
+    elif (mojom.IsPendingRemoteKind(kind) or mojom.IsPendingReceiverKind(kind)
+          or mojom.IsPendingAssociatedRemoteKind(kind)
+          or mojom.IsPendingAssociatedReceiverKind(kind)):
+      return "uint32_t"
     elif mojom.IsStringKind(kind):
       return "std::string"
     elif mojom.IsGenericHandleKind(kind):
@@ -403,25 +383,10 @@ class Generator(CppGenerator):
       return ("map<%sKey, %sValue>" %
               (self._GetProtoFieldType(kind.key_kind, quantified=False),
                self._GetProtoFieldType(kind.value_kind, quantified=False)))
-    elif mojom.IsInterfaceKind(kind):
-      unquantified = "%s.Ptr" % self._GetProtoNameForKind(kind)
-    elif mojom.IsInterfaceRequestKind(kind):
-      unquantified = "%s.Request" % self._GetProtoNameForKind(kind.kind)
-    elif mojom.IsAssociatedInterfaceKind(kind):
-      unquantified = "%s.AssociatedPtr" % self._GetProtoNameForKind(kind.kind)
-    elif mojom.IsAssociatedInterfaceRequestKind(kind):
-      unquantified = ("%s.AssociatedRequest" %
-                      self._GetProtoNameForKind(kind.kind))
-    elif mojom.IsPendingRemoteKind(kind):
-      unquantified = "%s.PendingRemote" % self._GetProtoNameForKind(kind.kind)
-    elif mojom.IsPendingReceiverKind(kind):
-      unquantified = "%s.PendingReceiver" % self._GetProtoNameForKind(kind.kind)
-    elif mojom.IsPendingAssociatedRemoteKind(kind):
-      unquantified = ("%s.PendingAssociatedRemote" %
-                      self._GetProtoNameForKind(kind.kind))
-    elif mojom.IsPendingAssociatedReceiverKind(kind):
-      unquantified = ("%s.PendingAssociatedReceiver" %
-                      self._GetProtoNameForKind(kind.kind))
+    elif (mojom.IsPendingRemoteKind(kind) or mojom.IsPendingReceiverKind(kind)
+          or mojom.IsPendingAssociatedRemoteKind(kind)
+          or mojom.IsPendingAssociatedReceiverKind(kind)):
+      unquantified = "uint32"
     elif mojom.IsStringKind(kind):
       unquantified = "string"
     elif mojom.IsGenericHandleKind(kind):

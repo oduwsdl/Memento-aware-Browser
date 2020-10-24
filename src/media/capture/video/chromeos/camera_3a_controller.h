@@ -32,6 +32,7 @@ class CAPTURE_EXPORT Camera3AController
 
   // CaptureMetadataDispatcher::ResultMetadataObserver implementation.
   void OnResultMetadataAvailable(
+      uint32_t frame_number,
       const cros::mojom::CameraMetadataPtr& result_metadata) final;
 
   // Enable the auto-focus mode suitable for still capture.
@@ -40,6 +41,9 @@ class CAPTURE_EXPORT Camera3AController
   // TODO(shik): This function is unused now.
   // Enable the auto-focus mode suitable for video recording.
   void SetAutoFocusModeForVideoRecording();
+
+  // Set auto white balance mode.
+  void SetAutoWhiteBalanceMode(cros::mojom::AndroidControlAwbMode mode);
 
   bool IsPointOfInterestSupported();
 

@@ -56,9 +56,12 @@ class MojoVideoDecoder final : public VideoDecoder,
       const gfx::ColorSpace& target_color_space);
   ~MojoVideoDecoder() final;
 
-  // VideoDecoder implementation.
-  std::string GetDisplayName() const final;
+  // Decoder implementation
   bool IsPlatformDecoder() const final;
+  bool SupportsDecryption() const final;
+  std::string GetDisplayName() const final;
+
+  // VideoDecoder implementation.
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,
@@ -88,7 +91,7 @@ class MojoVideoDecoder final : public VideoDecoder,
   void OnInitializeDone(const Status& status,
                         bool needs_bitstream_conversion,
                         int32_t max_decode_requests);
-  void OnDecodeDone(uint64_t decode_id, DecodeStatus status);
+  void OnDecodeDone(uint64_t decode_id, const Status& status);
   void OnResetDone();
 
   void BindRemoteDecoder();

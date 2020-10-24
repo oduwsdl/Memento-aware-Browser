@@ -15,22 +15,29 @@ namespace base {
 class SequencedTaskRunner;
 }  // namespace base
 
+namespace gpu {
+class GpuDriverBugWorkarounds;
+}
+
 namespace media {
 
 class DmabufVideoFramePool;
+class MediaLog;
 class VideoDecoder;
 class VideoFrameConverter;
 
 class MEDIA_GPU_EXPORT ChromeosVideoDecoderFactory {
  public:
-  static SupportedVideoDecoderConfigs GetSupportedConfigs();
+  static SupportedVideoDecoderConfigs GetSupportedConfigs(
+      const gpu::GpuDriverBugWorkarounds& workarounds);
 
   // Create VideoDecoder instance that allocates VideoFrame from |frame_pool|
   // and converts the output VideoFrame |frame_converter|.
   static std::unique_ptr<VideoDecoder> Create(
       scoped_refptr<base::SequencedTaskRunner> client_task_runner,
       std::unique_ptr<DmabufVideoFramePool> frame_pool,
-      std::unique_ptr<VideoFrameConverter> frame_converter);
+      std::unique_ptr<VideoFrameConverter> frame_converter,
+      std::unique_ptr<MediaLog> media_log);
 };
 
 }  // namespace media

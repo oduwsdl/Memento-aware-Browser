@@ -9,13 +9,11 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/timer/timer.h"
 #include "media/base/audio_renderer.h"
 #include "media/base/buffering_state.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/time_source.h"
-#include "media/fuchsia/mojom/fuchsia_media_resource_provider.mojom.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/remote.h"
 
 namespace media {
 
@@ -27,10 +25,9 @@ class MediaLog;
 // sends encoded stream directly to AudioConsumer provided by the platform.
 class FuchsiaAudioRenderer : public AudioRenderer, public TimeSource {
  public:
-  FuchsiaAudioRenderer(
-      MediaLog* media_log,
-      mojo::PendingRemote<media::mojom::FuchsiaMediaResourceProvider>
-          media_resource_provider);
+  FuchsiaAudioRenderer(MediaLog* media_log,
+                       fidl::InterfaceHandle<fuchsia::media::AudioConsumer>
+                           audio_consumer_handle);
   ~FuchsiaAudioRenderer() final;
 
   // AudioRenderer implementation.
@@ -43,6 +40,7 @@ class FuchsiaAudioRenderer : public AudioRenderer, public TimeSource {
   void StartPlaying() final;
   void SetVolume(float volume) final;
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) final;
+  void SetPreservesPitch(bool preserves_pitch) final;
 
   // TimeSource implementation.
   void StartTicking() final;
@@ -86,6 +84,10 @@ class FuchsiaAudioRenderer : public AudioRenderer, public TimeSource {
 
   // Resets AudioConsumer and reports error to the |client_|.
   void OnError(PipelineStatus Status);
+
+  // Connects |volume_control_|, if it hasn't been connected, and then sets
+  // |volume_|.
+  void UpdateVolume();
 
   // Initializes |stream_sink_|. Called during initialization and every time
   // configuration changes.
@@ -131,8 +133,11 @@ class FuchsiaAudioRenderer : public AudioRenderer, public TimeSource {
   fuchsia::media::StreamSinkPtr stream_sink_;
   fuchsia::media::audio::VolumeControlPtr volume_control_;
 
+  float volume_ = 1.0;
+
   DemuxerStream* demuxer_stream_ = nullptr;
   bool is_demuxer_read_pending_ = false;
+  bool drop_next_demuxer_read_result_ = false;
 
   RendererClient* client_ = nullptr;
 

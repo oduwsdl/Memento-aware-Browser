@@ -27,25 +27,27 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
-#include "media/base/hdr_metadata.h"
+#include "media/base/video_frame_feedback.h"
 #include "media/base/video_frame_layout.h"
 #include "media/base/video_frame_metadata.h"
 #include "media/base/video_types.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/hdr_metadata.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <CoreVideo/CVPixelBuffer.h>
 #include "base/mac/scoped_cftyperef.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "base/files/scoped_file.h"
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 namespace gfx {
 class GpuMemoryBuffer;
+struct GpuMemoryBufferHandle;
 }
 
 namespace media {
@@ -81,7 +83,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     STORAGE_UNOWNED_MEMORY = 2,  // External, non owned data pointers.
     STORAGE_OWNED_MEMORY = 3,  // VideoFrame has allocated its own data buffer.
     STORAGE_SHMEM = 4,         // Backed by unsafe (writable) shared memory.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     // TODO(mcasas): Consider turning this type into STORAGE_NATIVE
     // based on the idea of using this same enum value for both DMA
     // buffers on Linux and CVPixelBuffers on Mac (which currently use
@@ -234,6 +236,19 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       uint8_t* a_data,
       base::TimeDelta timestamp);
 
+  // Wraps external NV12 data of the given parameters with a VideoFrame.
+  // The returned VideoFrame does not own the data passed in.
+  static scoped_refptr<VideoFrame> WrapExternalYuvData(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      int32_t y_stride,
+      int32_t uv_stride,
+      uint8_t* y_data,
+      uint8_t* uv_data,
+      base::TimeDelta timestamp);
+
   // Wraps |gpu_memory_buffer| along with the mailboxes created from
   // |gpu_memory_buffer|. |mailbox_holders_release_cb| will be called with a
   // sync token as the argument when the VideoFrame is to be destroyed.
@@ -245,7 +260,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       ReleaseMailboxCB mailbox_holder_release_cb,
       base::TimeDelta timestamp);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Wraps provided dmabufs
   // (https://www.kernel.org/doc/html/latest/driver-api/dma-buf.html) with a
   // VideoFrame. The frame will take ownership of |dmabuf_fds|, and will
@@ -264,7 +279,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       base::TimeDelta timestamp);
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Wraps a provided CVPixelBuffer with a VideoFrame. The pixel buffer is
   // retained for the lifetime of the VideoFrame and released upon destruction.
   // The image data is only accessible via the pixel buffer, which could be
@@ -275,6 +290,13 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // http://crbug.com/401308
   static scoped_refptr<VideoFrame> WrapCVPixelBuffer(
       CVPixelBufferRef cv_pixel_buffer,
+      base::TimeDelta timestamp);
+
+  // Wraps a provided IOSurface with a VideoFrame. The IOSurface is retained
+  // and locked for the lifetime of the VideoFrame.
+  static scoped_refptr<VideoFrame> WrapIOSurface(
+      gfx::GpuMemoryBufferHandle handle,
+      const gfx::Rect& visible_rect,
       base::TimeDelta timestamp);
 #endif
 
@@ -418,11 +440,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     color_space_ = color_space;
   }
 
-  const base::Optional<HDRMetadata>& hdr_metadata() const {
+  const base::Optional<gl::HDRMetadata>& hdr_metadata() const {
     return hdr_metadata_;
   }
 
-  void set_hdr_metadata(const base::Optional<HDRMetadata>& hdr_metadata) {
+  void set_hdr_metadata(const base::Optional<gl::HDRMetadata>& hdr_metadata) {
     hdr_metadata_ = hdr_metadata;
   }
 
@@ -485,7 +507,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // mailbox, the caller must wait for the included sync point.
   const gpu::MailboxHolder& mailbox_holder(size_t texture_index) const;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Returns a vector containing the backing DmaBufs for this frame. The number
   // of returned DmaBufs will be equal or less than the number of planes of
   // the frame. If there are less, this means that the last FD contains the
@@ -504,7 +526,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   bool IsSameDmaBufsAs(const VideoFrame& frame) const;
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Returns the backing CVPixelBuffer, if present.
   CVPixelBufferRef CvPixelBuffer() const;
 #endif
@@ -545,6 +567,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   // Resets |metadata_|.
   void clear_metadata() { set_metadata(VideoFrameMetadata()); }
+
+  const VideoFrameFeedback* feedback() const { return &feedback_; }
+  VideoFrameFeedback* feedback() { return &feedback_; }
 
   // The time span between the current frame and the first frame of the stream.
   // This is the media timestamp, and not the reference time.
@@ -671,7 +696,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // GPU memory buffer, if this frame is STORAGE_GPU_MEMORY_BUFFER.
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   class DmabufHolder;
 
   // Dmabufs for the frame, used when storage is STORAGE_DMABUFS. Size is either
@@ -685,7 +710,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   scoped_refptr<DmabufHolder> dmabuf_fds_;
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // CVPixelBuffer, if this frame is wrapping one.
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer_;
 #endif
@@ -699,11 +724,13 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   VideoFrameMetadata metadata_;
 
+  VideoFrameFeedback feedback_;
+
   // Generated at construction time.
   const int unique_id_;
 
   gfx::ColorSpace color_space_;
-  base::Optional<HDRMetadata> hdr_metadata_;
+  base::Optional<gl::HDRMetadata> hdr_metadata_;
 
   // Sampler conversion information which is used in vulkan context for android.
   base::Optional<gpu::VulkanYCbCrInfo> ycbcr_info_;

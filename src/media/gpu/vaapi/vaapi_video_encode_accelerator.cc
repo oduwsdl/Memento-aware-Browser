@@ -21,7 +21,6 @@
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
@@ -40,8 +39,10 @@
 #include "media/gpu/macros.h"
 #include "media/gpu/vaapi/h264_encoder.h"
 #include "media/gpu/vaapi/vaapi_common.h"
+#include "media/gpu/vaapi/vaapi_utils.h"
 #include "media/gpu/vaapi/vp8_encoder.h"
 #include "media/gpu/vaapi/vp9_encoder.h"
+#include "media/gpu/vaapi/vp9_temporal_layers.h"
 #include "media/gpu/vp8_reference_frame_vector.h"
 #include "media/gpu/vp9_reference_frame_vector.h"
 
@@ -62,17 +63,6 @@ constexpr size_t kMinNumFramesInFlight = 4;
 
 // Percentage of bitrate set to be targeted by the HW encoder.
 constexpr unsigned int kTargetBitratePercentage = 90;
-
-// UMA errors that the VaapiVideoEncodeAccelerator class reports.
-enum VAVEAEncoderFailure {
-  VAAPI_ERROR = 0,
-  VAVEA_ENCODER_FAILURES_MAX,
-};
-
-static void ReportToUMA(VAVEAEncoderFailure failure) {
-  UMA_HISTOGRAM_ENUMERATION("Media.VAVEA.EncoderFailure", failure,
-                            VAVEA_ENCODER_FAILURES_MAX + 1);
-}
 
 // Calculate the size of the allocated buffer aligned to hardware/driver
 // requirements.
@@ -114,30 +104,27 @@ class VaapiEncodeJob : public AcceleratedVideoEncoder::EncodeJob {
                  bool keyframe,
                  base::OnceClosure execute_cb,
                  scoped_refptr<VASurface> input_surface,
-                 scoped_refptr<VASurface> reconstructed_surface,
-                 VABufferID coded_buffer_id);
+                 scoped_refptr<CodecPicture> picture,
+                 std::unique_ptr<ScopedVABuffer> coded_buffer);
+
   ~VaapiEncodeJob() override = default;
 
   VaapiEncodeJob* AsVaapiEncodeJob() override { return this; }
 
-  VABufferID coded_buffer_id() const { return coded_buffer_id_; }
+  VABufferID coded_buffer_id() const { return coded_buffer_->id(); }
   const scoped_refptr<VASurface> input_surface() const {
     return input_surface_;
   }
-  const scoped_refptr<VASurface> reconstructed_surface() const {
-    return reconstructed_surface_;
-  }
+  const scoped_refptr<CodecPicture> picture() const { return picture_; }
 
  private:
   // Input surface for video frame data or scaled data.
   const scoped_refptr<VASurface> input_surface_;
 
-  // Surface for the reconstructed picture, used for reference
-  // for subsequent frames.
-  const scoped_refptr<VASurface> reconstructed_surface_;
+  const scoped_refptr<CodecPicture> picture_;
 
   // Buffer that will contain the output bitstream data for this frame.
-  VABufferID coded_buffer_id_;
+  const std::unique_ptr<ScopedVABuffer> coded_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(VaapiEncodeJob);
 };
@@ -270,15 +257,19 @@ VaapiVideoEncodeAccelerator::~VaapiVideoEncodeAccelerator() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_sequence_checker_);
 }
 
+CodecPicture* VaapiVideoEncodeAccelerator::GetPictureFromJobForTesting(
+    VaapiEncodeJob* job) {
+  return job->picture().get();
+}
+
 bool VaapiVideoEncodeAccelerator::Initialize(const Config& config,
                                              Client* client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(child_sequence_checker_);
   DCHECK_EQ(state_, kUninitialized);
-
   VLOGF(2) << "Initializing VAVEA, " << config.AsHumanReadableString();
 
-  // VaapiVEA doesn't support temporal layers but we let it pass here to support
-  // simulcast.
+  // VaapiVEA supports temporal layers for VP9 only, but we also allow VP8 to
+  // support VP8 simulcast.
   if (config.HasSpatialLayer()) {
     VLOGF(1) << "Spatial layer encoding is supported";
     return false;
@@ -340,11 +331,17 @@ bool VaapiVideoEncodeAccelerator::Initialize(const Config& config,
 
   DCHECK_EQ(IsConfiguredForTesting(), !!vaapi_wrapper_);
   if (!IsConfiguredForTesting()) {
+    if (vaapi_wrapper_) {
+      VLOGF(1) << "Initialize() is called twice";
+      return false;
+    }
     VaapiWrapper::CodecMode mode =
         codec == kCodecVP9 ? VaapiWrapper::kEncodeConstantQuantizationParameter
                            : VaapiWrapper::kEncode;
     vaapi_wrapper_ = VaapiWrapper::CreateForVideoCodec(
-        mode, config.output_profile, base::Bind(&ReportToUMA, VAAPI_ERROR));
+        mode, config.output_profile,
+        base::Bind(&ReportVaapiErrorToUMA,
+                   "Media.VaapiVideoEncodeAccelerator.VAAPIError"));
     if (!vaapi_wrapper_) {
       VLOGF(1) << "Failed initializing VAAPI for profile "
                << GetProfileName(config.output_profile);
@@ -364,10 +361,10 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
   DCHECK_EQ(state_, kUninitialized);
   VLOGF(2);
 
-  VideoCodec codec = VideoCodecProfileToVideoCodec(config.output_profile);
+  output_codec_ = VideoCodecProfileToVideoCodec(config.output_profile);
   AcceleratedVideoEncoder::Config ave_config{};
   DCHECK_EQ(IsConfiguredForTesting(), !!encoder_);
-  switch (codec) {
+  switch (output_codec_) {
     case kCodecH264:
       if (!IsConfiguredForTesting()) {
         encoder_ = std::make_unique<H264Encoder>(
@@ -393,7 +390,7 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
           kConstantQuantizationParameter;
       break;
     default:
-      NOTREACHED() << "Unsupported codec type " << GetCodecName(codec);
+      NOTREACHED() << "Unsupported codec type " << GetCodecName(output_codec_);
       return;
   }
 
@@ -474,12 +471,14 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
   // Investigate and fix the issue.
   // encoder_info_.scaling_settings = encoder_->GetScalingSettings();
 
-  // TODO(crbug.com/1030199): VaapiVideoEncodeAccelerator doesn't support either
-  // temporal-SVC or spatial-SVC. Update |fps_allocation| properly once they are
-  // supported.
-  // A single stream shall be output at the desired FPS.
-  constexpr uint8_t kFullFramerate = 255;
-  encoder_info_.fps_allocation[0] = {kFullFramerate};
+  if (config.HasTemporalLayer()) {
+    DCHECK(!config.spatial_layers.empty());
+    encoder_info_.fps_allocation[0] = VP9TemporalLayers::GetFpsAllocation(
+        config.spatial_layers[0].num_of_temporal_layers);
+  } else {
+    constexpr uint8_t kFullFramerate = 255;
+    encoder_info_.fps_allocation[0] = {kFullFramerate};
+  }
 
   // Notify VideoEncoderInfo after initialization.
   child_task_runner_->PostTask(
@@ -539,9 +538,17 @@ void VaapiVideoEncodeAccelerator::SubmitVAEncMiscParamBuffer(
     scoped_refptr<base::RefCountedBytes> buffer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_sequence_checker_);
 
-  if (!vaapi_wrapper_->SubmitVAEncMiscParamBuffer(type, buffer->size(),
-                                                  buffer->front())) {
-    NOTIFY_ERROR(kPlatformFailureError, "Failed submitting a parameter buffer");
+  const size_t temp_size = sizeof(VAEncMiscParameterBuffer) + buffer->size();
+  std::vector<uint8_t> temp(temp_size);
+
+  auto* const va_buffer =
+      reinterpret_cast<VAEncMiscParameterBuffer*>(temp.data());
+  va_buffer->type = type;
+  memcpy(va_buffer->data, buffer->front(), buffer->size());
+
+  if (!vaapi_wrapper_->SubmitBuffer(VAEncMiscParameterBufferType, temp_size,
+                                    temp.data())) {
+    NOTIFY_ERROR(kPlatformFailureError, "Failed submitting a buffer");
   }
 }
 
@@ -600,26 +607,24 @@ void VaapiVideoEncodeAccelerator::ReturnBitstreamBuffer(
     std::unique_ptr<BitstreamBufferRef> buffer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(encoder_sequence_checker_);
   const VABufferID coded_buffer_id = encode_job->coded_buffer_id();
-  base::ScopedClosureRunner scoped_buffer(
-      base::BindOnce(&VaapiWrapper::DestroyVABuffer,
-                     base::Unretained(vaapi_wrapper_.get()), coded_buffer_id));
-
   uint8_t* target_data = static_cast<uint8_t*>(buffer->shm->memory());
   size_t data_size = 0;
   if (!vaapi_wrapper_->DownloadFromVABuffer(
-          encode_job->coded_buffer_id(), encode_job->input_surface()->id(),
-          target_data, buffer->shm->size(), &data_size)) {
+          coded_buffer_id, encode_job->input_surface()->id(), target_data,
+          buffer->shm->size(), &data_size)) {
     NOTIFY_ERROR(kPlatformFailureError, "Failed downloading coded buffer");
     return;
   }
   DVLOGF(4) << "Returning bitstream buffer "
             << (encode_job->IsKeyframeRequested() ? "(keyframe)" : "")
             << " id: " << buffer->id << " size: " << data_size;
-  scoped_buffer.RunAndReset();
+
+  auto metadata = encoder_->GetMetadata(encode_job.get(), data_size);
+  encode_job.reset();
 
   child_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&Client::BitstreamBufferReady, client_,
-                                buffer->id, encode_job->Metadata(data_size)));
+                                buffer->id, std::move(metadata)));
 }
 
 void VaapiVideoEncodeAccelerator::Encode(scoped_refptr<VideoFrame> frame,
@@ -663,9 +668,9 @@ std::unique_ptr<VaapiEncodeJob> VaapiVideoEncodeAccelerator::CreateEncodeJob(
     return nullptr;
   }
 
-  VABufferID coded_buffer_id;
-  if (!vaapi_wrapper_->CreateVABuffer(output_buffer_byte_size_,
-                                      &coded_buffer_id)) {
+  auto coded_buffer = vaapi_wrapper_->CreateVABuffer(VAEncCodedBufferType,
+                                                     output_buffer_byte_size_);
+  if (!coded_buffer) {
     NOTIFY_ERROR(kPlatformFailureError, "Failed creating coded buffer");
     return nullptr;
   }
@@ -725,9 +730,10 @@ std::unique_ptr<VaapiEncodeJob> VaapiVideoEncodeAccelerator::CreateEncodeJob(
     // Do cropping/scaling.  Here the buffer size contained in |input_surface|
     // is |frame->coded_size()|.
     if (!vpp_vaapi_wrapper_) {
-      vpp_vaapi_wrapper_ =
-          VaapiWrapper::Create(VaapiWrapper::kVideoProcess, VAProfileNone,
-                               base::Bind(&ReportToUMA, VAAPI_ERROR));
+      vpp_vaapi_wrapper_ = VaapiWrapper::Create(
+          VaapiWrapper::kVideoProcess, VAProfileNone,
+          base::Bind(&ReportVaapiErrorToUMA,
+                     "Media.VaapiVideoEncodeAccelerator.Vpp.VAAPIError"));
       if (!vpp_vaapi_wrapper_) {
         NOTIFY_ERROR(kPlatformFailureError,
                      "Failed to initialize VppVaapiWrapper");
@@ -776,11 +782,26 @@ std::unique_ptr<VaapiEncodeJob> VaapiVideoEncodeAccelerator::CreateEncodeJob(
                     kVaSurfaceFormat, base::BindOnce(va_surface_release_cb_));
   available_va_surface_ids_.pop_back();
 
+  scoped_refptr<CodecPicture> picture;
+  switch (output_codec_) {
+    case kCodecH264:
+      picture = new VaapiH264Picture(std::move(reconstructed_surface));
+      break;
+    case kCodecVP8:
+      picture = new VaapiVP8Picture(std::move(reconstructed_surface));
+      break;
+    case kCodecVP9:
+      picture = new VaapiVP9Picture(std::move(reconstructed_surface));
+      break;
+    default:
+      return nullptr;
+  }
+
   auto job = std::make_unique<VaapiEncodeJob>(
       frame, force_keyframe,
       base::BindOnce(&VaapiVideoEncodeAccelerator::ExecuteEncode,
                      encoder_weak_this_, input_surface->id()),
-      input_surface, std::move(reconstructed_surface), coded_buffer_id);
+      input_surface, std::move(picture), std::move(coded_buffer));
 
   if (!native_input_mode_) {
     job->AddSetupCallback(base::BindOnce(
@@ -968,6 +989,10 @@ void VaapiVideoEncodeAccelerator::DestroyTask() {
   while (!input_queue_.empty())
     input_queue_.pop();
 
+  // Note ScopedVABuffer in VaapiEncodeJob must be destroyed before
+  // |vaapi_wrapper_| is destroyed to ensure VADisplay is valid on the
+  // ScopedVABuffer's destruction.
+  DCHECK(vaapi_wrapper_ || submitted_encode_jobs_.empty());
   while (!submitted_encode_jobs_.empty())
     submitted_encode_jobs_.pop();
 
@@ -1007,15 +1032,15 @@ VaapiEncodeJob::VaapiEncodeJob(scoped_refptr<VideoFrame> input_frame,
                                bool keyframe,
                                base::OnceClosure execute_cb,
                                scoped_refptr<VASurface> input_surface,
-                               scoped_refptr<VASurface> reconstructed_surface,
-                               VABufferID coded_buffer_id)
+                               scoped_refptr<CodecPicture> picture,
+                               std::unique_ptr<ScopedVABuffer> coded_buffer)
     : EncodeJob(input_frame, keyframe, std::move(execute_cb)),
       input_surface_(input_surface),
-      reconstructed_surface_(reconstructed_surface),
-      coded_buffer_id_(coded_buffer_id) {
+      picture_(std::move(picture)),
+      coded_buffer_(std::move(coded_buffer)) {
   DCHECK(input_surface_);
-  DCHECK(reconstructed_surface_);
-  DCHECK_NE(coded_buffer_id_, VA_INVALID_ID);
+  DCHECK(picture_);
+  DCHECK(coded_buffer_);
 }
 
 static void InitVAPictureH264(VAPictureH264* va_pic) {
@@ -1207,8 +1232,8 @@ bool VaapiVideoEncodeAccelerator::H264Accelerator::SubmitFrameParameters(
 scoped_refptr<H264Picture>
 VaapiVideoEncodeAccelerator::H264Accelerator::GetPicture(
     AcceleratedVideoEncoder::EncodeJob* job) {
-  return base::MakeRefCounted<VaapiH264Picture>(
-      job->AsVaapiEncodeJob()->reconstructed_surface());
+  return base::WrapRefCounted(
+      reinterpret_cast<H264Picture*>(job->AsVaapiEncodeJob()->picture().get()));
 }
 
 bool VaapiVideoEncodeAccelerator::H264Accelerator::SubmitPackedHeaders(
@@ -1249,8 +1274,8 @@ bool VaapiVideoEncodeAccelerator::H264Accelerator::SubmitPackedHeaders(
 scoped_refptr<VP8Picture>
 VaapiVideoEncodeAccelerator::VP8Accelerator::GetPicture(
     AcceleratedVideoEncoder::EncodeJob* job) {
-  return base::MakeRefCounted<VaapiVP8Picture>(
-      job->AsVaapiEncodeJob()->reconstructed_surface());
+  return base::WrapRefCounted(
+      reinterpret_cast<VP8Picture*>(job->AsVaapiEncodeJob()->picture().get()));
 }
 
 bool VaapiVideoEncodeAccelerator::VP8Accelerator::SubmitFrameParameters(
@@ -1424,8 +1449,8 @@ bool VaapiVideoEncodeAccelerator::VP8Accelerator::SubmitFrameParameters(
 scoped_refptr<VP9Picture>
 VaapiVideoEncodeAccelerator::VP9Accelerator::GetPicture(
     AcceleratedVideoEncoder::EncodeJob* job) {
-  return base::MakeRefCounted<VaapiVP9Picture>(
-      job->AsVaapiEncodeJob()->reconstructed_surface());
+  return base::WrapRefCounted(
+      reinterpret_cast<VP9Picture*>(job->AsVaapiEncodeJob()->picture().get()));
 }
 
 bool VaapiVideoEncodeAccelerator::VP9Accelerator::SubmitFrameParameters(

@@ -22,6 +22,7 @@
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_transformation.h"
+#include "media/renderers/video_frame_yuv_converter.h"
 
 namespace gfx {
 class RectF;
@@ -61,7 +62,9 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
              VideoTransformation video_transformation,
              viz::RasterContextProvider* raster_context_provider);
 
-  // Paints |video_frame| scaled to its visible size on |canvas|.
+  // Paints |video_frame|, scaled to its |video_frame->visible_rect().size()|
+  // on |canvas|. Note that the origin of |video_frame->visible_rect()| is
+  // ignored -- the copy is done to the origin of |canvas|.
   //
   // If the format of |video_frame| is PIXEL_FORMAT_NATIVE_TEXTURE, |context_3d|
   // and |context_support| must be provided.
@@ -236,9 +239,6 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
     // (if true), or to an allocated shared image (if false).
     bool wraps_video_frame_texture = false;
 
-    // Whether the texture pointed by |paint_image| is owned by skia or not.
-    bool texture_ownership_in_skia = false;
-
     // Used to allow recycling of the previous shared image. This requires that
     // no external users have access to this resource via SkImage. Returns true
     // if the existing resource can be recycled.
@@ -254,6 +254,17 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   bool PrepareVideoFrame(scoped_refptr<VideoFrame> video_frame,
                          viz::RasterContextProvider* raster_context_provider,
                          const gpu::MailboxHolder& dest_holder);
+
+  bool UploadVideoFrameToGLTexture(
+      viz::RasterContextProvider* raster_context_provider,
+      gpu::gles2::GLES2Interface* destination_gl,
+      scoped_refptr<VideoFrame> video_frame,
+      unsigned int target,
+      unsigned int texture,
+      unsigned int internal_format,
+      unsigned int format,
+      unsigned int type,
+      bool flip_y);
 
   base::Optional<Cache> cache_;
 
@@ -278,6 +289,10 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
 
     // The shared image backing the texture.
     gpu::Mailbox mailbox;
+
+    // Used to perform YUV->RGB conversion on video frames. Internally caches
+    // shared images that are created to upload CPU video frame data to the GPU.
+    VideoFrameYUVConverter yuv_converter;
 
     // A SyncToken after last usage, used for reusing or destroying texture and
     // shared image.

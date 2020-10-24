@@ -26,6 +26,7 @@
 
 namespace media {
 
+class MediaLog;
 class VideoFrame;
 
 // Implements the VideoDecodeAccelerator backed by a VideoDecoder.
@@ -47,7 +48,8 @@ class MEDIA_GPU_EXPORT VdVideoDecodeAccelerator
       base::RepeatingCallback<std::unique_ptr<VideoDecoder>(
           scoped_refptr<base::SequencedTaskRunner>,
           std::unique_ptr<DmabufVideoFramePool>,
-          std::unique_ptr<VideoFrameConverter>)>;
+          std::unique_ptr<VideoFrameConverter>,
+          std::unique_ptr<MediaLog>)>;
 
   // Create VdVideoDecodeAccelerator instance, and call Initialize().
   // Return nullptr if Initialize() failed.
@@ -92,9 +94,9 @@ class MEDIA_GPU_EXPORT VdVideoDecodeAccelerator
 
   // Callback methods of |vd_|.
   void OnInitializeDone(Status status);
-  void OnDecodeDone(int32_t bitstream_buffer_id, DecodeStatus status);
+  void OnDecodeDone(int32_t bitstream_buffer_id, Status status);
   void OnFrameReady(scoped_refptr<VideoFrame> frame);
-  void OnFlushDone(DecodeStatus status);
+  void OnFlushDone(Status status);
   void OnResetDone();
 
   // Get Picture instance that represents the same buffer as |frame|. Return

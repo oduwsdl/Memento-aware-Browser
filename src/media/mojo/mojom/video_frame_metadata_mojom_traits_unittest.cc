@@ -64,7 +64,7 @@ TEST_F(VideoFrameMetadataStructTraitsTest, EmptyMetadata) {
   EXPECT_FALSE(metadata_out.capture_update_rect.has_value());
   EXPECT_FALSE(metadata_out.rotation.has_value());
   EXPECT_FALSE(metadata_out.allow_overlay);
-  EXPECT_FALSE(metadata_out.copy_required);
+  EXPECT_FALSE(metadata_out.copy_mode.has_value());
   EXPECT_FALSE(metadata_out.end_of_stream);
   EXPECT_FALSE(metadata_out.texture_owner);
   EXPECT_FALSE(metadata_out.wants_promotion_hint);
@@ -79,7 +79,6 @@ TEST_F(VideoFrameMetadataStructTraitsTest, EmptyMetadata) {
   EXPECT_FALSE(metadata_out.root_scroll_offset_x.has_value());
   EXPECT_FALSE(metadata_out.root_scroll_offset_y.has_value());
   EXPECT_FALSE(metadata_out.top_controls_visible_height.has_value());
-  EXPECT_FALSE(metadata_out.resource_utilization.has_value());
   EXPECT_FALSE(metadata_out.frame_rate.has_value());
   EXPECT_FALSE(metadata_out.rtp_timestamp.has_value());
   EXPECT_FALSE(metadata_out.receive_time.has_value());
@@ -107,9 +106,12 @@ TEST_F(VideoFrameMetadataStructTraitsTest, ValidMetadata) {
   // media::VideoRotations
   metadata_in.rotation = media::VideoRotation::VIDEO_ROTATION_90;
 
+  // media::VideoFrameMetadata::CopyMode
+  metadata_in.copy_mode =
+      media::VideoFrameMetadata::CopyMode::kCopyToNewTexture;
+
   // bools
   metadata_in.allow_overlay = true;
-  metadata_in.copy_required = true;
   metadata_in.end_of_stream = true;
   metadata_in.texture_owner = true;
   metadata_in.wants_promotion_hint = true;
@@ -128,7 +130,6 @@ TEST_F(VideoFrameMetadataStructTraitsTest, ValidMetadata) {
   metadata_in.root_scroll_offset_x = 100.2;
   metadata_in.root_scroll_offset_y = 200.1;
   metadata_in.top_controls_visible_height = 25.5;
-  metadata_in.resource_utilization = 95.8;
   metadata_in.frame_rate = 29.94;
   metadata_in.rtp_timestamp = 1.0;
 
@@ -154,7 +155,7 @@ TEST_F(VideoFrameMetadataStructTraitsTest, ValidMetadata) {
   EXPECT_EQ(metadata_in.capture_update_rect, metadata_out.capture_update_rect);
   EXPECT_EQ(metadata_in.rotation, metadata_out.rotation);
   EXPECT_EQ(metadata_in.allow_overlay, metadata_out.allow_overlay);
-  EXPECT_EQ(metadata_in.copy_required, metadata_out.copy_required);
+  EXPECT_EQ(metadata_in.copy_mode, metadata_out.copy_mode);
   EXPECT_EQ(metadata_in.end_of_stream, metadata_out.end_of_stream);
   EXPECT_EQ(metadata_in.texture_owner, metadata_out.texture_owner);
   EXPECT_EQ(metadata_in.wants_promotion_hint,
@@ -174,8 +175,6 @@ TEST_F(VideoFrameMetadataStructTraitsTest, ValidMetadata) {
             metadata_out.root_scroll_offset_y);
   EXPECT_EQ(metadata_in.top_controls_visible_height,
             metadata_out.top_controls_visible_height);
-  EXPECT_EQ(metadata_in.resource_utilization,
-            metadata_out.resource_utilization);
   EXPECT_EQ(metadata_in.frame_rate, metadata_out.frame_rate);
   EXPECT_EQ(metadata_in.rtp_timestamp, metadata_out.rtp_timestamp);
   EXPECT_EQ(metadata_in.receive_time, metadata_out.receive_time);

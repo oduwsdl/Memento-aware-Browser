@@ -129,33 +129,32 @@ class MFPhotoCallback final
 // and automatically unlocks the buffer when destroyed.
 class ScopedBufferLock {
  public:
-  ScopedBufferLock(ComPtr<IMFMediaBuffer> buffer) : buffer_(std::move(buffer)) {
+  explicit ScopedBufferLock(ComPtr<IMFMediaBuffer> buffer)
+      : buffer_(std::move(buffer)) {
     if (FAILED(buffer_.As(&buffer_2d_))) {
       LockSlow();
       return;
     }
     // Try lock methods from fastest to slowest: Lock2DSize(), then Lock2D(),
     // then finally LockSlow().
-    if ((Lock2DSize() || Lock2D()) && !UnlockedNoncontiguousBuffer())
-      return;
+    if (Lock2DSize() || Lock2D()) {
+      if (IsContiguous())
+        return;
+      buffer_2d_->Unlock2D();
+    }
     // Fall back to LockSlow() if 2D buffer was unsupported or noncontiguous.
     buffer_2d_ = nullptr;
     LockSlow();
   }
 
-  // Unlocks |buffer_2d_| and returns true if |buffer_2d_| is non-contiguous or
-  // has negative pitch. If |buffer_2d_| is contiguous with positive pitch,
-  // i.e., the buffer format that the surrounding code expects, returns false.
-  bool UnlockedNoncontiguousBuffer() {
+  // Returns whether |buffer_2d_| is contiguous with positive pitch, i.e., the
+  // buffer format that the surrounding code expects.
+  bool IsContiguous() {
     BOOL is_contiguous;
-    if (pitch_ > 0 &&
-        SUCCEEDED(buffer_2d_->IsContiguousFormat(&is_contiguous)) &&
-        is_contiguous &&
-        (length_ || SUCCEEDED(buffer_2d_->GetContiguousLength(&length_)))) {
-      return false;
-    }
-    buffer_2d_->Unlock2D();
-    return true;
+    return pitch_ > 0 &&
+           SUCCEEDED(buffer_2d_->IsContiguousFormat(&is_contiguous)) &&
+           is_contiguous &&
+           (length_ || SUCCEEDED(buffer_2d_->GetContiguousLength(&length_)));
   }
 
   bool Lock2DSize() {
@@ -417,7 +416,7 @@ const CapabilityWin& GetBestMatchedPhotoCapability(
 
 HRESULT CreateCaptureEngine(IMFCaptureEngine** engine) {
   ComPtr<IMFCaptureEngineClassFactory> capture_engine_class_factory;
-  HRESULT hr = CoCreateInstance(CLSID_MFCaptureEngineClassFactory, NULL,
+  HRESULT hr = CoCreateInstance(CLSID_MFCaptureEngineClassFactory, nullptr,
                                 CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(&capture_engine_class_factory));
   if (FAILED(hr))
@@ -425,6 +424,14 @@ HRESULT CreateCaptureEngine(IMFCaptureEngine** engine) {
 
   return capture_engine_class_factory->CreateInstance(CLSID_MFCaptureEngine,
                                                       IID_PPV_ARGS(engine));
+}
+
+bool GetCameraControlSupport(ComPtr<IAMCameraControl> camera_control,
+                             CameraControlProperty control_property) {
+  long min, max, step, default_value, flags;
+  HRESULT hr = camera_control->GetRange(control_property, &min, &max, &step,
+                                        &default_value, &flags);
+  return SUCCEEDED(hr) && min < max;
 }
 
 // Retrieves the control range and value, and
@@ -436,7 +443,7 @@ mojom::RangePtr RetrieveControlRangeAndCurrent(
     std::vector<mojom::MeteringMode>* supported_modes = nullptr,
     mojom::MeteringMode* current_mode = nullptr,
     double (*value_converter)(long) = PlatformToCaptureValue,
-    double (*step_converter)(long) = PlatformToCaptureValue) {
+    double (*step_converter)(long, double, double) = PlatformToCaptureStep) {
   return media::RetrieveControlRangeAndCurrent(
       [&control_interface, control_property](auto... args) {
         return control_interface->GetRange(control_property, args...);
@@ -484,11 +491,19 @@ class MFVideoCallback final
   }
 
   IFACEMETHODIMP OnEvent(IMFMediaEvent* media_event) override {
+    base::AutoLock lock(lock_);
+    if (!observer_) {
+      return S_OK;
+    }
     observer_->OnEvent(media_event);
     return S_OK;
   }
 
   IFACEMETHODIMP OnSample(IMFSample* sample) override {
+    base::AutoLock lock(lock_);
+    if (!observer_) {
+      return S_OK;
+    }
     if (!sample) {
       observer_->OnFrameDropped(
           VideoCaptureFrameDropReason::kWinMediaFoundationReceivedSampleIsNull);
@@ -527,10 +542,18 @@ class MFVideoCallback final
     return S_OK;
   }
 
+  void Shutdown() {
+    base::AutoLock lock(lock_);
+    observer_ = nullptr;
+  }
+
  private:
   friend class base::RefCountedThreadSafe<MFVideoCallback>;
   ~MFVideoCallback() {}
-  VideoCaptureDeviceMFWin* observer_;
+
+  // Protects access to |observer_|.
+  base::Lock lock_;
+  VideoCaptureDeviceMFWin* observer_ GUARDED_BY(lock_);
 };
 
 // static
@@ -544,6 +567,38 @@ bool VideoCaptureDeviceMFWin::GetPixelFormatFromMFSourceMediaSubtype(
 
   *pixel_format = media_format_configuration.pixel_format;
   return true;
+}
+
+// Check if the video capture device supports pan, tilt and zoom controls.
+// static
+VideoCaptureControlSupport VideoCaptureDeviceMFWin::GetControlSupport(
+    ComPtr<IMFMediaSource> source) {
+  VideoCaptureControlSupport control_support;
+
+  ComPtr<IAMCameraControl> camera_control;
+  HRESULT hr = source.As(&camera_control);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to retrieve IAMCameraControl", hr);
+  ComPtr<IAMVideoProcAmp> video_control;
+  hr = source.As(&video_control);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to retrieve IAMVideoProcAmp", hr);
+
+  // On Windows platform, some Image Capture video constraints and settings are
+  // get or set using IAMCameraControl interface while the rest are get or set
+  // using IAMVideoProcAmp interface and most device drivers define both of
+  // them. So for simplicity GetPhotoState and SetPhotoState support Image
+  // Capture API constraints and settings only if both interfaces are available.
+  // Therefore, if either of these interface is missing, this backend does not
+  // really support pan, tilt nor zoom.
+  if (camera_control && video_control) {
+    control_support.pan =
+        GetCameraControlSupport(camera_control, CameraControl_Pan);
+    control_support.tilt =
+        GetCameraControlSupport(camera_control, CameraControl_Tilt);
+    control_support.zoom =
+        GetCameraControlSupport(camera_control, CameraControl_Zoom);
+  }
+
+  return control_support;
 }
 
 HRESULT VideoCaptureDeviceMFWin::ExecuteHresultCallbackWithRetries(
@@ -665,12 +720,17 @@ HRESULT VideoCaptureDeviceMFWin::FillCapabilities(
 
 VideoCaptureDeviceMFWin::VideoCaptureDeviceMFWin(
     const VideoCaptureDeviceDescriptor& device_descriptor,
-    ComPtr<IMFMediaSource> source)
-    : VideoCaptureDeviceMFWin(device_descriptor, source, nullptr) {}
+    ComPtr<IMFMediaSource> source,
+    scoped_refptr<VideoCaptureDXGIDeviceManager> dxgi_device_manager)
+    : VideoCaptureDeviceMFWin(device_descriptor,
+                              source,
+                              std::move(dxgi_device_manager),
+                              nullptr) {}
 
 VideoCaptureDeviceMFWin::VideoCaptureDeviceMFWin(
     const VideoCaptureDeviceDescriptor& device_descriptor,
     ComPtr<IMFMediaSource> source,
+    scoped_refptr<VideoCaptureDXGIDeviceManager> dxgi_device_manager,
     ComPtr<IMFCaptureEngine> engine)
     : facing_mode_(device_descriptor.facing),
       create_mf_photo_callback_(base::BindRepeating(&CreateMFPhotoCallback)),
@@ -688,7 +748,8 @@ VideoCaptureDeviceMFWin::VideoCaptureDeviceMFWin(
                           base::WaitableEvent::InitialState::NOT_SIGNALED),
       // We never want to reset |capture_error_|.
       capture_error_(base::WaitableEvent::ResetPolicy::MANUAL,
-                     base::WaitableEvent::InitialState::NOT_SIGNALED) {
+                     base::WaitableEvent::InitialState::NOT_SIGNALED),
+      dxgi_device_manager_(std::move(dxgi_device_manager)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -703,6 +764,9 @@ VideoCaptureDeviceMFWin::~VideoCaptureDeviceMFWin() {
               ? IsHighResolution(selected_video_capability_->supported_format)
               : false);
     }
+  }
+  if (video_callback_) {
+    video_callback_->Shutdown();
   }
 }
 
@@ -726,8 +790,21 @@ bool VideoCaptureDeviceMFWin::Init() {
   }
 
   ComPtr<IMFAttributes> attributes;
-  MFCreateAttributes(&attributes, 1);
-  DCHECK(attributes);
+  hr = MFCreateAttributes(&attributes, 1);
+  if (FAILED(hr)) {
+    LogError(FROM_HERE, hr);
+    return false;
+  }
+
+  hr = attributes->SetUINT32(MF_CAPTURE_ENGINE_USE_VIDEO_DEVICE_ONLY, TRUE);
+  if (FAILED(hr)) {
+    LogError(FROM_HERE, hr);
+    return false;
+  }
+
+  if (dxgi_device_manager_) {
+    dxgi_device_manager_->RegisterInCaptureEngineAttributes(attributes.Get());
+  }
 
   video_callback_ = new MFVideoCallback(this);
   hr = engine_->Initialize(video_callback_.get(), attributes.Get(), nullptr,
@@ -863,7 +940,7 @@ void VideoCaptureDeviceMFWin::AllocateAndStart(
 
   DWORD dw_sink_stream_index = 0;
   hr = preview_sink->AddStream(best_match_video_capability.stream_index,
-                               sink_video_media_type.Get(), NULL,
+                               sink_video_media_type.Get(), nullptr,
                                &dw_sink_stream_index);
   if (FAILED(hr)) {
     OnError(VideoCaptureError::kWinMediaFoundationSinkAddStreamFailed,
@@ -991,9 +1068,9 @@ void VideoCaptureDeviceMFWin::TakePhoto(TakePhotoCallback callback) {
   }
 
   DWORD dw_sink_stream_index = 0;
-  hr =
-      photo_sink->AddStream(selected_photo_capability_->stream_index,
-                            sink_media_type.Get(), NULL, &dw_sink_stream_index);
+  hr = photo_sink->AddStream(selected_photo_capability_->stream_index,
+                             sink_media_type.Get(), nullptr,
+                             &dw_sink_stream_index);
   if (FAILED(hr)) {
     LogError(FROM_HERE, hr);
     return;
@@ -1285,12 +1362,17 @@ void VideoCaptureDeviceMFWin::OnIncomingCapturedData(
       client_->OnStarted();
     }
 
+    // We always calculate camera rotation for the first frame. We also cache
+    // the latest value to use when AutoRotation is turned off.
+    if (!camera_rotation_.has_value() || IsAutoRotationEnabled())
+      camera_rotation_ = GetCameraRotation(facing_mode_);
+
     // TODO(julien.isorce): retrieve the color space information using Media
     // Foundation api, MFGetAttributeSize/MF_MT_VIDEO_PRIMARIES,in order to
     // build a gfx::ColorSpace. See http://crbug.com/959988.
     client_->OnIncomingCapturedData(
         data, length, selected_video_capability_->supported_format,
-        gfx::ColorSpace(), GetCameraRotation(facing_mode_), false /* flip_y */,
+        gfx::ColorSpace(), camera_rotation_.value(), false /* flip_y */,
         reference_time, timestamp);
   }
 

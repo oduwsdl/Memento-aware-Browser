@@ -25,12 +25,12 @@
 #include "media/base/media_switches.h"
 #include "media/base/overlay_info.h"
 #include "media/base/video_frame.h"
+#include "media/media_buildflags.h"
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/common/mojo_decoder_buffer_converter.h"
 #include "media/mojo/mojom/media_types.mojom.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "media/video/video_decode_accelerator.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
@@ -133,6 +133,16 @@ bool MojoVideoDecoder::IsPlatformDecoder() const {
   return true;
 }
 
+bool MojoVideoDecoder::SupportsDecryption() const {
+  // Currently only the Android backends and specific ChromeOS configurations
+  // support decryption.
+#if defined(OS_ANDROID) || BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
+  return true;
+#else
+  return false;
+#endif
+}
+
 std::string MojoVideoDecoder::GetDisplayName() const {
   return "MojoVideoDecoder";
 }
@@ -159,15 +169,15 @@ void MojoVideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
-  int cdm_id =
-      cdm_context ? cdm_context->GetCdmId() : CdmContext::kInvalidCdmId;
+  base::Optional<base::UnguessableToken> cdm_id =
+      cdm_context ? cdm_context->GetCdmId() : base::nullopt;
 
   // Fail immediately if the stream is encrypted but |cdm_id| is invalid.
   // This check is needed to avoid unnecessary IPC to the remote process.
   // Note that we do not support unsetting a CDM, so it should never happen
   // that a valid CDM ID is available on first initialization but an invalid
   // is passed for reinitialization.
-  if (config.is_encrypted() && CdmContext::kInvalidCdmId == cdm_id) {
+  if (config.is_encrypted() && !cdm_id) {
     DVLOG(1) << __func__ << ": Invalid CdmContext.";
     FailInit(std::move(init_cb),
              StatusCode::kDecoderMissingCdmForEncryptedContent);
@@ -286,7 +296,7 @@ void MojoVideoDecoder::OnVideoFrameDecoded(
   }
 }
 
-void MojoVideoDecoder::OnDecodeDone(uint64_t decode_id, DecodeStatus status) {
+void MojoVideoDecoder::OnDecodeDone(uint64_t decode_id, const Status& status) {
   DVLOG(3) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -297,7 +307,7 @@ void MojoVideoDecoder::OnDecodeDone(uint64_t decode_id, DecodeStatus status) {
     return;
   }
 
-  if (status == DecodeStatus::DECODE_ERROR)
+  if (!status.is_ok() && status.code() != StatusCode::kAborted)
     ReportInitialPlaybackErrorUMA();
 
   DecodeCB decode_cb = std::move(it->second);

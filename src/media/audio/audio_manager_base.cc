@@ -209,10 +209,9 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStream(
   // importantly it prevents instability on certain systems.
   // See bug: http://crbug.com/30242.
   if (num_output_streams_ >= max_num_output_streams_) {
-    DLOG(ERROR) << "Number of opened output audio streams "
-                << num_output_streams_
-                << " exceed the max allowed number "
-                << max_num_output_streams_;
+    LOG(ERROR) << "Number of opened output audio streams "
+               << num_output_streams_ << " exceed the max allowed number "
+               << max_num_output_streams_;
     return nullptr;
   }
 
@@ -270,15 +269,15 @@ AudioInputStream* AudioManagerBase::MakeAudioInputStream(
 
   if (!params.IsValid() || (params.channels() > kMaxInputChannels) ||
       device_id.empty()) {
-    DLOG(ERROR) << "Audio parameters are invalid for device " << device_id;
-    VLOG(1) << params.AsHumanReadableString();
+    DLOG(ERROR) << "Audio parameters are invalid for device " << device_id
+                << ", params: " << params.AsHumanReadableString();
     return nullptr;
   }
 
   if (input_stream_count() >= kMaxInputStreams) {
-    DLOG(ERROR) << "Number of opened input audio streams "
-                << input_stream_count() << " exceed the max allowed number "
-                << kMaxInputStreams;
+    LOG(ERROR) << "Number of opened input audio streams "
+               << input_stream_count() << " exceed the max allowed number "
+               << kMaxInputStreams;
     return nullptr;
   }
 

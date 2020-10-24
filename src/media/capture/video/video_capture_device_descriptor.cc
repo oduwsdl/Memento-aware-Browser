@@ -25,30 +25,30 @@ VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     const std::string& display_name,
     const std::string& device_id,
     VideoCaptureApi capture_api,
-    VideoCaptureTransportType transport_type,
-    const base::Optional<bool>& pan_tilt_zoom_supported)
+    const VideoCaptureControlSupport& control_support,
+    VideoCaptureTransportType transport_type)
     : device_id(device_id),
       facing(VideoFacingMode::MEDIA_VIDEO_FACING_NONE),
       capture_api(capture_api),
       transport_type(transport_type),
       display_name_(TrimDisplayName(display_name)),
-      pan_tilt_zoom_supported_(pan_tilt_zoom_supported) {}
+      control_support_(control_support) {}
 
 VideoCaptureDeviceDescriptor::VideoCaptureDeviceDescriptor(
     const std::string& display_name,
     const std::string& device_id,
     const std::string& model_id,
     VideoCaptureApi capture_api,
+    const VideoCaptureControlSupport& control_support,
     VideoCaptureTransportType transport_type,
-    VideoFacingMode facing,
-    const base::Optional<bool>& pan_tilt_zoom_supported)
+    VideoFacingMode facing)
     : device_id(device_id),
       model_id(model_id),
       facing(facing),
       capture_api(capture_api),
       transport_type(transport_type),
       display_name_(TrimDisplayName(display_name)),
-      pan_tilt_zoom_supported_(pan_tilt_zoom_supported) {}
+      control_support_(control_support) {}
 
 VideoCaptureDeviceDescriptor::~VideoCaptureDeviceDescriptor() = default;
 

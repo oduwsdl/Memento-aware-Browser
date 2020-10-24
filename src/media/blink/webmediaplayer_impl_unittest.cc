@@ -52,7 +52,6 @@
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/media/webmediaplayer_delegate.h"
@@ -162,8 +161,7 @@ class MockWebMediaPlayerClient : public blink::WebMediaPlayerClient {
   MOCK_METHOD0(RequestExitPictureInPicture, void());
   MOCK_METHOD0(GetFeatures, Features(void));
   MOCK_METHOD0(OnRequestVideoFrameCallback, void());
-
-  void set_was_always_muted(bool value) { was_always_muted_ = value; }
+  MOCK_METHOD0(GetTextTrackMetadata, std::vector<blink::TextTrackMetadata>());
 
   bool was_always_muted_ = false;
 
@@ -202,9 +200,15 @@ class MockWebMediaPlayerDelegate : public blink::WebMediaPlayerDelegate {
     observer_ = nullptr;
   }
 
-  MOCK_METHOD4(DidPlay, void(int, bool, bool, MediaContentType));
-  MOCK_METHOD1(DidPause, void(int));
-  MOCK_METHOD1(PlayerGone, void(int));
+  MOCK_METHOD4(DidMediaMetadataChange, void(int, bool, bool, MediaContentType));
+
+  void DidPlay(int player_id) override { DCHECK_EQ(player_id_, player_id); }
+
+  void DidPause(int player_id, bool reached_end_of_stream) override {
+    DCHECK_EQ(player_id_, player_id);
+  }
+
+  void PlayerGone(int player_id) override { DCHECK_EQ(player_id_, player_id); }
 
   void SetIdle(int player_id, bool is_idle) override {
     DCHECK_EQ(player_id_, player_id);
@@ -241,6 +245,12 @@ class MockWebMediaPlayerDelegate : public blink::WebMediaPlayerDelegate {
     DCHECK_EQ(player_id_, player_id);
   }
 
+  void DidBufferUnderflow(int player_id) override {
+    DCHECK_EQ(player_id_, player_id);
+  }
+
+  void DidSeek(int player_id) override { DCHECK_EQ(player_id_, player_id); }
+
   bool IsFrameHidden() override { return is_hidden_; }
 
   bool IsFrameClosed() override { return is_closed_; }
@@ -273,6 +283,10 @@ class MockWebMediaPlayerDelegate : public blink::WebMediaPlayerDelegate {
 
   MOCK_METHOD2(DidPictureInPictureAvailabilityChange, void(int, bool));
 
+  MOCK_METHOD2(DidAudioOutputSinkChange, void(int, const std::string&));
+
+  MOCK_METHOD1(DidDisableAudioOutputSinkChanges, void(int));
+
  private:
   Observer* observer_ = nullptr;
   int player_id_ = 1234;
@@ -287,7 +301,6 @@ class MockSurfaceLayerBridge : public blink::WebSurfaceLayerBridge {
   MOCK_CONST_METHOD0(GetCcLayer, cc::Layer*());
   MOCK_CONST_METHOD0(GetFrameSinkId, const viz::FrameSinkId&());
   MOCK_CONST_METHOD0(GetSurfaceId, const viz::SurfaceId&());
-  MOCK_CONST_METHOD0(GetLocalSurfaceIdAllocationTime, base::TimeTicks());
   MOCK_METHOD0(ClearSurfaceId, void());
   MOCK_METHOD1(SetContentsOpaque, void(bool));
   MOCK_METHOD0(CreateSurfaceLayer, void());
@@ -308,9 +321,10 @@ class MockVideoFrameCompositor : public VideoFrameCompositor {
       GetLastPresentedFrameMetadata,
       std::unique_ptr<blink::WebMediaPlayer::VideoFramePresentationMetadata>());
   MOCK_METHOD0(GetCurrentFrameOnAnyThread, scoped_refptr<VideoFrame>());
-  MOCK_METHOD4(
-      EnableSubmission,
-      void(const viz::SurfaceId&, base::TimeTicks, media::VideoRotation, bool));
+  MOCK_METHOD1(UpdateCurrentFrameIfStale,
+               void(VideoFrameCompositor::UpdateType));
+  MOCK_METHOD3(EnableSubmission,
+               void(const viz::SurfaceId&, media::VideoRotation, bool));
 };
 
 class WebMediaPlayerImplTest
@@ -321,6 +335,7 @@ class WebMediaPlayerImplTest
       : media_thread_("MediaThreadForTest"),
         web_view_(blink::WebView::Create(/*client=*/nullptr,
                                          /*is_hidden=*/false,
+                                         /*is_inside_portal=*/false,
                                          /*compositing_enabled=*/false,
                                          nullptr,
                                          mojo::NullAssociatedReceiver())),
@@ -345,8 +360,6 @@ class WebMediaPlayerImplTest
     EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
     ON_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
         .WillByDefault(ReturnRef(surface_id_));
-    ON_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-        .WillByDefault(Return(base::TimeTicks()));
   }
 
   void InitializeWebMediaPlayerImpl() {
@@ -501,8 +514,6 @@ class WebMediaPlayerImplTest
 
     EXPECT_CALL(client_, ReadyStateChanged());
     wmpi_->SetReadyState(blink::WebMediaPlayer::kReadyStateHaveMetadata);
-    EXPECT_CALL(client_, WasAlwaysMuted())
-        .WillRepeatedly(Return(client_.was_always_muted_));
     wmpi_->pipeline_metadata_.has_audio = has_audio;
     wmpi_->pipeline_metadata_.has_video = has_video;
 
@@ -534,32 +545,22 @@ class WebMediaPlayerImplTest
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayState() {
-    EXPECT_CALL(client_, WasAlwaysMuted())
-        .WillRepeatedly(Return(client_.was_always_muted_));
     return wmpi_->UpdatePlayState_ComputePlayState(false, true, false, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayState_FrameHidden() {
-    EXPECT_CALL(client_, WasAlwaysMuted())
-        .WillRepeatedly(Return(client_.was_always_muted_));
     return wmpi_->UpdatePlayState_ComputePlayState(false, true, false, true);
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayState_Suspended() {
-    EXPECT_CALL(client_, WasAlwaysMuted())
-        .WillRepeatedly(Return(client_.was_always_muted_));
     return wmpi_->UpdatePlayState_ComputePlayState(false, true, true, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayState_Flinging() {
-    EXPECT_CALL(client_, WasAlwaysMuted())
-        .WillRepeatedly(Return(client_.was_always_muted_));
     return wmpi_->UpdatePlayState_ComputePlayState(true, true, false, false);
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayState_BackgroundedStreaming() {
-    EXPECT_CALL(client_, WasAlwaysMuted())
-        .WillRepeatedly(Return(client_.was_always_muted_));
     return wmpi_->UpdatePlayState_ComputePlayState(false, false, false, true);
   }
 
@@ -676,6 +677,7 @@ class WebMediaPlayerImplTest
   void GetVideoFramePresentationMetadata() {
     wmpi_->GetVideoFramePresentationMetadata();
   }
+  void UpdateFrameIfStale() { wmpi_->UpdateFrameIfStale(); }
 
   void OnNewFramePresentedCallback() { wmpi_->OnNewFramePresentedCallback(); }
 
@@ -1192,6 +1194,22 @@ TEST_F(WebMediaPlayerImplTest, RequestVideoFrameCallback) {
   RequestVideoFrameCallback();
 }
 
+TEST_F(WebMediaPlayerImplTest, UpdateFrameIfStale) {
+  InitializeWebMediaPlayerImpl();
+
+  base::RunLoop loop;
+  EXPECT_CALL(*compositor_,
+              UpdateCurrentFrameIfStale(
+                  VideoFrameCompositor::UpdateType::kBypassClient))
+      .WillOnce(RunClosure(loop.QuitClosure()));
+
+  UpdateFrameIfStale();
+
+  loop.Run();
+
+  testing::Mock::VerifyAndClearExpectations(compositor_);
+}
+
 TEST_F(WebMediaPlayerImplTest, GetVideoFramePresentationMetadata) {
   InitializeWebMediaPlayerImpl();
 
@@ -1401,7 +1419,7 @@ TEST_F(WebMediaPlayerImplTest, ComputePlayState_Ended) {
 
   SetPaused(true);
   state = ComputePlayState();
-  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::PAUSED, state.delegate_state);
   EXPECT_TRUE(state.is_idle);
   EXPECT_FALSE(state.is_suspended);
   EXPECT_FALSE(state.is_memory_reporting_enabled);
@@ -1507,41 +1525,25 @@ TEST_F(WebMediaPlayerImplTest, ComputePlayState_Streaming) {
   EXPECT_FALSE(state.is_memory_reporting_enabled);
 }
 
-TEST_F(WebMediaPlayerImplTest, AutoplayMuted_StartsAndStops) {
+TEST_F(WebMediaPlayerImplTest, AutoplayMuted) {
+  PipelineMetadata metadata;
+  metadata.has_video = true;
+  metadata.video_decoder_config = TestVideoConfig::Normal();
+  metadata.has_audio = true;
+  metadata.audio_decoder_config = TestAudioConfig::Normal();
+
+  EXPECT_CALL(client_, WasAlwaysMuted()).WillRepeatedly(Return(true));
+
   InitializeWebMediaPlayerImpl();
-  SetMetadata(true, true);
-  SetReadyState(blink::WebMediaPlayer::kReadyStateHaveFutureData);
   SetPaused(false);
-  client_.set_was_always_muted(true);
 
-  EXPECT_CALL(delegate_, DidPlay(_, true, false, _));
-  EXPECT_CALL(client_, WasAlwaysMuted())
-      .WillOnce(Return(client_.was_always_muted_));
-  SetDelegateState(WebMediaPlayerImpl::DelegateState::PLAYING);
+  EXPECT_CALL(delegate_, DidMediaMetadataChange(_, false, true, _));
+  OnMetadata(metadata);
+  testing::Mock::VerifyAndClearExpectations(&client_);
+  testing::Mock::VerifyAndClearExpectations(&delegate_);
 
-  client_.set_was_always_muted(false);
-  EXPECT_CALL(delegate_, DidPlay(_, true, true, _));
-  EXPECT_CALL(client_, WasAlwaysMuted())
-      .WillOnce(Return(client_.was_always_muted_));
-  SetDelegateState(WebMediaPlayerImpl::DelegateState::PLAYING);
-}
-
-TEST_F(WebMediaPlayerImplTest, AutoplayMuted_SetVolume) {
-  InitializeWebMediaPlayerImpl();
-  SetMetadata(true, true);
-  SetReadyState(blink::WebMediaPlayer::kReadyStateHaveFutureData);
-  SetPaused(false);
-  client_.set_was_always_muted(true);
-
-  EXPECT_CALL(delegate_, DidPlay(_, true, false, _));
-  EXPECT_CALL(client_, WasAlwaysMuted())
-      .WillOnce(Return(client_.was_always_muted_));
-  SetDelegateState(WebMediaPlayerImpl::DelegateState::PLAYING);
-
-  client_.set_was_always_muted(false);
-  EXPECT_CALL(client_, WasAlwaysMuted())
-      .WillOnce(Return(client_.was_always_muted_));
-  EXPECT_CALL(delegate_, DidPlay(_, true, true, _));
+  EXPECT_CALL(client_, WasAlwaysMuted()).WillRepeatedly(Return(false));
+  EXPECT_CALL(delegate_, DidMediaMetadataChange(_, true, true, _));
   wmpi_->SetVolume(1.0);
 }
 
@@ -1623,6 +1625,26 @@ TEST_F(WebMediaPlayerImplTest, MediaPositionState_Underflow) {
   wmpi_->OnTimeUpdate();
 }
 
+// It's possible for current time to be infinite if the page seeks to
+// |kInfiniteDuration| (2**64 - 1) when duration is infinite.
+TEST_F(WebMediaPlayerImplTest, MediaPositionState_InfiniteCurrentTime) {
+  InitializeWebMediaPlayerImpl();
+  SetDuration(kInfiniteDuration);
+  wmpi_->OnTimeUpdate();
+
+  EXPECT_CALL(delegate_, DidPlayerMediaPositionStateChange(
+                             delegate_.player_id(),
+                             media_session::MediaPosition(
+                                 0.0, kInfiniteDuration, kInfiniteDuration)));
+  wmpi_->Seek(kInfiniteDuration.InSecondsF());
+  wmpi_->OnTimeUpdate();
+
+  testing::Mock::VerifyAndClearExpectations(&delegate_);
+
+  EXPECT_CALL(delegate_, DidPlayerMediaPositionStateChange(_, _)).Times(0);
+  wmpi_->OnTimeUpdate();
+}
+
 TEST_F(WebMediaPlayerImplTest, NoStreams) {
   InitializeWebMediaPlayerImpl();
   PipelineMetadata metadata;
@@ -1630,10 +1652,21 @@ TEST_F(WebMediaPlayerImplTest, NoStreams) {
   EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer()).Times(0);
   EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId()).Times(0);
-  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _)).Times(0);
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _)).Times(0);
 
-  // Nothing should happen.  In particular, no assertions should fail.
+  // Since there is no audio nor video to play, OnError should occur with
+  // resulting network state error update, and transition to HAVE_METADATA
+  // should not occur.
+  EXPECT_CALL(client_, NetworkStateChanged()).Times(1);
+  EXPECT_CALL(client_, ReadyStateChanged()).Times(0);
+
+  // No assertions in the production code should fail.
   OnMetadata(metadata);
+
+  EXPECT_EQ(wmpi_->GetNetworkState(),
+            blink::WebMediaPlayer::kNetworkStateFormatError);
+  EXPECT_EQ(wmpi_->GetReadyState(),
+            blink::WebMediaPlayer::kReadyStateHaveNothing);
 }
 
 TEST_F(WebMediaPlayerImplTest, Encrypted) {
@@ -1659,7 +1692,7 @@ TEST_F(WebMediaPlayerImplTest, Encrypted) {
   EXPECT_CALL(mock_cdm_context_, GetDecryptor())
       .Times(AnyNumber())
       .WillRepeatedly(Return(nullptr));
-  mock_cdm_context_.set_cdm_id(CdmContext::kInvalidCdmId);
+  mock_cdm_context_.set_cdm_id(nullptr);
 
   {
     // Wait for kNetworkStateFormatError caused by Renderer initialization
@@ -1856,7 +1889,8 @@ TEST_F(WebMediaPlayerImplTest, VideoLockedWhenPausedWhenHidden) {
   EXPECT_TRUE(IsVideoLockedWhenPausedWhenHidden());
 
   // With a user gesture it does unlock the player.
-  GetWebLocalFrame()->NotifyUserActivation();
+  GetWebLocalFrame()->NotifyUserActivation(
+      blink::mojom::UserActivationNotificationType::kTest);
   Play();
   EXPECT_FALSE(IsVideoLockedWhenPausedWhenHidden());
 
@@ -1866,7 +1900,8 @@ TEST_F(WebMediaPlayerImplTest, VideoLockedWhenPausedWhenHidden) {
   EXPECT_FALSE(IsVideoLockedWhenPausedWhenHidden());
 
   // With a user gesture, pause does lock the player.
-  GetWebLocalFrame()->NotifyUserActivation();
+  GetWebLocalFrame()->NotifyUserActivation(
+      blink::mojom::UserActivationNotificationType::kTest);
   Pause();
   EXPECT_TRUE(IsVideoLockedWhenPausedWhenHidden());
 
@@ -1938,10 +1973,8 @@ TEST_F(WebMediaPlayerImplTest, SetContentsLayerGetsWebLayerFromBridge) {
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer());
   EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
       .WillOnce(ReturnRef(surface_id_));
-  EXPECT_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-      .WillOnce(Return(base::TimeTicks()));
   EXPECT_CALL(*surface_layer_bridge_ptr_, SetContentsOpaque(false));
-  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _));
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _));
 
   // We only call the callback to create the bridge in OnMetadata, so we need
   // to call it.
@@ -1981,9 +2014,7 @@ TEST_F(WebMediaPlayerImplTest, PictureInPictureStateChange) {
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer());
   EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
       .WillRepeatedly(ReturnRef(surface_id_));
-  EXPECT_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-      .WillRepeatedly(Return(base::TimeTicks()));
-  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _));
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _));
   EXPECT_CALL(*surface_layer_bridge_ptr_, SetContentsOpaque(false));
 
   PipelineMetadata metadata;
@@ -2317,8 +2348,6 @@ TEST_P(WebMediaPlayerImplBackgroundBehaviorTest, AudioVideo) {
   // test back into a normal state.
   EXPECT_TRUE(IsDisableVideoTrackPending());
 
-  EXPECT_CALL(client_, WasAlwaysMuted())
-      .WillRepeatedly(Return(client_.was_always_muted_));
   ForegroundPlayer();
   EXPECT_FALSE(IsVideoTrackDisabled());
   EXPECT_FALSE(IsDisableVideoTrackPending());

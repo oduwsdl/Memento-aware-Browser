@@ -20,48 +20,30 @@
 
 namespace media {
 
-class MEDIA_EXPORT VideoFrameMetadata {
- public:
-  enum Key {
-    ALLOW_OVERLAY,
-    CAPTURE_BEGIN_TIME,
-    CAPTURE_END_TIME,
-    CAPTURE_COUNTER,
-    CAPTURE_UPDATE_RECT,
-    COPY_REQUIRED,
-    END_OF_STREAM,
-    FRAME_DURATION,
-    FRAME_RATE,
-    INTERACTIVE_CONTENT,
-    REFERENCE_TIME,
-    RESOURCE_UTILIZATION,
-    READ_LOCK_FENCES_ENABLED,
-    ROTATION,
-    TEXTURE_OWNER,
-    WANTS_PROMOTION_HINT,
-    PROTECTED_VIDEO,
-    HW_PROTECTED,
-    OVERLAY_PLANE_ID,
-    POWER_EFFICIENT,
-    DEVICE_SCALE_FACTOR,
-    PAGE_SCALE_FACTOR,
-    ROOT_SCROLL_OFFSET_X,
-    ROOT_SCROLL_OFFSET_Y,
-    TOP_CONTROLS_VISIBLE_HEIGHT,
-    DECODE_BEGIN_TIME,
-    DECODE_END_TIME,
-    PROCESSING_TIME,
-    RTP_TIMESTAMP,
-    RECEIVE_TIME,
-    WALLCLOCK_FRAME_DURATION,
-
-    NUM_KEYS
-  };
-
+struct MEDIA_EXPORT VideoFrameMetadata {
   VideoFrameMetadata();
-  ~VideoFrameMetadata();
+  ~VideoFrameMetadata() = default;
 
   VideoFrameMetadata(const VideoFrameMetadata& other);
+
+  enum CopyMode {
+    // Indicates that mailbox created in one context, is also being used in a
+    // different context belonging to another share group and video frames are
+    // using SurfaceTexture to render frames.
+    // Textures generated from SurfaceTexture can't be shared between contexts
+    // of different share group and hence this frame must be copied to a new
+    // texture before use, rather than being used directly.
+    kCopyToNewTexture = 0,
+
+    // Indicates that mailbox created in one context, is also being used in a
+    // different context belonging to another share group and video frames are
+    // using AImageReader to render frames.
+    // AImageReader allows to render image data to AHardwareBuffer which can be
+    // shared between contexts of different share group. AHB from existing
+    // mailbox is wrapped into a new mailbox(AHB backed) which can then be used
+    // by another context.
+    kCopyMailboxesOnly = 1,
+  };
 
   // Merges internal values from |metadata_source|.
   void MergeMetadataFrom(const VideoFrameMetadata* metadata_source);
@@ -93,11 +75,9 @@ class MEDIA_EXPORT VideoFrameMetadata {
   // fully contained within visible_rect().
   base::Optional<gfx::Rect> capture_update_rect;
 
-  // Indicates that this frame must be copied to a new texture before use,
-  // rather than being used directly. Specifically this is required for
-  // WebView because of limitations about sharing surface textures between GL
-  // contexts.
-  bool copy_required = false;
+  // If not null, it indicates how video frame mailbox should be copied to a
+  // new mailbox.
+  base::Optional<CopyMode> copy_mode;
 
   // Indicates if the current frame is the End of its current Stream.
   bool end_of_stream = false;
@@ -128,24 +108,6 @@ class MEDIA_EXPORT VideoFrameMetadata {
   // presentation time; but, instead, it should be used for buffering playback
   // and for A/V synchronization purposes.
   base::Optional<base::TimeTicks> reference_time;
-
-  // A feedback signal that indicates the fraction of the tolerable maximum
-  // amount of resources that were utilized to process this frame.  A producer
-  // can check this value after-the-fact, usually via a VideoFrame destruction
-  // observer, to determine whether the consumer can handle more or less data
-  // volume, and achieve the right quality versus performance trade-off.
-  //
-  // Values are interpreted as follows:
-  // Less than 0.0 is meaningless and should be ignored.  1.0 indicates a
-  // maximum sustainable utilization.  Greater than 1.0 indicates the consumer
-  // is likely to stall or drop frames if the data volume is not reduced.
-  //
-  // Example: In a system that encodes and transmits video frames over the
-  // network, this value can be used to indicate whether sufficient CPU
-  // is available for encoding and/or sufficient bandwidth is available for
-  // transmission over the network.  The maximum of the two utilization
-  // measurements would be used as feedback.
-  base::Optional<double> resource_utilization;
 
   // Sources of VideoFrames use this marker to indicate that an instance of
   // VideoFrameExternalResources produced from the associated video frame

@@ -63,9 +63,11 @@ media::VideoFrameMetadata GetFullVideoFrameMetadata() {
   // media::VideoRotations
   metadata.rotation = media::VideoRotation::VIDEO_ROTATION_90;
 
+  // media::VideoFrameMetadata::CopyMode
+  metadata.copy_mode = media::VideoFrameMetadata::CopyMode::kCopyToNewTexture;
+
   // bools
   metadata.allow_overlay = true;
-  metadata.copy_required = true;
   metadata.end_of_stream = true;
   metadata.texture_owner = true;
   metadata.wants_promotion_hint = true;
@@ -84,7 +86,6 @@ media::VideoFrameMetadata GetFullVideoFrameMetadata() {
   metadata.root_scroll_offset_x = 100.2;
   metadata.root_scroll_offset_y = 200.1;
   metadata.top_controls_visible_height = 25.5;
-  metadata.resource_utilization = 95.8;
   metadata.frame_rate = 29.94;
   metadata.rtp_timestamp = 1.0;
 
@@ -112,13 +113,12 @@ void VerifyVideoFrameMetadataEquality(const media::VideoFrameMetadata& a,
   EXPECT_EQ(a.capture_end_time, b.capture_end_time);
   EXPECT_EQ(a.capture_counter, b.capture_counter);
   EXPECT_EQ(a.capture_update_rect, b.capture_update_rect);
-  EXPECT_EQ(a.copy_required, b.copy_required);
+  EXPECT_EQ(a.copy_mode, b.copy_mode);
   EXPECT_EQ(a.end_of_stream, b.end_of_stream);
   EXPECT_EQ(a.frame_duration, b.frame_duration);
   EXPECT_EQ(a.frame_rate, b.frame_rate);
   EXPECT_EQ(a.interactive_content, b.interactive_content);
   EXPECT_EQ(a.reference_time, b.reference_time);
-  EXPECT_EQ(a.resource_utilization, b.resource_utilization);
   EXPECT_EQ(a.read_lock_fences_enabled, b.read_lock_fences_enabled);
   EXPECT_EQ(a.rotation, b.rotation);
   EXPECT_EQ(a.texture_owner, b.texture_owner);
@@ -441,9 +441,14 @@ TEST(VideoFrame, WrapExternalGpuMemoryBuffer) {
   gfx::Size coded_size = gfx::Size(256, 256);
   gfx::Rect visible_rect(coded_size);
   auto timestamp = base::TimeDelta::FromMilliseconds(1);
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+  const uint64_t modifier = 0x001234567890abcdULL;
+#else
+  const uint64_t modifier = gfx::NativePixmapHandle::kNoModifier;
+#endif
   std::unique_ptr<gfx::GpuMemoryBuffer> gmb =
       std::make_unique<FakeGpuMemoryBuffer>(
-          coded_size, gfx::BufferFormat::YUV_420_BIPLANAR);
+          coded_size, gfx::BufferFormat::YUV_420_BIPLANAR, modifier);
   gfx::GpuMemoryBuffer* gmb_raw_ptr = gmb.get();
   gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes] = {
       gpu::MailboxHolder(gpu::Mailbox::Generate(), gpu::SyncToken(), 5),
@@ -459,6 +464,7 @@ TEST(VideoFrame, WrapExternalGpuMemoryBuffer) {
   for (size_t i = 0; i < 2; ++i) {
     EXPECT_EQ(frame->layout().planes()[i].stride, coded_size.width());
   }
+  EXPECT_EQ(frame->layout().modifier(), modifier);
   EXPECT_EQ(frame->storage_type(), VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
   EXPECT_TRUE(frame->HasGpuMemoryBuffer());
   EXPECT_EQ(frame->GetGpuMemoryBuffer(), gmb_raw_ptr);
@@ -471,7 +477,7 @@ TEST(VideoFrame, WrapExternalGpuMemoryBuffer) {
   EXPECT_EQ(frame->mailbox_holder(1).mailbox, mailbox_holders[1].mailbox);
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 TEST(VideoFrame, WrapExternalDmabufs) {
   gfx::Size coded_size = gfx::Size(256, 256);
   gfx::Rect visible_rect(coded_size);
@@ -684,6 +690,7 @@ TEST(VideoFrame, AllocationSize_OddSize) {
       case PIXEL_FORMAT_YUV420P9:
       case PIXEL_FORMAT_YUV420P10:
       case PIXEL_FORMAT_YUV420P12:
+      case PIXEL_FORMAT_P016LE:
         EXPECT_EQ(72u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;
@@ -706,7 +713,6 @@ TEST(VideoFrame, AllocationSize_OddSize) {
       case PIXEL_FORMAT_I420A:
       case PIXEL_FORMAT_ABGR:
       case PIXEL_FORMAT_XBGR:
-      case PIXEL_FORMAT_P016LE:
       case PIXEL_FORMAT_XR30:
       case PIXEL_FORMAT_XB30:
         EXPECT_EQ(60u, VideoFrame::AllocationSize(format, size))
@@ -748,13 +754,11 @@ TEST(VideoFrameMetadata, PartialMergeMetadata) {
   const base::TimeTicks kTempTicks =
       base::TimeTicks::Now() + base::TimeDelta::FromSeconds(2);
   const base::TimeDelta kTempDelta = base::TimeDelta::FromMilliseconds(31415);
-  const double kTempDouble = 123.45;
 
   VideoFrameMetadata partial_metadata;
   partial_metadata.capture_update_rect = kTempRect;
   partial_metadata.reference_time = kTempTicks;
   partial_metadata.processing_time = kTempDelta;
-  partial_metadata.resource_utilization = kTempDouble;
   partial_metadata.allow_overlay = false;
 
   // Merging partial metadata into full metadata partially override it.
@@ -763,7 +767,6 @@ TEST(VideoFrameMetadata, PartialMergeMetadata) {
   EXPECT_EQ(partial_metadata.capture_update_rect, kTempRect);
   EXPECT_EQ(partial_metadata.reference_time, kTempTicks);
   EXPECT_EQ(partial_metadata.processing_time, kTempDelta);
-  EXPECT_EQ(partial_metadata.resource_utilization, kTempDouble);
   EXPECT_EQ(partial_metadata.allow_overlay, false);
 }
 

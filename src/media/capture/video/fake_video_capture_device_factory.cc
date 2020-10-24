@@ -199,50 +199,56 @@ std::unique_ptr<VideoCaptureDevice> FakeVideoCaptureDeviceFactory::CreateDevice(
   return nullptr;
 }
 
-void FakeVideoCaptureDeviceFactory::GetDeviceDescriptors(
-    VideoCaptureDeviceDescriptors* device_descriptors) {
+void FakeVideoCaptureDeviceFactory::GetDevicesInfo(
+    GetDevicesInfoCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(device_descriptors->empty());
+
+  std::vector<VideoCaptureDeviceInfo> devices_info;
 
   int entry_index = 0;
   for (const auto& entry : devices_config_) {
-    device_descriptors->emplace_back(
-        base::StringPrintf("fake_device_%d", entry_index), entry.device_id,
-#if defined(OS_LINUX)
-        VideoCaptureApi::LINUX_V4L2_SINGLE_PLANE,
-#elif defined(OS_MACOSX)
-        VideoCaptureApi::MACOSX_AVFOUNDATION,
+    VideoCaptureApi api =
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+        VideoCaptureApi::LINUX_V4L2_SINGLE_PLANE;
+#elif defined(OS_MAC)
+        VideoCaptureApi::MACOSX_AVFOUNDATION;
 #elif defined(OS_WIN)
-        VideoCaptureApi::WIN_DIRECT_SHOW,
+        VideoCaptureApi::WIN_DIRECT_SHOW;
 #elif defined(OS_ANDROID)
-        VideoCaptureApi::ANDROID_API2_LEGACY,
+        VideoCaptureApi::ANDROID_API2_LEGACY;
 #elif defined(OS_FUCHSIA)
-        VideoCaptureApi::UNKNOWN,
+        VideoCaptureApi::FUCHSIA_CAMERA3;
+#else
+#error Unsupported platform
 #endif
-        VideoCaptureTransportType::OTHER_TRANSPORT,
-        entry.photo_device_config.pan_tilt_zoom_supported);
+
+    devices_info.emplace_back(VideoCaptureDeviceDescriptor(
+        base::StringPrintf("fake_device_%d", entry_index), entry.device_id, api,
+        entry.photo_device_config.control_support,
+        VideoCaptureTransportType::OTHER_TRANSPORT));
+
+    devices_info.back().supported_formats =
+        GetSupportedFormats(entry.device_id);
     entry_index++;
   }
+
+  std::move(callback).Run(std::move(devices_info));
 }
 
-void FakeVideoCaptureDeviceFactory::GetSupportedFormats(
-    const VideoCaptureDeviceDescriptor& device_descriptor,
-    VideoCaptureFormats* supported_formats) {
+VideoCaptureFormats FakeVideoCaptureDeviceFactory::GetSupportedFormats(
+    const std::string& device_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  VideoCaptureFormats supported_formats;
   for (const auto& entry : devices_config_) {
-    if (device_descriptor.device_id != entry.device_id)
+    if (device_id != entry.device_id)
       continue;
-    supported_formats->insert(supported_formats->end(),
-                              entry.supported_formats.begin(),
-                              entry.supported_formats.end());
+    supported_formats.insert(supported_formats.end(),
+                             entry.supported_formats.begin(),
+                             entry.supported_formats.end());
   }
-}
 
-void FakeVideoCaptureDeviceFactory::GetCameraLocationsAsync(
-    std::unique_ptr<VideoCaptureDeviceDescriptors> device_descriptors,
-    DeviceDescriptorsCallback result_callback) {
-  std::move(result_callback).Run(std::move(device_descriptors));
+  return supported_formats;
 }
 
 // static
@@ -335,11 +341,21 @@ void FakeVideoCaptureDeviceFactory::ParseFakeDevicesConfigFromOptionsString(
       }
     } else if (base::EqualsCaseInsensitiveASCII(param.front(),
                                                 "hardware-support")) {
-      photo_device_config.pan_tilt_zoom_supported = false;
-      if (base::EqualsCaseInsensitiveASCII(param.back(), "pan-tilt-zoom"))
-        photo_device_config.pan_tilt_zoom_supported = true;
-      else if (!base::EqualsCaseInsensitiveASCII(param.back(), "none"))
-        LOG(WARNING) << "Unknown hardware support " << param.back();
+      photo_device_config.control_support = VideoCaptureControlSupport();
+      if (!base::EqualsCaseInsensitiveASCII(param.back(), "none")) {
+        for (const std::string& support :
+             base::SplitString(param.back(), "-", base::KEEP_WHITESPACE,
+                               base::SPLIT_WANT_NONEMPTY)) {
+          if (base::EqualsCaseInsensitiveASCII(support, "pan"))
+            photo_device_config.control_support.pan = true;
+          else if (base::EqualsCaseInsensitiveASCII(support, "tilt"))
+            photo_device_config.control_support.tilt = true;
+          else if (base::EqualsCaseInsensitiveASCII(support, "zoom"))
+            photo_device_config.control_support.zoom = true;
+          else
+            LOG(WARNING) << "Unsupported hardware support " << support;
+        }
+      }
     }
   }
 

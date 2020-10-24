@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
@@ -26,15 +27,16 @@
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
+#include "media/base/win/hresult_status_helper.h"
 #include "media/gpu/windows/d3d11_picture_buffer.h"
 #include "media/gpu/windows/d3d11_video_context_wrapper.h"
 #include "media/gpu/windows/d3d11_video_decoder_impl.h"
 #include "media/gpu/windows/d3d11_video_device_format_support.h"
-#include "media/gpu/windows/display_helper.h"
 #include "media/gpu/windows/supported_profile_helpers.h"
 #include "media/media_buildflags.h"
 #include "ui/gl/gl_angle_util_win.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/hdr_metadata_helper_win.h"
 
 namespace media {
 
@@ -166,23 +168,128 @@ HRESULT D3D11VideoDecoder::InitializeAcceleratedDecoder(
   profile_ = config.profile();
   if (config.codec() == kCodecVP9) {
     accelerated_video_decoder_ = std::make_unique<VP9Decoder>(
-        std::make_unique<D3D11VP9Accelerator>(this, media_log_.get(),
-                                              video_decoder, video_device_,
-                                              std::move(video_context)),
+        std::make_unique<D3D11VP9Accelerator>(
+            this, media_log_.get(), video_device_, std::move(video_context)),
         profile_, config.color_space_info());
-    return hr;
-  }
-
-  if (config.codec() == kCodecH264) {
+  } else if (config.codec() == kCodecH264) {
     accelerated_video_decoder_ = std::make_unique<H264Decoder>(
-        std::make_unique<D3D11H264Accelerator>(this, media_log_.get(),
-                                               video_decoder, video_device_,
-                                               std::move(video_context)),
+        std::make_unique<D3D11H264Accelerator>(
+            this, media_log_.get(), video_device_, std::move(video_context)),
         profile_, config.color_space_info());
-    return hr;
+  } else {
+    return E_FAIL;
   }
 
-  return E_FAIL;
+  // Provide the initial video decoder object.
+  DCHECK(set_accelerator_decoder_cb_);
+  set_accelerator_decoder_cb_.Run(std::move(video_decoder));
+
+  return hr;
+}
+
+ErrorOr<std::tuple<ComD3D11VideoDecoder>>
+D3D11VideoDecoder::CreateD3D11Decoder() {
+  HRESULT hr;
+
+  // TODO: supported check?
+
+  decoder_configurator_ = D3D11DecoderConfigurator::Create(
+      gpu_preferences_, gpu_workarounds_, config_, media_log_.get());
+  if (!decoder_configurator_)
+    return StatusCode::kDecoderUnsupportedProfile;
+
+  if (!decoder_configurator_->SupportsDevice(video_device_))
+    return StatusCode::kDecoderUnsupportedCodec;
+
+  FormatSupportChecker format_checker(device_);
+  if (!format_checker.Initialize()) {
+    // Don't fail; it'll just return no support a lot.
+    MEDIA_LOG(WARNING, media_log_)
+        << "Could not create format checker, continuing";
+  }
+
+  // Use IsHDRSupported to guess whether the compositor can output HDR textures.
+  // See TextureSelector for notes about why the decoder should not care.
+  texture_selector_ = TextureSelector::Create(
+      gpu_preferences_, gpu_workarounds_,
+      decoder_configurator_->TextureFormat(),
+      is_hdr_supported_ ? TextureSelector::HDRMode::kSDROrHDR
+                        : TextureSelector::HDRMode::kSDROnly,
+      &format_checker, video_device_, device_context_, media_log_.get());
+  if (!texture_selector_)
+    return StatusCode::kCreateTextureSelectorFailed;
+
+  UINT config_count = 0;
+  hr = video_device_->GetVideoDecoderConfigCount(
+      decoder_configurator_->DecoderDescriptor(), &config_count);
+  if (FAILED(hr)) {
+    return Status(StatusCode::kGetDecoderConfigCountFailed)
+        .AddCause(HresultToStatus(hr));
+  }
+
+  if (config_count == 0)
+    return Status(StatusCode::kGetDecoderConfigCountFailed);
+
+  D3D11_VIDEO_DECODER_CONFIG dec_config = {};
+  bool found = false;
+
+  for (UINT i = 0; i < config_count; i++) {
+    hr = video_device_->GetVideoDecoderConfig(
+        decoder_configurator_->DecoderDescriptor(), i, &dec_config);
+    if (FAILED(hr)) {
+      return Status(StatusCode::kGetDecoderConfigFailed)
+          .AddCause(HresultToStatus(hr));
+    }
+
+    if (config_.codec() == kCodecVP9 && dec_config.ConfigBitstreamRaw == 1) {
+      // DXVA VP9 specification mentions ConfigBitstreamRaw "shall be 1".
+      found = true;
+      break;
+    }
+
+    if (config_.codec() == kCodecH264 && dec_config.ConfigBitstreamRaw == 2) {
+      // ConfigBitstreamRaw == 2 means the decoder uses DXVA_Slice_H264_Short.
+      found = true;
+      break;
+    }
+  }
+  if (!found)
+    return StatusCode::kDecoderUnsupportedConfig;
+
+  // Prefer whatever the config tells us about whether to use one Texture2D with
+  // multiple array slices, or multiple Texture2Ds with one slice each.  If bit
+  // 14 is clear, then it's the former, else it's the latter.
+  //
+  // Let the workaround override array texture mode, if enabled.
+  // TODO(crbug.com/971952): Ignore |use_single_video_decoder_texture_| here,
+  // since it might be the case that it's not actually the right fix.  Instead,
+  // We use this workaround to force a copy later.  The workaround will be
+  // renamed if this turns out to fix the issue, but we might need to merge back
+  // and smaller changes are better.
+  //
+  // For more information, please see:
+  // https://download.microsoft.com/download/9/2/A/92A4E198-67E0-4ABD-9DB7-635D711C2752/DXVA_VPx.pdf
+  // https://download.microsoft.com/download/5/f/c/5fc4ec5c-bd8c-4624-8034-319c1bab7671/DXVA_H264.pdf
+  use_single_video_decoder_texture_ =
+      !!(dec_config.ConfigDecoderSpecific & (1 << 14));
+  if (use_single_video_decoder_texture_)
+    MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using single textures";
+  else
+    MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using array texture";
+
+  Microsoft::WRL::ComPtr<ID3D11VideoDecoder> video_decoder;
+  hr = video_device_->CreateVideoDecoder(
+      decoder_configurator_->DecoderDescriptor(), &dec_config, &video_decoder);
+
+  if (!video_decoder.Get())
+    return Status(StatusCode::kDecoderCreationFailed);
+
+  if (FAILED(hr)) {
+    return Status(StatusCode::kDecoderCreationFailed)
+        .AddCause(HresultToStatus(hr));
+  }
+
+  return {std::move(video_decoder)};
 }
 
 void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
@@ -257,57 +364,20 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
     return;
   }
 
-  device_->GetImmediateContext(device_context_.ReleaseAndGetAddressOf());
+  device_->GetImmediateContext(&device_context_);
 
   HRESULT hr;
 
   // TODO(liberato): Handle cleanup better.  Also consider being less chatty in
   // the logs, since this will fall back.
 
-  hr = device_.CopyTo(video_device_.ReleaseAndGetAddressOf());
-  if (!SUCCEEDED(hr)) {
-    NotifyError("Failed to get video device");
-    return;
-  }
-
-  decoder_configurator_ = D3D11DecoderConfigurator::Create(
-      gpu_preferences_, gpu_workarounds_, config, media_log_.get());
-  if (!decoder_configurator_) {
-    NotifyError("D3DD11: Config provided unsupported profile");
-    return;
-  }
-
-  if (!decoder_configurator_->SupportsDevice(video_device_)) {
-    NotifyError("D3D11: Device does not support decoder GUID");
-    return;
-  }
-
-  FormatSupportChecker format_checker(device_);
-  if (!format_checker.Initialize()) {
-    // Don't fail; it'll just return no support a lot.
-    MEDIA_LOG(WARNING, media_log_)
-        << "Could not create format checker, continuing";
-  }
-
-  // Use IsHDRSupported to guess whether the compositor can output HDR textures.
-  // See TextureSelector for notes about why the decoder should not care.
-  texture_selector_ = TextureSelector::Create(
-      gpu_preferences_, gpu_workarounds_,
-      decoder_configurator_->TextureFormat(),
-      is_hdr_supported_ ? TextureSelector::HDRMode::kSDROrHDR
-                        : TextureSelector::HDRMode::kSDROnly,
-      &format_checker, media_log_.get());
-  if (!texture_selector_) {
-    NotifyError("D3DD11: Cannot get TextureSelector for format");
-    return;
-  }
-
   // TODO(liberato): dxva does this.  don't know if we need to.
   if (!base::FeatureList::IsEnabled(kD3D11VideoDecoderSkipMultithreaded)) {
     ComD3D11Multithread multi_threaded;
     hr = device_->QueryInterface(IID_PPV_ARGS(&multi_threaded));
-    if (!SUCCEEDED(hr)) {
-      NotifyError("Failed to query ID3D11Multithread");
+    if (FAILED(hr)) {
+      NotifyError(Status(StatusCode::kQueryID3D11MultithreadFailed)
+                      .AddCause(HresultToStatus(hr)));
       return;
     }
     // TODO(liberato): This is a hack, since the unittest returns
@@ -316,68 +386,20 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
       multi_threaded->SetMultithreadProtected(TRUE);
   }
 
-  UINT config_count = 0;
-  hr = video_device_->GetVideoDecoderConfigCount(
-      decoder_configurator_->DecoderDescriptor(), &config_count);
-  if (FAILED(hr) || config_count == 0) {
-    NotifyError("Failed to get video decoder config count");
+  hr = device_.As(&video_device_);
+  if (!SUCCEEDED(hr)) {
+    NotifyError("Failed to get video device");
     return;
   }
 
-  D3D11_VIDEO_DECODER_CONFIG dec_config = {};
-  bool found = false;
-
-  for (UINT i = 0; i < config_count; i++) {
-    hr = video_device_->GetVideoDecoderConfig(
-        decoder_configurator_->DecoderDescriptor(), i, &dec_config);
-    if (FAILED(hr)) {
-      NotifyError("Failed to get decoder config");
-      return;
-    }
-
-    if (config.codec() == kCodecVP9 && dec_config.ConfigBitstreamRaw == 1) {
-      // DXVA VP9 specification mentions ConfigBitstreamRaw "shall be 1".
-      found = true;
-      break;
-    }
-
-    if (config.codec() == kCodecH264 && dec_config.ConfigBitstreamRaw == 2) {
-      // ConfigBitstreamRaw == 2 means the decoder uses DXVA_Slice_H264_Short.
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
-    NotifyError("Failed to find decoder config");
+  auto video_decoder_or_error = CreateD3D11Decoder();
+  if (video_decoder_or_error.has_error()) {
+    NotifyError(video_decoder_or_error.error());
     return;
   }
 
-  // Prefer whatever the config tells us about whether to use one Texture2D with
-  // multiple array slices, or multiple Texture2Ds with one slice each.  If bit
-  // 14 is clear, then it's the former, else it's the latter.
-  //
-  // Let the workaround override array texture mode, if enabled.
-  //
-  // For more information, please see:
-  // https://download.microsoft.com/download/9/2/A/92A4E198-67E0-4ABD-9DB7-635D711C2752/DXVA_VPx.pdf
-  // https://download.microsoft.com/download/5/f/c/5fc4ec5c-bd8c-4624-8034-319c1bab7671/DXVA_H264.pdf
-  use_single_video_decoder_texture_ =
-      !!(dec_config.ConfigDecoderSpecific & (1 << 14)) ||
-      gpu_workarounds_.use_single_video_decoder_texture;
-  if (use_single_video_decoder_texture_)
-    MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using single textures";
-  else
-    MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using array texture";
-
-  Microsoft::WRL::ComPtr<ID3D11VideoDecoder> video_decoder;
-  hr = video_device_->CreateVideoDecoder(
-      decoder_configurator_->DecoderDescriptor(), &dec_config, &video_decoder);
-  if (!video_decoder.Get()) {
-    NotifyError("Failed to create a video decoder");
-    return;
-  }
-
-  hr = InitializeAcceleratedDecoder(config, video_decoder);
+  hr = InitializeAcceleratedDecoder(
+      config, std::move(std::get<0>(video_decoder_or_error.value())));
 
   if (!SUCCEEDED(hr)) {
     NotifyError("Failed to get device context");
@@ -573,13 +595,35 @@ void D3D11VideoDecoder::DoDecode() {
         return;
       CreatePictureBuffers();
     } else if (result == media::AcceleratedVideoDecoder::kConfigChange) {
+      // TODO(liberato): I think we support this now, as long as it's the same
+      // decoder.  Should update |config_| though.
       if (profile_ != accelerated_video_decoder_->GetProfile()) {
         // TODO(crbug.com/1022246): Handle profile change.
         LOG(ERROR) << "Profile change is not supported";
         NotifyError("Profile change is not supported");
         return;
       }
-      CreatePictureBuffers();
+      // Before the first frame, we get a config change that we should ignore.
+      // We only want to take action if this is a mid-stream config change.  We
+      // could wait until now to allocate the first D3D11VideoDecoder, but we
+      // don't, so that init can fail rather than decoding if there's a problem
+      // creating it.  If there's a config change at the start of the stream,
+      // then this might not work.
+      if (!picture_buffers_.size())
+        continue;
+
+      // Update the config.
+      const auto new_coded_size = accelerated_video_decoder_->GetPicSize();
+      config_.set_coded_size(new_coded_size);
+      auto video_decoder_or_error = CreateD3D11Decoder();
+      if (video_decoder_or_error.has_error()) {
+        NotifyError(video_decoder_or_error.error());
+        return;
+      }
+      DCHECK(set_accelerator_decoder_cb_);
+      set_accelerator_decoder_cb_.Run(
+          std::move(std::get<0>(video_decoder_or_error.value())));
+      picture_buffers_.clear();
     } else if (result == media::AcceleratedVideoDecoder::kTryAgain) {
       LOG(ERROR) << "Try again is not supported";
       NotifyError("Try again is not supported");
@@ -644,7 +688,7 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
   DCHECK(texture_selector_);
   gfx::Size size = accelerated_video_decoder_->GetPicSize();
 
-  HDRMetadata stream_metadata;
+  gl::HDRMetadata stream_metadata;
   if (config_.hdr_metadata())
     stream_metadata = *config_.hdr_metadata();
   // else leave |stream_metadata| default-initialized.  We might use it anyway.
@@ -653,8 +697,8 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
   if (decoder_configurator_->TextureFormat() == DXGI_FORMAT_P010) {
     // For HDR formats, try to get the display metadata.  This may fail, which
     // is okay.  We'll just skip sending the metadata.
-    DisplayHelper display_helper(device_);
-    display_metadata = display_helper.GetDisplayMetadata();
+    gl::HDRMetadataHelperWin hdr_metadata_helper(device_);
+    display_metadata = hdr_metadata_helper.GetDisplayMetadata();
   }
 
   // Drop any old pictures.
@@ -668,22 +712,24 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
   for (size_t i = 0; i < D3D11DecoderConfigurator::BUFFER_COUNT; i++) {
     // Create an input texture / texture array if we haven't already.
     if (!in_texture) {
-      in_texture = decoder_configurator_->CreateOutputTexture(
+      auto result = decoder_configurator_->CreateOutputTexture(
           device_, size,
           use_single_video_decoder_texture_
               ? 1
               : D3D11DecoderConfigurator::BUFFER_COUNT);
+      if (result.has_value()) {
+        in_texture = std::move(result.value());
+      } else {
+        NotifyError(std::move(result.error()).AddHere());
+        return;
+      }
     }
 
-    if (!in_texture) {
-      NotifyError("Failed to create a Texture2D for PictureBuffers");
-      return;
-    }
+    DCHECK(!!in_texture);
 
-    auto tex_wrapper = texture_selector_->CreateTextureWrapper(
-        device_, video_device_, device_context_, size);
+    auto tex_wrapper = texture_selector_->CreateTextureWrapper(device_, size);
     if (!tex_wrapper) {
-      NotifyError("Unable to allocate a texture for a CopyingTexture2DWrapper");
+      NotifyError(StatusCode::kAllocateTextureForCopyingWrapperFailed);
       return;
     }
 
@@ -691,10 +737,11 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
     picture_buffers_.push_back(
         new D3D11PictureBuffer(decoder_task_runner_, in_texture, array_slice,
                                std::move(tex_wrapper), size, i /* level */));
-    if (!picture_buffers_[i]->Init(
-            gpu_task_runner_, get_helper_cb_, video_device_,
-            decoder_configurator_->DecoderGuid(), media_log_->Clone())) {
-      NotifyError("Unable to allocate PictureBuffer");
+    Status result = picture_buffers_[i]->Init(
+        gpu_task_runner_, get_helper_cb_, video_device_,
+        decoder_configurator_->DecoderGuid(), media_log_->Clone());
+    if (!result.is_ok()) {
+      NotifyError(std::move(result).AddHere());
       return;
     }
 
@@ -753,10 +800,11 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
 
   MailboxHolderArray mailbox_holders;
   gfx::ColorSpace output_color_space;
-  if (!picture_buffer->ProcessTexture(
-          picture->get_colorspace().ToGfxColorSpace(), &mailbox_holders,
-          &output_color_space)) {
-    NotifyError("Unable to process texture");
+  Status result = picture_buffer->ProcessTexture(
+      picture->get_colorspace().ToGfxColorSpace(), &mailbox_holders,
+      &output_color_space);
+  if (!result.is_ok()) {
+    NotifyError(std::move(result).AddHere());
     return false;
   }
 
@@ -768,7 +816,7 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   if (!frame) {
     // This can happen if, somehow, we get an unsupported combination of
     // pixel format, etc.
-    NotifyError("Failed to construct video frame");
+    NotifyError(StatusCode::kDecoderVideoFrameConstructionFailed);
     return false;
   }
 
@@ -800,24 +848,31 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   frame->metadata()->allow_overlay = allow_overlay;
 
   frame->set_color_space(output_color_space);
+  frame->set_hdr_metadata(config_.hdr_metadata());
   output_cb_.Run(frame);
   return true;
 }
 
-// TODO(tmathmeyer) eventually have this take a Status and pass it through
-// to each of the callbacks.
+void D3D11VideoDecoder::SetDecoderCB(const SetAcceleratorDecoderCB& cb) {
+  set_accelerator_decoder_cb_ = cb;
+}
+
+// TODO(tmathmeyer): Please don't add new uses of this overload.
 void D3D11VideoDecoder::NotifyError(const char* reason) {
+  NotifyError(Status(StatusCode::kDecoderInitializeNeverCompleted, reason));
+}
+
+void D3D11VideoDecoder::NotifyError(const Status& reason) {
   TRACE_EVENT0("gpu", "D3D11VideoDecoder::NotifyError");
   state_ = State::kError;
-  DLOG(ERROR) << reason;
 
   // TODO(tmathmeyer) - Remove this after plumbing Status through the
   // decode_cb and input_buffer_queue cb's.
-  MEDIA_LOG(ERROR, media_log_) << reason;
+  MEDIA_LOG(ERROR, media_log_)
+      << "D3D11VideoDecoder error: " << std::hex << reason.code();
 
   if (init_cb_)
-    std::move(init_cb_).Run(
-        Status(StatusCode::kDecoderInitializeNeverCompleted, reason));
+    std::move(init_cb_).Run(reason);
 
   current_buffer_ = nullptr;
   if (current_decode_cb_)

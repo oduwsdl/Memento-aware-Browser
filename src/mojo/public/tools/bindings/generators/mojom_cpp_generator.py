@@ -7,6 +7,8 @@ import os
 import mojom.generate.generator as generator
 import mojom.generate.module as mojom
 import mojom.generate.pack as pack
+from generators.cpp_util import IsNativeOnlyKind
+from generators.cpp_tracing_support import WriteInputParamForTracing
 from mojom.generate.template_expander import UseJinja, UseJinjaForImportedTemplate
 
 
@@ -31,8 +33,6 @@ _kind_to_cpp_literal_suffix = {
   mojom.FLOAT:        "f",
   mojom.UINT64:       "ULL",
 }
-
-
 
 
 class _NameFormatter(object):
@@ -137,11 +137,6 @@ def GetEnumNameWithoutNamespace(enum):
   return full_enum_name.split("::")[-1]
 
 
-def IsNativeOnlyKind(kind):
-  return (mojom.IsStructKind(kind) or mojom.IsEnumKind(kind)) and \
-      kind.native_only
-
-
 def UseCustomSerializer(kind):
   return mojom.IsStructKind(kind) and kind.custom_serializer
 
@@ -180,9 +175,7 @@ def ShouldInlineStruct(struct):
 
 
 def ShouldInlineUnion(union):
-  return not any(
-      mojom.IsReferenceKind(field.kind) and not mojom.IsStringKind(field.kind)
-           for field in union.fields)
+  return not any(mojom.IsReferenceKind(field.kind) for field in union.fields)
 
 
 def HasPackedMethodOrdinals(interface):
@@ -273,16 +266,19 @@ class Generator(generator.Generator):
     return used_typemaps
 
   def _GetExtraPublicHeaders(self):
+    headers = set()
+
     all_enums = list(self.module.enums)
     for struct in self.module.structs:
       all_enums.extend(struct.enums)
     for interface in self.module.interfaces:
       all_enums.extend(interface.enums)
+      if interface.uuid:
+        headers.add('base/token.h')
 
     types = set(self._GetFullMojomNameForKind(typename)
                 for typename in
                 self.module.structs + all_enums + self.module.unions)
-    headers = set()
     for typename, typemap in self.typemap.items():
       if typename in types:
         headers.update(typemap.get("public_headers", []))
@@ -358,118 +354,68 @@ class Generator(generator.Generator):
 
   def GetFilters(self):
     cpp_filters = {
-        "all_enum_values":
-        AllEnumValues,
-        "constant_value":
-        self._ConstantValue,
-        "contains_handles_or_interfaces":
-        mojom.ContainsHandlesOrInterfaces,
-        "contains_move_only_members":
-        self._ContainsMoveOnlyMembers,
-        "cpp_data_view_type":
-        self._GetCppDataViewType,
-        "cpp_field_type":
-        self._GetCppFieldType,
-        "cpp_union_field_type":
-        self._GetCppUnionFieldType,
-        "cpp_pod_type":
-        GetCppPodType,
-        "cpp_union_getter_return_type":
-        self._GetUnionGetterReturnType,
+        "all_enum_values": AllEnumValues,
+        "constant_value": self._ConstantValue,
+        "contains_handles_or_interfaces": mojom.ContainsHandlesOrInterfaces,
+        "contains_move_only_members": self._ContainsMoveOnlyMembers,
+        "cpp_data_view_type": self._GetCppDataViewType,
+        "cpp_field_type": self._GetCppFieldType,
+        "cpp_union_field_type": self._GetCppUnionFieldType,
+        "cpp_pod_type": GetCppPodType,
+        "cpp_union_getter_return_type": self._GetUnionGetterReturnType,
         "cpp_union_trait_getter_return_type":
         self._GetUnionTraitGetterReturnType,
-        "cpp_wrapper_call_type":
-        self._GetCppWrapperCallType,
-        "cpp_wrapper_param_type":
-        self._GetCppWrapperParamType,
-        "cpp_wrapper_param_type_new":
-        self._GetCppWrapperParamTypeNew,
-        "cpp_wrapper_type":
-        self._GetCppWrapperType,
-        "cpp_enum_without_namespace":
-        GetEnumNameWithoutNamespace,
-        "default_value":
-        self._DefaultValue,
-        "expression_to_text":
-        self._ExpressionToText,
-        "format_constant_declaration":
-        self._FormatConstantDeclaration,
+        "cpp_wrapper_call_type": self._GetCppWrapperCallType,
+        "cpp_wrapper_param_type": self._GetCppWrapperParamType,
+        "write_input_param_for_tracing": self._WriteInputParamForTracing,
+        "cpp_wrapper_param_type_new": self._GetCppWrapperParamTypeNew,
+        "cpp_wrapper_type": self._GetCppWrapperType,
+        "cpp_enum_without_namespace": GetEnumNameWithoutNamespace,
+        "default_value": self._DefaultValue,
+        "expression_to_text": self._ExpressionToText,
+        "format_constant_declaration": self._FormatConstantDeclaration,
         "get_container_validate_params_ctor_args":
         self._GetContainerValidateParamsCtorArgs,
-        "get_full_mojom_name_for_kind":
-        self._GetFullMojomNameForKind,
-        "get_name_for_kind":
-        self._GetNameForKind,
-        "get_pad":
-        pack.GetPad,
-        "get_qualified_name_for_kind":
-        self._GetQualifiedNameForKind,
-        "has_callbacks":
-        mojom.HasCallbacks,
-        "has_packed_method_ordinals":
-        HasPackedMethodOrdinals,
-        "has_sync_methods":
-        mojom.HasSyncMethods,
+        "get_full_mojom_name_for_kind": self._GetFullMojomNameForKind,
+        "get_name_for_kind": self._GetNameForKind,
+        "get_pad": pack.GetPad,
+        "get_qualified_name_for_kind": self._GetQualifiedNameForKind,
+        "has_callbacks": mojom.HasCallbacks,
+        "has_packed_method_ordinals": HasPackedMethodOrdinals,
+        "has_sync_methods": mojom.HasSyncMethods,
         "method_supports_lazy_serialization":
         self._MethodSupportsLazySerialization,
-        "requires_context_for_data_view":
-        RequiresContextForDataView,
-        "should_inline":
-        ShouldInlineStruct,
-        "should_inline_union":
-        ShouldInlineUnion,
-        "is_array_kind":
-        mojom.IsArrayKind,
-        "is_enum_kind":
-        mojom.IsEnumKind,
-        "is_integral_kind":
-        mojom.IsIntegralKind,
-        "is_interface_kind":
-        mojom.IsInterfaceKind,
-        "is_receiver_kind":
-        self._IsReceiverKind,
-        "is_native_only_kind":
-        IsNativeOnlyKind,
-        "is_any_handle_kind":
-        mojom.IsAnyHandleKind,
-        "is_any_interface_kind":
-        mojom.IsAnyInterfaceKind,
-        "is_any_handle_or_interface_kind":
-        mojom.IsAnyHandleOrInterfaceKind,
-        "is_associated_kind":
-        mojom.IsAssociatedKind,
-        "is_float_kind":
-        mojom.IsFloatKind,
-        "is_hashable":
-        self._IsHashableKind,
-        "is_map_kind":
-        mojom.IsMapKind,
-        "is_nullable_kind":
-        mojom.IsNullableKind,
-        "is_object_kind":
-        mojom.IsObjectKind,
-        "is_reference_kind":
-        mojom.IsReferenceKind,
-        "is_string_kind":
-        mojom.IsStringKind,
-        "is_struct_kind":
-        mojom.IsStructKind,
-        "is_typemapped_kind":
-        self._IsTypemappedKind,
-        "is_union_kind":
-        mojom.IsUnionKind,
-        "passes_associated_kinds":
-        mojom.PassesAssociatedKinds,
-        "struct_constructors":
-        self._GetStructConstructors,
-        "under_to_camel":
-        self._UnderToCamel,
-        "unmapped_type_for_serializer":
-        self._GetUnmappedTypeForSerializer,
-        "use_custom_serializer":
-        UseCustomSerializer,
-        "wtf_hash_fn_name_for_enum":
-        GetWtfHashFnNameForEnum,
+        "requires_context_for_data_view": RequiresContextForDataView,
+        "should_inline": ShouldInlineStruct,
+        "should_inline_union": ShouldInlineUnion,
+        "is_array_kind": mojom.IsArrayKind,
+        "is_enum_kind": mojom.IsEnumKind,
+        "is_full_header_required_for_import":
+        self._IsFullHeaderRequiredForImport,
+        "is_integral_kind": mojom.IsIntegralKind,
+        "is_interface_kind": mojom.IsInterfaceKind,
+        "is_receiver_kind": self._IsReceiverKind,
+        "is_native_only_kind": IsNativeOnlyKind,
+        "is_any_handle_kind": mojom.IsAnyHandleKind,
+        "is_any_interface_kind": mojom.IsAnyInterfaceKind,
+        "is_any_handle_or_interface_kind": mojom.IsAnyHandleOrInterfaceKind,
+        "is_associated_kind": mojom.IsAssociatedKind,
+        "is_float_kind": mojom.IsFloatKind,
+        "is_hashable": self._IsHashableKind,
+        "is_map_kind": mojom.IsMapKind,
+        "is_nullable_kind": mojom.IsNullableKind,
+        "is_object_kind": mojom.IsObjectKind,
+        "is_reference_kind": mojom.IsReferenceKind,
+        "is_string_kind": mojom.IsStringKind,
+        "is_struct_kind": mojom.IsStructKind,
+        "is_typemapped_kind": self._IsTypemappedKind,
+        "is_union_kind": mojom.IsUnionKind,
+        "passes_associated_kinds": mojom.PassesAssociatedKinds,
+        "struct_constructors": self._GetStructConstructors,
+        "under_to_camel": self._UnderToCamel,
+        "unmapped_type_for_serializer": self._GetUnmappedTypeForSerializer,
+        "use_custom_serializer": UseCustomSerializer,
+        "wtf_hash_fn_name_for_enum": GetWtfHashFnNameForEnum,
     }
     return cpp_filters
 
@@ -668,6 +614,28 @@ class Generator(generator.Generator):
         GetCppPodType(constant.kind), constant.name,
         self._ConstantValue(constant))
 
+  def _WriteInputParamForTracing(self, kind, parameter_name, cpp_parameter_name,
+                                 value):
+    """Generates lines of C++ to log parameter |parameter_name| into TracedValue
+    |value|.
+
+    Args:
+      kind: {Kind} The kind of the parameter (corresponds to its C++ type).
+      cpp_parameter_name: {string} The actual C++ variable name corresponding to
+        the mojom parameter |parameter_name|. Can be a valid C++ expression
+        (e.g., dereferenced variable |"(*var)"|).
+      value: {string} The C++ |TracedValue*| variable name to be logged into.
+
+    Yields:
+      {string} C++ lines of code that trace |parameter_name| into |value|.
+    """
+    for line in WriteInputParamForTracing(generator=self,
+                                          kind=kind,
+                                          parameter_name=parameter_name,
+                                          cpp_parameter_name=cpp_parameter_name,
+                                          value=value):
+      yield line
+
   def _GetCppWrapperType(self,
                          kind,
                          add_same_module_namespaces=False,
@@ -768,6 +736,31 @@ class Generator(generator.Generator):
               self._IsMoveOnlyKind(kind.key_kind))
     if mojom.IsAnyHandleOrInterfaceKind(kind):
       return True
+    return False
+
+  def _IsFullHeaderRequiredForImport(self, imported_module):
+    """Determines whether a given import module requires a full header include,
+    or if the forward header is sufficient. The full header is required if any
+    imported structs, unions, interfaces, or typemapped types are referenced by
+    the module we're generating bindings for; or if an imported enum is used as
+    a map key."""
+
+    def requires_full_header(kind):
+      if (mojom.IsUnionKind(kind) or mojom.IsStructKind(kind)
+          or mojom.IsInterfaceKind(kind) or self._IsTypemappedKind(kind)):
+        return True
+      if mojom.IsEnumKind(kind):
+        # Blink bindings need the full header for an enum used as a map key.
+        # This is uncommon enough that we set the requirement generically for
+        # Blink and non-Blink bindings.
+        return any(
+            mojom.IsMapKind(k) and k.key_kind == kind
+            for k in self.module.kinds.values())
+      return False
+
+    for spec, kind in imported_module.kinds.items():
+      if spec in self.module.imported_kinds and requires_full_header(kind):
+        return True
     return False
 
   def _IsReceiverKind(self, kind):

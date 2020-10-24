@@ -16,6 +16,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -746,10 +747,6 @@ void FFmpegDemuxerStream::Read(ReadCB read_cb) {
   SatisfyPendingRead();
 }
 
-bool FFmpegDemuxerStream::IsReadPending() const {
-  return !read_cb_.is_null();
-}
-
 void FFmpegDemuxerStream::EnableBitstreamConverter() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -1220,16 +1217,12 @@ static int CalculateBitrate(AVFormatContext* format_context,
 
   // See if we can approximate the bitrate as long as we have a filesize and
   // valid duration.
-  if (duration.InMicroseconds() <= 0 || duration == kInfiniteDuration ||
-      filesize_in_bytes == 0) {
+  if (duration <= base::TimeDelta() || duration == kInfiniteDuration ||
+      !filesize_in_bytes)
     return 0;
-  }
 
-  // Do math in floating point as we'd overflow an int64_t if the filesize was
-  // larger than ~1073GB.
-  double bytes = filesize_in_bytes;
-  double duration_us = duration.InMicroseconds();
-  return bytes * 8000000.0 / duration_us;
+  // Don't multiply by 8 first; it will overflow if (filesize_in_bytes >= 2^60).
+  return base::ClampRound(filesize_in_bytes * duration.ToHz() * 8);
 }
 
 void FFmpegDemuxer::OnOpenContextDone(bool result) {
@@ -1521,6 +1514,12 @@ void FFmpegDemuxer::OnFindStreamInfoDone(int result) {
   // generation so we always get timestamps, see http://crbug.com/169570
   if (glue_->container() == container_names::CONTAINER_AVI)
     format_context->flags |= AVFMT_FLAG_GENPTS;
+
+  // FFmpeg will incorrectly adjust the start time of MP3 files into the future
+  // based on discard samples. We were unable to fix this upstream without
+  // breaking ffmpeg functionality. https://crbug.com/1062037
+  if (glue_->container() == container_names::CONTAINER_MP3)
+    start_time_ = base::TimeDelta();
 
   // For testing purposes, don't overwrite the timeline offset if set already.
   if (timeline_offset_.is_null()) {
@@ -1859,7 +1858,8 @@ bool FFmpegDemuxer::StreamsHaveAvailableCapacity() {
 bool FFmpegDemuxer::IsMaxMemoryUsageReached() const {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  size_t memory_left = GetDemuxerMemoryLimit();
+  size_t memory_left =
+      GetDemuxerMemoryLimit(Demuxer::DemuxerTypes::kFFmpegDemuxer);
   for (const auto& stream : streams_) {
     if (!stream)
       continue;

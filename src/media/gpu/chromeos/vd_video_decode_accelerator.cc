@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "media/base/media_util.h"
 #include "media/base/video_color_space.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
@@ -136,7 +137,8 @@ bool VdVideoDecodeAccelerator::Initialize(const Config& config,
   std::unique_ptr<VdaVideoFramePool> frame_pool =
       std::make_unique<VdaVideoFramePool>(weak_this_, client_task_runner_);
   vd_ = create_vd_cb_.Run(client_task_runner_, std::move(frame_pool),
-                          std::make_unique<VideoFrameConverter>());
+                          std::make_unique<VideoFrameConverter>(),
+                          std::make_unique<NullMediaLog>());
   if (!vd_)
     return false;
 
@@ -188,12 +190,12 @@ void VdVideoDecodeAccelerator::Decode(scoped_refptr<DecoderBuffer> buffer,
 }
 
 void VdVideoDecodeAccelerator::OnDecodeDone(int32_t bitstream_buffer_id,
-                                            DecodeStatus status) {
-  DVLOGF(4) << "status: " << status;
+                                            Status status) {
+  DVLOGF(4) << "status: " << status.code();
   DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
   DCHECK(client_);
 
-  if (status == DecodeStatus::DECODE_ERROR) {
+  if (!status.is_ok() && status.code() != StatusCode::kAborted) {
     OnError(FROM_HERE, PLATFORM_FAILURE);
     return;
   }
@@ -239,19 +241,19 @@ void VdVideoDecodeAccelerator::Flush() {
       base::BindOnce(&VdVideoDecodeAccelerator::OnFlushDone, weak_this_));
 }
 
-void VdVideoDecodeAccelerator::OnFlushDone(DecodeStatus status) {
-  DVLOGF(3) << "status: " << status;
+void VdVideoDecodeAccelerator::OnFlushDone(Status status) {
+  DVLOGF(3) << "status: " << status.code();
   DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
   DCHECK(client_);
 
-  switch (status) {
-    case DecodeStatus::OK:
+  switch (status.code()) {
+    case StatusCode::kOk:
       client_->NotifyFlushDone();
       break;
-    case DecodeStatus::ABORTED:
+    case StatusCode::kAborted:
       // Do nothing.
       break;
-    case DecodeStatus::DECODE_ERROR:
+    default:
       OnError(FROM_HERE, PLATFORM_FAILURE);
       break;
   }
@@ -327,20 +329,26 @@ void VdVideoDecodeAccelerator::ImportBufferForPicture(
       return;
     }
 
+    const uint64_t modifier = gmb_handle.type == gfx::NATIVE_PIXMAP
+                                  ? gmb_handle.native_pixmap_handle.modifier
+                                  : gfx::NativePixmapHandle::kNoModifier;
+
     std::vector<ColorPlaneLayout> planes = ExtractColorPlaneLayout(gmb_handle);
-    layout_ =
-        VideoFrameLayout::CreateWithPlanes(pixel_format, coded_size_, planes);
+    layout_ = VideoFrameLayout::CreateWithPlanes(
+        pixel_format, coded_size_, planes,
+        VideoFrameLayout::kBufferAddressAlignment, modifier);
     if (!layout_) {
       VLOGF(1) << "Failed to create VideoFrameLayout. format: "
                << VideoPixelFormatToString(pixel_format)
                << ", coded_size: " << coded_size_.ToString()
-               << ", planes: " << VectorToString(planes);
+               << ", planes: " << VectorToString(planes)
+               << ", modifier: " << std::hex << modifier;
       std::move(notify_layout_changed_cb_).Run(base::nullopt);
       return;
     }
 
     std::move(notify_layout_changed_cb_)
-        .Run(GpuBufferLayout::Create(*fourcc, coded_size_, planes));
+        .Run(GpuBufferLayout::Create(*fourcc, coded_size_, planes, modifier));
   }
 
   if (!layout_)

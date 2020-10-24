@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "media/base/encryption_scheme.h"
-#include "media/base/hdr_metadata.h"
 #include "media/base/media_export.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
@@ -21,11 +20,9 @@
 #include "media/base/video_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/hdr_metadata.h"
 
 namespace media {
-
-MEDIA_EXPORT VideoCodec
-VideoCodecProfileToVideoCodec(VideoCodecProfile profile);
 
 // Describes the content of a video stream, as described by the media container
 // (or otherwise determined by the demuxer).
@@ -95,6 +92,8 @@ class MEDIA_EXPORT VideoDecoderConfig {
   // in this region are valid.
   const gfx::Size& coded_size() const { return coded_size_; }
 
+  void set_coded_size(const gfx::Size& coded_size) { coded_size_ = coded_size; }
+
   // Region of coded_size() that contains image data, also known as the clean
   // aperture. Usually, but not always, origin-aligned (top-left).
   const gfx::Rect& visible_rect() const { return visible_rect_; }
@@ -152,10 +151,10 @@ class MEDIA_EXPORT VideoDecoderConfig {
   const VideoColorSpace& color_space_info() const { return color_space_info_; }
 
   // Dynamic range of the image data.
-  void set_hdr_metadata(const HDRMetadata& hdr_metadata) {
+  void set_hdr_metadata(const gl::HDRMetadata& hdr_metadata) {
     hdr_metadata_ = hdr_metadata;
   }
-  const base::Optional<HDRMetadata>& hdr_metadata() const {
+  const base::Optional<gl::HDRMetadata>& hdr_metadata() const {
     return hdr_metadata_;
   }
 
@@ -190,7 +189,7 @@ class MEDIA_EXPORT VideoDecoderConfig {
   EncryptionScheme encryption_scheme_ = EncryptionScheme::kUnencrypted;
 
   VideoColorSpace color_space_info_;
-  base::Optional<HDRMetadata> hdr_metadata_;
+  base::Optional<gl::HDRMetadata> hdr_metadata_;
 
   // Not using DISALLOW_COPY_AND_ASSIGN here intentionally to allow the compiler
   // generated copy constructor and assignment operator. Since the extra data is
