@@ -28,6 +28,8 @@
 #include "sandbox/linux/seccomp-bpf-helpers/sigsys_handlers.h"
 #include "sandbox/linux/seccomp-bpf/sandbox_bpf.h"
 #include "sandbox/linux/system_headers/linux_futex.h"
+#include "sandbox/linux/system_headers/linux_prctl.h"
+#include "sandbox/linux/system_headers/linux_ptrace.h"
 #include "sandbox/linux/system_headers/linux_syscalls.h"
 #include "sandbox/linux/system_headers/linux_time.h"
 
@@ -49,19 +51,6 @@
 
 #if !defined(F_DUPFD_CLOEXEC)
 #define F_DUPFD_CLOEXEC (F_LINUX_SPECIFIC_BASE + 6)
-#endif
-
-#if !defined(PR_SET_TIMERSLACK)
-#define PR_SET_TIMERSLACK 29
-#endif
-
-// https://android.googlesource.com/platform/bionic/+/lollipop-release/libc/private/bionic_prctl.h
-#if !defined(PR_SET_VMA)
-#define PR_SET_VMA 0x53564d41
-#endif
-
-#ifndef PR_SET_PTRACER
-#define PR_SET_PTRACER 0x59616d61
 #endif
 
 #endif  // defined(OS_ANDROID)
@@ -417,20 +406,26 @@ ResultExpr RestrictPrlimitToGetrlimit(pid_t target_pid) {
 #if !defined(OS_NACL_NONSFI)
 ResultExpr RestrictPtrace() {
   const Arg<int> request(0);
-  return Switch(request).CASES((
+#if defined(__aarch64__)
+  const Arg<uintptr_t> addr(2);
+#endif
+  return Switch(request)
+      .CASES((
 #if !defined(__aarch64__)
-        PTRACE_GETREGS,
-        PTRACE_GETFPREGS,
-        PTRACE_GET_THREAD_AREA,
+                 PTRACE_GETREGS, PTRACE_GETFPREGS, PTRACE_GET_THREAD_AREA,
+                 PTRACE_GETREGSET,
 #endif
 #if defined(__arm__)
-        PTRACE_GETVFPREGS,
+                 PTRACE_GETVFPREGS,
 #endif
-        PTRACE_GETREGSET,
-        PTRACE_PEEKDATA,
-        PTRACE_ATTACH,
-        PTRACE_DETACH),
-      Allow())
+                 PTRACE_PEEKDATA, PTRACE_ATTACH, PTRACE_DETACH),
+             Allow())
+#if defined(__aarch64__)
+      .Case(
+          PTRACE_GETREGSET,
+          If(AllOf(addr != NT_ARM_PACA_KEYS, addr != NT_ARM_PACG_KEYS), Allow())
+              .Else(CrashSIGSYSPtrace()))
+#endif
       .Default(CrashSIGSYSPtrace());
 }
 #endif  // defined(OS_NACL_NONSFI)
