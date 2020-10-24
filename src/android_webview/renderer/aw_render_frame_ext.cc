@@ -10,6 +10,7 @@
 #include "android_webview/common/aw_hit_test_data.h"
 #include "android_webview/common/render_view_messages.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
@@ -79,7 +80,7 @@ bool RemovePrefixAndAssignIfMatches(const base::StringPiece& prefix,
                                     std::string* dest) {
   const base::StringPiece spec(url.possibly_invalid_spec());
 
-  if (spec.starts_with(prefix)) {
+  if (base::StartsWith(spec, prefix)) {
     url::RawCanonOutputW<1024> output;
     url::DecodeURLEscapeSequences(
         spec.data() + prefix.length(), spec.length() - prefix.length(),
@@ -228,8 +229,6 @@ bool AwRenderFrameExt::OnMessageReceived(const IPC::Message& message) {
                         OnResetScrollAndScaleState)
     IPC_MESSAGE_HANDLER(AwViewMsg_SetInitialPageScale, OnSetInitialPageScale)
     IPC_MESSAGE_HANDLER(AwViewMsg_SetBackgroundColor, OnSetBackgroundColor)
-    IPC_MESSAGE_HANDLER(AwViewMsg_WillSuppressErrorPage,
-                        OnSetWillSuppressErrorPage)
     IPC_MESSAGE_HANDLER(AwViewMsg_SmoothScroll, OnSmoothScroll)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -346,14 +345,6 @@ void AwRenderFrameExt::OnSmoothScroll(int target_x,
     return;
 
   webview->SmoothScroll(target_x, target_y, duration);
-}
-
-void AwRenderFrameExt::OnSetWillSuppressErrorPage(bool suppress) {
-  this->will_suppress_error_page_ = suppress;
-}
-
-bool AwRenderFrameExt::GetWillSuppressErrorPage() {
-  return this->will_suppress_error_page_;
 }
 
 blink::WebView* AwRenderFrameExt::GetWebView() {

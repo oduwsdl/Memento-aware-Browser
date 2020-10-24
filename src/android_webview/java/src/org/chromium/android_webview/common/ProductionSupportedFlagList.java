@@ -4,7 +4,13 @@
 
 package org.chromium.android_webview.common;
 
+import org.chromium.base.BaseSwitches;
+import org.chromium.blink_public.common.BlinkFeatures;
+import org.chromium.cc.base.CcSwitches;
 import org.chromium.components.metrics.MetricsSwitches;
+import org.chromium.components.viz.common.VizFeatures;
+import org.chromium.gpu.config.GpuFeatures;
+import org.chromium.gpu.config.GpuSwitches;
 
 /**
  * List of experimental features/flags supported for user devices. Add features/flags to this list
@@ -34,7 +40,7 @@ public final class ProductionSupportedFlagList {
             Flag.commandLine(AwSwitches.WEBVIEW_VERBOSE_LOGGING,
                     "WebView will log additional debugging information to logcat, such as "
                             + "variations and commandline state."),
-            Flag.commandLine("show-composited-layer-borders",
+            Flag.commandLine(CcSwitches.SHOW_COMPOSITED_LAYER_BORDERS,
                     "Renders a border around compositor layers to help debug and study layer "
                             + "compositing."),
             Flag.commandLine(AwSwitches.FINCH_SEED_EXPIRATION_AGE,
@@ -51,27 +57,51 @@ public final class ProductionSupportedFlagList {
                     "Forces WebView's metrics reporting to be enabled. This overrides user "
                             + "settings and capacity sampling, but does not override the app's "
                             + "choice to opt-out."),
-            Flag.commandLine("webview-log-js-console-messages",
+            Flag.commandLine(AwSwitches.WEBVIEW_LOG_JS_CONSOLE_MESSAGES,
                     "Mirrors JavaScript console messages to system logs."),
-            Flag.commandLine(AwSwitches.CRASH_UPLOADS_ENABLED_FOR_TESTING_SWITCH,
+            Flag.commandLine(BaseSwitches.ENABLE_CRASH_REPORTER_FOR_TESTING,
                     "Used for turning on Breakpad crash reporting in a debug environment where "
                             + "crash reporting is typically compiled but disabled."),
-            Flag.commandLine("disable-gpu-rasterization",
+            Flag.commandLine(GpuSwitches.DISABLE_GPU_RASTERIZATION,
                     "Disables GPU rasterization, i.e. rasterizes on the CPU only."),
-            Flag.baseFeature("OutOfBlinkCors",
-                    "Moves CORS logic into the Network Service (rather than inside the blink "
-                            + "rendering engine)."),
-            Flag.baseFeature("EnableSharedImageForWebview", "Enables shared images for WebView."),
-            Flag.baseFeature("VizForWebView", "Enables Viz for WebView."),
+            Flag.commandLine(GpuSwitches.IGNORE_GPU_BLOCKLIST,
+                    "Overrides the built-in software rendering list and enables "
+                            + "GPU acceleration on unsupported device configurations."),
+            Flag.baseFeature(GpuFeatures.ENABLE_SHARED_IMAGE_FOR_WEBVIEW,
+                    "Enables shared images for WebView."),
+            Flag.baseFeature(VizFeatures.VIZ_FOR_WEBVIEW, "Enables Viz for WebView."),
+            Flag.baseFeature(
+                    GpuFeatures.USE_GLES2_FOR_OOP_R, "Force Skia context to use es2 only."),
             Flag.baseFeature(AwFeatures.WEBVIEW_CONNECTIONLESS_SAFE_BROWSING,
                     "Uses GooglePlayService's 'connectionless' APIs for Safe Browsing "
                             + "security checks."),
-            Flag.baseFeature(
-                    "WebViewBrotliSupport", "Enables brotli compression support in WebView."),
-            Flag.baseFeature(
-                    "AppCache", "Controls AppCache to facilitate testing against future removal."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_BROTLI_SUPPORT,
+                    "Enables brotli compression support in WebView."),
+            Flag.baseFeature(BlinkFeatures.APP_CACHE,
+                    "Controls AppCache to facilitate testing against future removal."),
             Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
                     "Only allow extra headers added via loadUrl() to be sent to the same origin "
                             + "as the original request."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_DOMAIN_ONLY,
+                    "Only allow extra headers added via loadUrl() to be sent to the same domain "
+                            + "(eTLD+1) as the original request. Has no effect when the "
+                            + "stricter same-origin feature is enabled."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_MEASURE_SCREEN_COVERAGE,
+                    "Measure the number of pixels occupied by one or more WebViews as a proportion "
+                            + "of the total screen size. Depending on the number of WebViews and "
+                            + "the size of the screen this might be expensive so hidden behind a "
+                            + "feature flag until the true runtime cost can be measured."),
+            Flag.baseFeature(BlinkFeatures.WEB_COMPONENTS_V0,
+                    "Re-enables the deprecated Web Components v0 features (Shadow DOM v0, Custom "
+                            + "Elements v0, and HTML Imports)."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_DISPLAY_CUTOUT,
+                    "Enables display cutout (notch) support in WebView for Android P and above."),
+            Flag.commandLine(AwSwitches.WEBVIEW_FORCE_LITTLE_CORES,
+                    "Forces WebView to do rendering work in little cores"),
+            Flag.baseFeature(BlinkFeatures.WEBVIEW_ACCELERATE_SMALL_CANVASES,
+                    "Accelerate all canvases in webview."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_MIXED_CONTENT_AUTOUPGRADES,
+                    "Enables autoupgrades for audio/video/image mixed content when mixed content "
+                            + "mode is set to MIXED_CONTENT_COMPATIBILITY_MODE"),
     };
 }

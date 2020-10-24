@@ -88,9 +88,10 @@ void GetOriginsTask::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
-      base::BindOnce(&QuotaManager::GetOriginsModifiedSince, quota_manager_,
+      base::BindOnce(&QuotaManager::GetOriginsModifiedBetween, quota_manager_,
                      blink::mojom::StorageType::kTemporary,
                      base::Time() /* Since beginning of time. */,
+                     base::Time::Max() /* Until the end of times */,
                      base::BindOnce(&GetOriginsTask::OnOriginsObtained, this)));
 }
 
@@ -252,7 +253,7 @@ void AwQuotaManagerBridge::GetOriginsCallbackImpl(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
+  if (!obj)
     return;
 
   Java_AwQuotaManagerBridge_onGetOriginsCallback(
@@ -318,7 +319,7 @@ void AwQuotaManagerBridge::QuotaUsageCallbackImpl(int jcallback_id,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
+  if (!obj)
     return;
 
   Java_AwQuotaManagerBridge_onGetUsageAndQuotaForOriginCallback(

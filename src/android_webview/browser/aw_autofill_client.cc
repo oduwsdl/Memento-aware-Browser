@@ -98,11 +98,19 @@ autofill::AddressNormalizer* AwAutofillClient::GetAddressNormalizer() {
   return nullptr;
 }
 
+const GURL& AwAutofillClient::GetLastCommittedURL() {
+  return web_contents_->GetLastCommittedURL();
+}
+
 security_state::SecurityLevel
 AwAutofillClient::GetSecurityLevelForUmaHistograms() {
   // The metrics are not recorded for Android webview, so return the count value
   // which will not be recorded.
   return security_state::SecurityLevel::SECURITY_LEVEL_COUNT;
+}
+
+const translate::LanguageState* AwAutofillClient::GetLanguageState() {
+  return nullptr;
 }
 
 void AwAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {
@@ -214,7 +222,7 @@ void AwAutofillClient::UpdatePopup(
 void AwAutofillClient::HideAutofillPopup(autofill::PopupHidingReason reason) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
+  if (!obj)
     return;
   delegate_.reset();
   Java_AwAutofillClient_hideAutofillPopup(env, obj);
@@ -309,7 +317,7 @@ void AwAutofillClient::ShowAutofillPopupImpl(
     const std::vector<autofill::Suggestion>& suggestions) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
+  if (!obj)
     return;
 
   // We need an array of AutofillSuggestion.
@@ -331,11 +339,11 @@ void AwAutofillClient::ShowAutofillPopupImpl(
     return;
 
   const ScopedJavaLocalRef<jobject> current_view = anchor_view_.view();
-  if (current_view.is_null())
+  if (!current_view)
     anchor_view_ = view_android->AcquireAnchorView();
 
   const ScopedJavaLocalRef<jobject> view = anchor_view_.view();
-  if (view.is_null())
+  if (!view)
     return;
 
   view_android->SetAnchorRect(view, element_bounds);

@@ -84,6 +84,8 @@ class AwRenderViewHostExt : public content::WebContentsObserver {
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
   void RenderFrameCreated(content::RenderFrameHost* frame_host) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
   void OnPageScaleFactorChanged(float page_scale_factor) override;
@@ -109,7 +111,7 @@ class AwRenderViewHostExt : public content::WebContentsObserver {
   // *current* RVH.
   std::map<int, DocumentHasImagesResult> image_requests_callback_map_;
 
-  // Master copy of hit test data on the browser side. This is updated
+  // Authoritative copy of hit test data on the browser side. This is updated
   // as a result of DoHitTest called explicitly or when the FocusedNodeChanged
   // is called in AwRenderViewExt.
   AwHitTestData last_hit_test_data_;

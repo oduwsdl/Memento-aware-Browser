@@ -33,7 +33,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
-#include "components/viz/common/surfaces/local_surface_id_allocation.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
@@ -67,8 +67,9 @@ class HardwareRendererViz::OnViz : public viz::DisplayClient {
 
   // viz::DisplayClient overrides.
   void DisplayOutputSurfaceLost() override;
-  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              viz::RenderPassList* render_passes) override;
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      viz::AggregatedRenderPassList* render_passes) override;
   void DisplayDidDrawAndSwap() override {}
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override {}
@@ -85,7 +86,7 @@ class HardwareRendererViz::OnViz : public viz::DisplayClient {
   scoped_refptr<RootFrameSink> without_gpu_;
 
   const viz::FrameSinkId frame_sink_id_;
-  viz::LocalSurfaceIdAllocation root_id_allocation_;
+  viz::LocalSurfaceId root_local_surface_id_;
   viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
   std::unique_ptr<viz::BeginFrameSource> stub_begin_frame_source_;
   std::unique_ptr<viz::Display> display_;
@@ -119,9 +120,12 @@ HardwareRendererViz::OnViz::OnViz(
 
   // Android WebView has no overlay processor, and does not need to share
   // gpu_task_scheduler, so it is passed in as nullptr.
+  // TODO(weiliangc): Android WebView should support overlays. Change initialize
+  // order to make this happen.
   display_ = std::make_unique<viz::Display>(
       nullptr /* shared_bitmap_manager */,
-      output_surface_provider->renderer_settings(), frame_sink_id_,
+      output_surface_provider->renderer_settings(),
+      output_surface_provider->debug_settings(), frame_sink_id_,
       nullptr /*gpu_task_scheduler */, std::move(output_surface),
       std::move(overlay_processor), std::move(scheduler),
       nullptr /* current_task_runner */);
@@ -173,8 +177,9 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
 
   // Create a frame with a single SurfaceDrawQuad referencing the child
   // Surface and transformed using the given transform.
-  std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
-  render_pass->SetNew(1, gfx::Rect(viewport), clip, gfx::Transform());
+  auto render_pass = viz::CompositorRenderPass::Create();
+  render_pass->SetNew(viz::CompositorRenderPassId{1}, gfx::Rect(viewport), clip,
+                      gfx::Transform());
   render_pass->has_transparent_background = false;
 
   viz::SharedQuadState* quad_state =
@@ -201,14 +206,13 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
   frame.metadata.device_scale_factor = device_scale_factor;
   frame.metadata.frame_token = ++next_frame_token_;
 
-  if (!root_id_allocation_.IsValid() || viewport != surface_size_ ||
+  if (!root_local_surface_id_.is_valid() || viewport != surface_size_ ||
       child_surface_id_ != child_id) {
     parent_local_surface_id_allocator_.GenerateId();
-    root_id_allocation_ =
-        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation();
+    root_local_surface_id_ =
+        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId();
     surface_size_ = viewport;
-    display_->SetLocalSurfaceId(root_id_allocation_.local_surface_id(),
-                                device_scale_factor);
+    display_->SetLocalSurfaceId(root_local_surface_id_, device_scale_factor);
 
     if (child_surface_id_ != child_id) {
       if (child_surface_id_.frame_sink_id() != child_id.frame_sink_id()) {
@@ -227,8 +231,8 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
     frame.metadata.referenced_surfaces = std::move(child_ranges);
   }
 
-  without_gpu_->support()->SubmitCompositorFrame(
-      root_id_allocation_.local_surface_id(), std::move(frame));
+  without_gpu_->support()->SubmitCompositorFrame(root_local_surface_id_,
+                                                 std::move(frame));
   display_->Resize(viewport);
   display_->DrawAndSwap(base::TimeTicks::Now());
 }
@@ -251,7 +255,7 @@ void HardwareRendererViz::OnViz::DisplayOutputSurfaceLost() {
 
 void HardwareRendererViz::OnViz::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
-    viz::RenderPassList* render_passes) {
+    viz::AggregatedRenderPassList* render_passes) {
   DCHECK_CALLED_ON_VALID_THREAD(viz_thread_checker_);
   hit_test_aggregator_->Aggregate(child_surface_id_, render_passes);
 }
@@ -267,8 +271,9 @@ HardwareRendererViz::OnViz::GetPreferredFrameIntervalForFrameSinkId(
 
 HardwareRendererViz::HardwareRendererViz(
     RenderThreadManager* state,
-    RootFrameSinkGetter root_frame_sink_getter)
-    : HardwareRenderer(state) {
+    RootFrameSinkGetter root_frame_sink_getter,
+    AwVulkanContextProvider* context_provider)
+    : HardwareRenderer(state), output_surface_provider_(context_provider) {
   DCHECK_CALLED_ON_VALID_THREAD(render_thread_checker_);
   DCHECK(output_surface_provider_.renderer_settings().use_skia_renderer);
 

@@ -15,7 +15,6 @@
 #include "url/origin.h"
 
 namespace blink {
-enum WebMeaningfulLayout;
 class WebFrameWidget;
 class WebView;
 }
@@ -30,8 +29,6 @@ class AwRenderFrameExt : public content::RenderFrameObserver {
   explicit AwRenderFrameExt(content::RenderFrame* render_frame);
 
   static AwRenderFrameExt* FromRenderFrame(content::RenderFrame* render_frame);
-
-  bool GetWillSuppressErrorPage();
 
  private:
   ~AwRenderFrameExt() override;
@@ -60,17 +57,12 @@ class AwRenderFrameExt : public content::RenderFrameObserver {
 
   void OnSmoothScroll(int target_x, int target_y, base::TimeDelta duration);
 
-  void OnSetWillSuppressErrorPage(bool suppress);
-
   blink::WebView* GetWebView();
   blink::WebFrameWidget* GetWebFrameWidget();
 
   url::Origin last_origin_;
 
   blink::AssociatedInterfaceRegistry registry_;
-
-  // Some WebView users might want to show their own error pages / logic
-  bool will_suppress_error_page_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AwRenderFrameExt);
 };

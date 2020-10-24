@@ -22,7 +22,7 @@
 #include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkBackendContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkExtensions.h"
 #include "third_party/skia/src/gpu/vk/GrVkSecondaryCBDrawContext.h"
@@ -68,7 +68,7 @@ class GLNonOwnedCompatibilityContext : public gl::GLContextEGL {
     g_gl_context = this;
   }
 
-  bool MakeCurrent(gl::GLSurface* surface) override {
+  bool MakeCurrentImpl(gl::GLSurface* surface) override {
     // A GLNonOwnedCompatibilityContext may have set the GetRealCurrent()
     // pointer to itself, while re-using our EGL context. In these cases just
     // call SetCurrent to restore expected GetRealContext().
@@ -83,10 +83,10 @@ class GLNonOwnedCompatibilityContext : public gl::GLContextEGL {
       return true;
     }
 
-    return gl::GLContextEGL::MakeCurrent(surface);
+    return gl::GLContextEGL::MakeCurrentImpl(surface);
   }
 
-  bool MakeCurrent() { return MakeCurrent(surface_.get()); }
+  bool MakeCurrent() { return gl::GLContext::MakeCurrent(surface_.get()); }
 
   static scoped_refptr<GLNonOwnedCompatibilityContext> GetOrCreateInstance() {
     if (g_gl_context)
@@ -157,7 +157,7 @@ void PostDrawVkWrapper(int functor,
 }
 
 sk_sp<GrVkSecondaryCBDrawContext> CreateDrawContext(
-    GrContext* gr_context,
+    GrDirectContext* gr_context,
     AwDrawFn_DrawVkParams* params,
     sk_sp<SkColorSpace> color_space) {
   // Create a GrVkSecondaryCBDrawContext to render our AHB w/ Vulkan.
@@ -280,8 +280,9 @@ void AwDrawFnImpl::InitVk(AwDrawFn_InitVkParams* params) {
   // We should never have a |vulkan_context_provider_| if we are calling VkInit.
   // This means context destroyed was not correctly called.
   DCHECK(!vulkan_context_provider_);
-  vulkan_context_provider_ =
-      AwVulkanContextProvider::GetOrCreateInstance(params);
+  vulkan_context_provider_ = AwVulkanContextProvider::Create(params);
+  render_thread_manager_.SetVulkanContextProviderOnRT(
+      vulkan_context_provider_.get());
 
   // Make sure we have a GL context.
   DCHECK(!gl_context_);
@@ -316,8 +317,8 @@ void AwDrawFnImpl::DrawVkDirect(AwDrawFn_DrawVkParams* params) {
     LOG(ERROR) << "Received invalid colorspace.";
     color_space = SkColorSpace::MakeSRGB();
   }
-  auto draw_context = CreateDrawContext(vulkan_context_provider_->gr_context(),
-                                        params, color_space);
+  auto draw_context = CreateDrawContext(
+      vulkan_context_provider_->GetGrContext(), params, color_space);
 
   // Set the draw contexct in |vulkan_context_provider_|, so the SkiaRenderer
   // and SkiaOutputSurface* will use it as frame render target.
@@ -437,16 +438,18 @@ void AwDrawFnImpl::DrawVkInterop(AwDrawFn_DrawVkParams* params) {
   }
 
   pending_draw->draw_context = CreateDrawContext(
-      vulkan_context_provider_->gr_context(), params, color_space);
+      vulkan_context_provider_->GetGrContext(), params, color_space);
 
   // If we have a |gl_done_fd|, create a Skia GrBackendSemaphore from
   // |gl_done_fd| and wait.
   if (gl_done_fd.is_valid()) {
     VkSemaphore gl_done_semaphore =
-        vulkan_context_provider_->implementation()->ImportSemaphoreHandle(
-            vulkan_context_provider_->device(),
-            gpu::SemaphoreHandle(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
-                                 std::move(gl_done_fd)));
+        vulkan_context_provider_->GetVulkanImplementation()
+            ->ImportSemaphoreHandle(
+                vulkan_context_provider_->device(),
+                gpu::SemaphoreHandle(
+                    VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+                    std::move(gl_done_fd)));
     if (gl_done_semaphore == VK_NULL_HANDLE) {
       LOG(ERROR) << "Could not create Vulkan semaphore for GL completion.";
       return;
@@ -485,7 +488,7 @@ void AwDrawFnImpl::DrawVkInterop(AwDrawFn_DrawVkParams* params) {
   GrBackendTexture backend_texture(params->width, params->height,
                                    pending_draw->image_info);
   pending_draw->ahb_skimage = SkImage::MakeFromTexture(
-      vulkan_context_provider_->gr_context(), backend_texture,
+      vulkan_context_provider_->GetGrContext(), backend_texture,
       kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
       color_space);
   if (!pending_draw->ahb_skimage) {
@@ -555,14 +558,14 @@ void AwDrawFnImpl::PostDrawVkInterop(AwDrawFn_PostDrawVkParams* params) {
   flushInfo.fNumSemaphores = 1;
   flushInfo.fSignalSemaphores = &gr_post_draw_semaphore;
   GrSemaphoresSubmitted submitted =
-      vulkan_context_provider_->gr_context()->flush(flushInfo);
-  vulkan_context_provider_->gr_context()->submit();
+      vulkan_context_provider_->GetGrContext()->flush(flushInfo);
+  vulkan_context_provider_->GetGrContext()->submit();
   if (submitted != GrSemaphoresSubmitted::kYes) {
     LOG(ERROR) << "Skia could not submit GrSemaphore.";
     return;
   }
   gpu::SemaphoreHandle semaphore_handle =
-      vulkan_context_provider_->implementation()->GetSemaphoreHandle(
+      vulkan_context_provider_->GetVulkanImplementation()->GetSemaphoreHandle(
           vulkan_context_provider_->device(),
           pending_draw->post_draw_semaphore);
   if (!semaphore_handle.is_valid()) {
@@ -625,7 +628,7 @@ AwDrawFnImpl::InFlightInteropDraw::~InFlightInteropDraw() {
     // to flush before the vkQueueWaitIdle below.
     if (ahb_skimage) {
       ahb_skimage.reset();
-      vk_context_provider->gr_context()->flushAndSubmit();
+      vk_context_provider->GetGrContext()->flushAndSubmit();
     }
     // We encountered an error and are not sure when our Vk objects are safe to
     // delete. VkQueueWaitIdle to ensure safety.

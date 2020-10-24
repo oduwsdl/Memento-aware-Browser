@@ -11,7 +11,6 @@
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_main_parts.h"
-#include "android_webview/browser/aw_content_browser_overlay_manifest.h"
 #include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_contents_client_bridge.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
@@ -58,7 +57,7 @@
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/page_load_metrics/browser/metrics_navigation_throttle.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
-#include "components/policy/content/policy_blacklist_navigation_throttle.h"
+#include "components/policy/content/policy_blocklist_navigation_throttle.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/browser_url_loader_throttle.h"
@@ -86,7 +85,6 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/user_agent.h"
-#include "content/public/common/web_preferences.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -101,6 +99,7 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_bundle_android.h"
@@ -278,12 +277,12 @@ bool AwContentBrowserClient::get_check_cleartext_permitted() {
 
 AwContentBrowserClient::AwContentBrowserClient(
     AwFeatureListCreator* aw_feature_list_creator)
-    : aw_feature_list_creator_(aw_feature_list_creator) {
+    : sniff_file_urls_(AwSettings::GetAllowSniffingFileUrls()),
+      aw_feature_list_creator_(aw_feature_list_creator) {
   // |aw_feature_list_creator| should not be null. The AwBrowserContext will
   // take the PrefService owned by the creator as the Local State instead
   // of loading the JSON file from disk.
   DCHECK(aw_feature_list_creator_);
-  sniff_file_urls_ = AwSettings::GetAllowSniffingFileUrls();
 }
 
 AwContentBrowserClient::~AwContentBrowserClient() {}
@@ -421,6 +420,11 @@ void AwContentBrowserClient::AppendExtraCommandLineSwitches(
             ::switches::kEnableCrashReporterForTesting)) {
       command_line->AppendSwitch(::switches::kEnableCrashReporterForTesting);
     }
+    // Pass WebView's force little cores flag to renderer process.
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            ::switches::kWebViewForceLittleCores)) {
+      command_line->AppendSwitch(::switches::kWebViewForceLittleCores);
+    }
   }
 }
 
@@ -457,11 +461,14 @@ AwContentBrowserClient::CreateQuotaPermissionContext() {
 content::GeneratedCodeCacheSettings
 AwContentBrowserClient::GetGeneratedCodeCacheSettings(
     content::BrowserContext* context) {
-  // If we pass 0 for size, disk_cache will pick a default size using the
-  // heuristics based on available disk size. These are implemented in
-  // disk_cache::PreferredCacheSize in net/disk_cache/cache_util.cc.
+  // WebView limits the main HTTP cache to 20MB; we need to set a comparable
+  // limit for the code cache since the source file needs to be in the HTTP
+  // cache for the code cache entry to be used. There are two code caches that
+  // both use this value, so we pass 10MB to keep the total disk usage to
+  // roughly 2x what it was before the code cache was implemented.
+  // TODO(crbug/893318): webview should have smarter cache sizing logic.
   AwBrowserContext* browser_context = static_cast<AwBrowserContext*>(context);
-  return content::GeneratedCodeCacheSettings(true, 0,
+  return content::GeneratedCodeCacheSettings(true, 10 * 1024 * 1024,
                                              browser_context->GetCacheDir());
 }
 
@@ -593,13 +600,13 @@ void AwContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
   int crash_signal_fd =
       crashpad::CrashHandlerHost::Get()->GetDeathSignalSocket();
   if (crash_signal_fd >= 0) {
-    mappings->Share(service_manager::kCrashDumpSignal, crash_signal_fd);
+    mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
 }
 
 void AwContentBrowserClient::OverrideWebkitPrefs(
     content::RenderViewHost* rvh,
-    content::WebPreferences* web_prefs) {
+    blink::web_pref::WebPreferences* web_prefs) {
   AwSettings* aw_settings = AwSettings::FromWebContents(
       content::WebContents::FromRenderViewHost(rvh));
   if (aw_settings) {
@@ -629,7 +636,7 @@ AwContentBrowserClient::CreateThrottlesForNavigation(
     throttles.push_back(
         navigation_interception::InterceptNavigationDelegate::CreateThrottleFor(
             navigation_handle, navigation_interception::SynchronyMode::kSync));
-    throttles.push_back(std::make_unique<PolicyBlacklistNavigationThrottle>(
+    throttles.push_back(std::make_unique<PolicyBlocklistNavigationThrottle>(
         navigation_handle, AwBrowserContext::FromWebContents(
                                navigation_handle->GetWebContents())));
     throttles.push_back(
@@ -641,13 +648,6 @@ AwContentBrowserClient::CreateThrottlesForNavigation(
 content::DevToolsManagerDelegate*
 AwContentBrowserClient::GetDevToolsManagerDelegate() {
   return new AwDevToolsManagerDelegate();
-}
-
-base::Optional<service_manager::Manifest>
-AwContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
-  if (name == content::mojom::kBrowserServiceName)
-    return GetAWContentBrowserOverlayManifest();
-  return base::nullopt;
 }
 
 bool AwContentBrowserClient::BindAssociatedReceiverFromFrame(
@@ -748,7 +748,7 @@ AwContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate() {
     safe_browsing_url_checker_delegate_ = new AwUrlCheckerDelegateImpl(
         AwBrowserProcess::GetInstance()->GetSafeBrowsingDBManager(),
         AwBrowserProcess::GetInstance()->GetSafeBrowsingUIManager(),
-        AwBrowserProcess::GetInstance()->GetSafeBrowsingWhitelistManager());
+        AwBrowserProcess::GetInstance()->GetSafeBrowsingAllowlistManager());
   }
 
   return safe_browsing_url_checker_delegate_;
@@ -834,11 +834,13 @@ bool AwContentBrowserClient::HandleExternalProtocol(
     mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory) {
   mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver =
       out_factory->InitWithNewPipeAndPassReceiver();
+  // We don't need to care for |security_options| as the factories constructed
+  // below are used only for navigation.
   if (content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
     // Manages its own lifetime.
     new android_webview::AwProxyingURLLoaderFactory(
         0 /* process_id */, std::move(receiver), mojo::NullRemote(),
-        true /* intercept_only */);
+        true /* intercept_only */, base::nullopt /* security_options */);
   } else {
     content::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
@@ -848,7 +850,8 @@ bool AwContentBrowserClient::HandleExternalProtocol(
               // Manages its own lifetime.
               new android_webview::AwProxyingURLLoaderFactory(
                   0 /* process_id */, std::move(receiver), mojo::NullRemote(),
-                  true /* intercept_only */);
+                  true /* intercept_only */,
+                  base::nullopt /* security_options */);
             },
             std::move(receiver)));
   }
@@ -866,10 +869,11 @@ void AwContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
   if (aw_settings && aw_settings->GetAllowFileAccess()) {
     AwBrowserContext* aw_browser_context =
         AwBrowserContext::FromWebContents(web_contents);
-    auto file_factory = CreateFileURLLoaderFactory(
-        aw_browser_context->GetPath(),
-        aw_browser_context->GetSharedCorsOriginAccessList());
-    factories->emplace(url::kFileScheme, std::move(file_factory));
+    factories->emplace(
+        url::kFileScheme,
+        content::CreateFileURLLoaderFactory(
+            aw_browser_context->GetPath(),
+            aw_browser_context->GetSharedCorsOriginAccessList()));
   }
 }
 
@@ -885,11 +889,11 @@ bool AwContentBrowserClient::ShouldEnableStrictSiteIsolation() {
   return false;
 }
 
-bool AwContentBrowserClient::ShouldLockToOrigin(
+bool AwContentBrowserClient::ShouldLockProcessToSite(
     content::BrowserContext* browser_context,
     const GURL& effective_url) {
   // TODO(lukasza): https://crbug.cmo/869494: Once Android WebView supports
-  // OOPIFs, we should remove this ShouldLockToOrigin overload.  Till then,
+  // OOPIFs, we should remove this ShouldLockProcess overload.  Till then,
   // returning false helps avoid accidentally applying citadel-style Site
   // Isolation enforcement to Android WebView (and causing incorrect renderer
   // kills).
@@ -903,6 +907,7 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     base::Optional<int64_t> navigation_id,
+    base::UkmSourceId ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -937,10 +942,44 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
       type == URLLoaderFactoryType::kNavigation ? 0 : render_process_id;
 
   // Android WebView has one non off-the-record browser context.
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy,
-                                process_id, std::move(proxied_receiver),
-                                std::move(target_factory_remote)));
+  if (frame) {
+    auto security_options =
+        base::make_optional<AwProxyingURLLoaderFactory::SecurityOptions>();
+    security_options->disable_web_security =
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kDisableWebSecurity);
+    const auto& preferences =
+        WebContents::FromRenderFrameHost(frame)->GetOrCreateWebPreferences();
+    // See also //android_webview/docs/cors-and-webview-api.md to understand how
+    // each settings affect CORS behaviors on file:// and content://.
+    if (request_initiator.scheme() == url::kFileScheme) {
+      security_options->disable_web_security |=
+          preferences.allow_universal_access_from_file_urls;
+      // Usual file:// to file:// requests are mapped to kNoCors if the setting
+      // is set to true. Howover, file:///android_{asset|res}/ still uses kCors
+      // and needs to permit it in the |security_options|.
+      security_options->allow_cors_to_same_scheme =
+          preferences.allow_file_access_from_file_urls;
+    } else if (request_initiator.scheme() == url::kContentScheme) {
+      security_options->allow_cors_to_same_scheme =
+          preferences.allow_file_access_from_file_urls ||
+          preferences.allow_universal_access_from_file_urls;
+    }
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy, process_id,
+                       std::move(proxied_receiver),
+                       std::move(target_factory_remote), security_options));
+  } else {
+    // A service worker and worker subresources set nullptr to |frame|, and
+    // work without seeing the AllowUniversalAccessFromFileURLs setting. So,
+    // we don't pass a valid |security_options| here.
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&AwProxyingURLLoaderFactory::CreateProxy,
+                                  process_id, std::move(proxied_receiver),
+                                  std::move(target_factory_remote),
+                                  base::nullopt /* security_options */));
+  }
   return true;
 }
 

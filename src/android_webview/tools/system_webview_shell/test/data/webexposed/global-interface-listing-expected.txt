@@ -699,6 +699,9 @@ interface CanvasRenderingContext2D
     getter strokeStyle
     getter textAlign
     getter textBaseline
+    getter textLetterSpacing
+    getter textWordSpacing
+    getter fontKerning
     method arc
     method arcTo
     method beginPath
@@ -707,6 +710,7 @@ interface CanvasRenderingContext2D
     method clip
     method closePath
     method constructor
+    method createConicGradient
     method createImageData
     method createLinearGradient
     method createPattern
@@ -761,6 +765,9 @@ interface CanvasRenderingContext2D
     setter strokeStyle
     setter textAlign
     setter textBaseline
+    setter textLetterSpacing
+    setter textWordSpacing
+    setter fontKerning
 interface ChannelMergerNode : AudioNode
     attribute @@toStringTag
     method constructor
@@ -4244,7 +4251,10 @@ interface OffscreenCanvasRenderingContext2D
     getter shadowOffsetY
     getter strokeStyle
     getter textAlign
+    getter textLetterSpacing
+    getter textWordSpacing
     getter textBaseline
+    getter fontKerning
     method arc
     method arcTo
     method beginPath
@@ -4253,6 +4263,7 @@ interface OffscreenCanvasRenderingContext2D
     method clip
     method closePath
     method constructor
+    method createConicGradient
     method createImageData
     method createLinearGradient
     method createPattern
@@ -4305,6 +4316,9 @@ interface OffscreenCanvasRenderingContext2D
     setter strokeStyle
     setter textAlign
     setter textBaseline
+    setter textLetterSpacing
+    setter textWordSpacing
+    setter fontKerning
 interface Option
     attribute @@toStringTag
     getter defaultSelected
