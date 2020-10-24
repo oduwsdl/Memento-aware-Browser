@@ -39,28 +39,28 @@ HostStarter::HostStarter(
 HostStarter::~HostStarter() = default;
 
 std::unique_ptr<HostStarter> HostStarter::Create(
-    const std::string& remoting_server_endpoint,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   return base::WrapUnique(new HostStarter(
       std::make_unique<gaia::GaiaOAuthClient>(url_loader_factory),
-      std::make_unique<remoting::ServiceClient>(remoting_server_endpoint),
+      std::make_unique<remoting::ServiceClient>(url_loader_factory),
       remoting::DaemonController::Create()));
 }
 
-void HostStarter::StartHost(
-    const std::string& host_name,
-    const std::string& host_pin,
-    bool consent_to_data_collection,
-    const std::string& auth_code,
-    const std::string& redirect_url,
-    CompletionCallback on_done) {
+void HostStarter::StartHost(const std::string& host_id,
+                            const std::string& host_name,
+                            const std::string& host_pin,
+                            bool consent_to_data_collection,
+                            const std::string& auth_code,
+                            const std::string& redirect_url,
+                            CompletionCallback on_done) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DCHECK(on_done_.is_null());
 
+  host_id_ = host_id;
   host_name_ = host_name;
   host_pin_ = host_pin;
   consent_to_data_collection_ = consent_to_data_collection;
-  on_done_ = on_done;
+  on_done_ = std::move(on_done);
   oauth_client_info_.client_id =
       google_apis::GetOAuth2ClientID(google_apis::CLIENT_REMOTING);
   oauth_client_info_.client_secret =
@@ -121,7 +121,8 @@ void HostStarter::OnGetUserEmailResponse(const std::string& user_email) {
     // This is the first callback, with the host owner credentials. Store the
     // owner's email, and register the host.
     host_owner_ = user_email;
-    host_id_ = base::GenerateGUID();
+    if (host_id_.empty())
+      host_id_ = base::GenerateGUID();
     key_pair_ = RsaKeyPair::Generate();
 
     std::string host_client_id;
@@ -185,7 +186,7 @@ void HostStarter::StartHostProcess() {
   config->SetString("host_secret_hash", host_secret_hash);
   daemon_controller_->SetConfigAndStart(
       std::move(config), consent_to_data_collection_,
-      base::Bind(&HostStarter::OnHostStarted, base::Unretained(this)));
+      base::BindOnce(&HostStarter::OnHostStarted, base::Unretained(this)));
 }
 
 void HostStarter::OnHostStarted(DaemonController::AsyncResult result) {
