@@ -184,19 +184,19 @@ def chromium_save_isolated(isolated, data, path_variables, algo):
   cost by splitting low-churn files off the master .isolated file. It also
   reduces overall isolateserver memcache consumption.
   """
-  slaves = []
+  subs = []
 
   def extract_into_included_isolated(prefix):
-    new_slave = {
-      'algo': data['algo'],
-      'files': {},
-      'version': data['version'],
+    new_sub = {
+        'algo': data['algo'],
+        'files': {},
+        'version': data['version'],
     }
-    for f in data['files'].keys():
+    for f in list(data['files'].keys()):
       if f.startswith(prefix):
-        new_slave['files'][f] = data['files'].pop(f)
-    if new_slave['files']:
-      slaves.append(new_slave)
+        new_sub['files'][f] = data['files'].pop(f)
+    if new_sub['files']:
+      subs.append(new_sub)
 
   # Split test/data/ in its own .isolated file.
   extract_into_included_isolated(os.path.join('test', 'data', ''))
@@ -206,12 +206,12 @@ def chromium_save_isolated(isolated, data, path_variables, algo):
     extract_into_included_isolated(path_variables['PRODUCT_DIR'])
 
   files = []
-  for index, f in enumerate(slaves):
-    slavepath = isolated[:-len('.isolated')] + '.%d.isolated' % index
-    tools.write_json(slavepath, f, True)
-    data.setdefault('includes', []).append(
-        isolated_format.hash_file(slavepath, algo))
-    files.append(os.path.basename(slavepath))
+  for index, f in enumerate(subs):
+    sub_path = isolated[:-len('.isolated')] + '.%d.isolated' % index
+    tools.write_json(sub_path, f, True)
+    data.setdefault('includes',
+                    []).append(isolated_format.hash_file(sub_path, algo))
+    files.append(os.path.basename(sub_path))
 
   isolated_format.save_isolated(isolated, data)
   return files
@@ -280,7 +280,7 @@ class SavedState(Flattenable):
       # Algorithm used to generate the hash. The only supported value is at the
       # time of writing 'sha-1'.
       'algo',
-      # List of included .isolated files. Used to support/remember 'slave'
+      # List of included .isolated files. Used to support/remember 'sub'
       # .isolated files. Relative path to isolated_basedir.
       'child_isolated_files',
       # Cache of the processed command. This value is saved because .isolated
@@ -388,7 +388,7 @@ class SavedState(Flattenable):
     """
 
     def strip(data):
-      """Returns a 'files' entry with only the whitelisted keys."""
+      """Returns a 'files' entry with only the keys in the allowlist."""
       return dict((k, data[k]) for k in ('h', 'l', 'm', 's') if k in data)
 
     out = {
@@ -503,7 +503,7 @@ class CompleteState(object):
     return cls(isolated_filepath, s)
 
   def load_isolate(self, cwd, isolate_file, path_variables, config_variables,
-                   blacklist, ignore_broken_items, collapse_symlinks):
+                   denylist, ignore_broken_items, collapse_symlinks):
     """Updates self.isolated and self.saved_state with information loaded from a
     .isolate file.
 
@@ -549,7 +549,8 @@ class CompleteState(object):
     # form '../../foo/bar'. Note that path variables must be taken in account
     # too, add them as if they were input files.
     self.saved_state.root_dir = isolate_format.determine_root_dir(
-        isolate_cmd_dir, infiles + self.saved_state.path_variables.values())
+        isolate_cmd_dir,
+        infiles + list(self.saved_state.path_variables.values()))
     # The relative directory is automatically determined by the relative path
     # between root_dir and the directory containing the .isolate file,
     # isolate_base_dir.
@@ -574,12 +575,11 @@ class CompleteState(object):
       follow_symlinks = sys.platform != 'win32'
     # Expand the directories by listing each file inside. Up to now, trailing
     # os.path.sep must be kept.
-    infiles = _expand_directories_and_symlinks(
-        self.saved_state.root_dir,
-        infiles,
-        tools.gen_blacklist(blacklist),
-        follow_symlinks,
-        ignore_broken_items)
+    infiles = _expand_directories_and_symlinks(self.saved_state.root_dir,
+                                               infiles,
+                                               tools.gen_denylist(denylist),
+                                               follow_symlinks,
+                                               ignore_broken_items)
 
     # Finally, update the new data to be able to generate the foo.isolated file,
     # the file that is used by run_isolated.py.
@@ -604,7 +604,6 @@ class CompleteState(object):
         # code is going away soon and shouldn't be used in new code.
         meta = isolated_format.file_to_metadata(
             filepath,
-            self.saved_state.read_only,
             collapse_symlinks)
         if 'l' not in meta:
           meta['h'] = isolated_format.hash_file(filepath, self.saved_state.algo)
@@ -661,7 +660,7 @@ def load_complete_state(options, cwd, subdir, skip_update):
   """
   assert not options.isolate or os.path.isabs(options.isolate)
   assert not options.isolated or os.path.isabs(options.isolated)
-  cwd = file_path.get_native_path_case(unicode(cwd))
+  cwd = file_path.get_native_path_case(six.ensure_text(cwd))
   # maruel: This is incorrect but it's not worth fixing.
   namespace = getattr(options, 'namespace', 'default')
   algo_name = isolate_storage.ServerRef('', namespace).hash_algo_name
@@ -752,7 +751,6 @@ def create_isolate_tree(outdir, root_dir, files, relative_cwd, read_only):
   # directory.
   file_path.ensure_tree(cwd)
 
-  run_isolated.change_tree_read_only(outdir, read_only)
   return cwd
 
 
@@ -819,9 +817,9 @@ def _process_infiles(infiles):
   logging.info('Skipped %d duplicated entries', skipped)
 
 
-def _expand_directories_and_symlinks(
-    indir, infiles, blacklist, follow_symlinks, ignore_broken_items):
-  """Expands the directories and the symlinks, applies the blacklist and
+def _expand_directories_and_symlinks(indir, infiles, denylist, follow_symlinks,
+                                     ignore_broken_items):
+  """Expands the directories and the symlinks, applies the denylist and
   verifies files exist.
 
   Files are specified in os native path separator.
@@ -838,10 +836,9 @@ def _expand_directories_and_symlinks(
     try:
       # Ignore the symlink hint, this code will be eventually deleted so it is
       # not worth optimizing.
-      out.extend(
-          relpath for relpath, _is_symlink
-          in isolated_format.expand_directory_and_symlink(
-              indir, relfile, blacklist, follow_symlinks))
+      out.extend(relpath for relpath, _is_symlink in
+                 isolated_format.expand_directory_and_symlink(
+                     indir, relfile, denylist, follow_symlinks))
     except isolated_format.MappingError as e:
       if not ignore_broken_items:
         raise
@@ -951,7 +948,7 @@ def CMDarchive(parser, args):
   if result is None:
     return EXIT_CODE_UPLOAD_ERROR
   assert len(result) == 1, result
-  if result.values()[0] is None:
+  if list(result.values())[0] is None:
     return EXIT_CODE_ISOLATE_ERROR
   return 0
 
@@ -1142,7 +1139,7 @@ def _process_variable_arg(option, opt, _value, parser):
     raise optparse.OptionValueError(
         'Variable \'%s\' doesn\'t respect format \'%s\'' %
         (k, isolate_format.VALID_VARIABLE))
-  variables.append((k, v.decode('utf-8')))
+  variables.append((k, six.ensure_text(v)))
 
 
 def add_variable_option(parser):
@@ -1257,7 +1254,7 @@ def process_isolate_options(parser, options, cwd=None, require_isolated=True):
   Mutates |options| in place, by normalizing path to isolate file, values of
   variables, etc.
   """
-  cwd = file_path.get_native_path_case(unicode(cwd or os.getcwd()))
+  cwd = file_path.get_native_path_case(six.ensure_text(cwd or os.getcwd()))
 
   # Parse --isolated option.
   if options.isolated:
@@ -1275,7 +1272,8 @@ def process_isolate_options(parser, options, cwd=None, require_isolated=True):
     try:
       return int(s)
     except ValueError:
-      return s.decode('utf-8')
+      return six.ensure_text(s)
+
   options.config_variables = dict(
       (k, try_make_int(v)) for k, v in options.config_variables)
   options.path_variables = dict(options.path_variables)

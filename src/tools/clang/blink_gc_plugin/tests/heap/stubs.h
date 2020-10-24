@@ -102,7 +102,6 @@ class ListHashSet {
 };
 
 template <typename ValueArg,
-          typename HashArg = void,
           typename TraitsArg = void,
           typename Allocator = DefaultAllocator>
 class LinkedHashSet {
@@ -175,6 +174,13 @@ class Optional {};
 
 }  // namespace base
 
+namespace absl {
+
+template <class... Ts>
+class variant {};
+
+}  // namespace absl
+
 namespace blink {
 
 using namespace WTF;
@@ -198,18 +204,6 @@ using namespace WTF;
 
 #define GC_PLUGIN_IGNORE(bug)                           \
     __attribute__((annotate("blink_gc_plugin_ignore")))
-
-#define USING_GARBAGE_COLLECTED_MIXIN(type)                             \
- public:                                                                \
-  virtual void AdjustAndMark(Visitor*) const override {}                \
-  virtual bool IsHeapObjectAlive(Visitor*) const override { return 0; } \
-  void* mixin_constructor_marker_
-
-#define USING_GARBAGE_COLLECTED_MIXIN_NEW(type)                         \
- public:                                                                \
-  virtual void AdjustAndMark(Visitor*) const override {}                \
-  virtual bool IsHeapObjectAlive(Visitor*) const override { return 0; } \
-  typedef int HasUsingGarbageCollectedMixinMacro
 
 template<typename T> class GarbageCollected { };
 
@@ -284,7 +278,7 @@ template<typename T>
 class HeapListHashSet : public ListHashSet<T, void, void, HeapAllocator> { };
 
 template<typename T>
-class HeapLinkedHashSet : public LinkedHashSet<T, void, void, HeapAllocator> {
+class HeapLinkedHashSet : public LinkedHashSet<T, void, HeapAllocator> {
 };
 
 template<typename T>

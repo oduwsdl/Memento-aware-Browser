@@ -104,19 +104,25 @@ PRUNE_PATHS = set([
 
 # Directories we don't scan through.
 VCS_METADATA_DIRS = ('.svn', '.git')
-PRUNE_DIRS = (VCS_METADATA_DIRS +
-              ('out', 'Debug', 'Release',  # build files
-               'layout_tests'))            # lots of subdirs
+PRUNE_DIRS = VCS_METADATA_DIRS + ('layout_tests', )  # lots of subdirs
 
 # A third_party directory can define this file, containing a list of
 # subdirectories to process in addition to itself. Intended for directories
 # that contain multiple others as transitive dependencies.
 ADDITIONAL_PATHS_FILENAME = 'additional_readme_paths.json'
 
+# A list of paths that contain license information but that would otherwise
+# not be included.  Possible reasons include:
+#   - Third party directories in //clank which are considered to be Google-owned
+#   - Directories that are directly checked out from upstream, and thus
+#     don't have a README.chromium
+#   - Directories that contain example code, or build tooling.
+#   - Nested third_party code inside other third_party libraries.
 ADDITIONAL_PATHS = (
     os.path.join('chrome', 'common', 'extensions', 'docs', 'examples'),
     os.path.join('chrome', 'test', 'chromeos', 'autotest'),
     os.path.join('chrome', 'test', 'data'),
+    os.path.join('clank', 'third_party', 'elements'),
     os.path.join('native_client'),
     os.path.join('testing', 'gmock'),
     os.path.join('testing', 'gtest'),
@@ -322,7 +328,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'ashmem'),
     os.path.join('third_party', 'blink'),
     os.path.join('third_party', 'bspatch'),
-    os.path.join('third_party', 'cacheinvalidation'),
     os.path.join('third_party', 'cld'),
     os.path.join('third_party', 'flot'),
     os.path.join('third_party', 'gtk+'),
@@ -334,7 +339,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'libXNVCtrl'),
     os.path.join('third_party', 'libevent'),
     os.path.join('third_party', 'libjpeg'),
-    os.path.join('third_party', 'libovr'),
     os.path.join('third_party', 'libusb'),
     os.path.join('third_party', 'libxslt'),
     os.path.join('third_party', 'lss'),
@@ -464,13 +468,24 @@ def FilterDirsWithFiles(dirs_list, root):
   return [x for x in dirs_list if ContainsFiles(x, root)]
 
 
+def ProcessAdditionalReadmePathsJson(root, dirname, third_party_dirs):
+  """For a given directory, process the additional readme paths, and add to
+    third_party_dirs."""
+  additional_paths_file = os.path.join(root, dirname, ADDITIONAL_PATHS_FILENAME)
+  if os.path.exists(additional_paths_file):
+    with open(additional_paths_file) as paths_file:
+      extra_paths = json.load(paths_file)
+      third_party_dirs.update([os.path.join(dirname, p) for p in extra_paths])
+
+
 def FindThirdPartyDirs(prune_paths, root):
   """Find all third_party directories underneath the source root."""
   third_party_dirs = set()
   for path, dirs, files in os.walk(root):
     path = path[len(root) + 1:]  # Pretty up the path.
 
-    if path in prune_paths:
+    # .gitignore ignores /out*/, so do the same here.
+    if path in prune_paths or path.startswith('out'):
       dirs[:] = []
       continue
 
@@ -485,15 +500,10 @@ def FindThirdPartyDirs(prune_paths, root):
       # Add all subdirectories that are not marked for skipping.
       for dir in dirs:
         dirpath = os.path.join(path, dir)
-        additional_paths_file = os.path.join(root, dirpath,
-                                             ADDITIONAL_PATHS_FILENAME)
         if dirpath not in prune_paths:
           third_party_dirs.add(dirpath)
-        if os.path.exists(additional_paths_file):
-          with open(additional_paths_file) as paths_file:
-            extra_paths = json.load(paths_file)
-            third_party_dirs.update(
-                [os.path.join(dirpath, p) for p in extra_paths])
+
+        ProcessAdditionalReadmePathsJson(root, dirpath, third_party_dirs)
 
       # Don't recurse into any subdirs from here.
       dirs[:] = []
@@ -507,6 +517,7 @@ def FindThirdPartyDirs(prune_paths, root):
   for dir in ADDITIONAL_PATHS:
     if dir not in prune_paths:
       third_party_dirs.add(dir)
+      ProcessAdditionalReadmePathsJson(root, dir, third_party_dirs)
 
   return third_party_dirs
 

@@ -169,7 +169,7 @@ def GenerateExitCode(test_results):
   """
   if any(r['status'] == 'FAIL' for r in test_results):
     return 1
-  if all(r['status'] == 'SKIP' for r in test_results):
+  if test_results and all(r['status'] == 'SKIP' for r in test_results):
     return 111
   return 0
 
@@ -269,7 +269,7 @@ def AggregateTBMv3Traces(test_result):
     proto_files = [artifacts[name]['filePath'] for name in traces]
     concatenated_path = _BuildOutputPath(
         proto_files, compute_metrics.CONCATENATED_PROTO_NAME)
-    with open(concatenated_path, 'w') as concatenated_trace:
+    with open(concatenated_path, 'wb') as concatenated_trace:
       for trace_file in proto_files:
         if trace_file.endswith('.pb.gz'):
           with gzip.open(trace_file, 'rb') as f:

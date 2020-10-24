@@ -59,6 +59,10 @@ class _CommonSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
         'reportedByPageMetric',
         'tracingMetric',
         'umaMetric',
+        # Unless --experimentatil-tbmv3-metric flag is used, the following tbmv3
+        # metrics do nothing.
+        'tbmv3:accessibility_metric',
+        'tbmv3:cpu_time_metric',
     ])
     loading_metrics_category.AugmentOptionsForLoadingMetrics(options)
     # The EQT metric depends on the same categories as the loading metric.
@@ -117,6 +121,13 @@ class MobileCommonSystemHealth(_CommonSystemHealthBenchmark):
   def Name(cls):
     return 'system_health.common_mobile'
 
+  def SetExtraBrowserOptions(self, options):
+    super(MobileCommonSystemHealth, self).SetExtraBrowserOptions(options)
+    # Force online state for the offline indicator so it doesn't show and affect
+    # the benchmarks on bots, which are offline by default.
+    options.AppendExtraBrowserArgs(
+        '--force-online-connection-state-for-indicator')
+
 
 class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """Chrome Memory System Health Benchmark.
@@ -149,9 +160,14 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
                                           take_memory_measurement=True)
 
 
+MEMORY_DEBUGGING_BLURB = "See https://bit.ly/2CpMhze for more information" \
+                         " on debugging memory metrics."
+
+
 @benchmark.Info(
     emails=['pasko@chromium.org', 'chrome-android-perf-status@chromium.org'],
-    documentation_url='https://bit.ly/system-health-benchmarks')
+    documentation_url='https://bit.ly/system-health-benchmarks',
+    info_blurb=MEMORY_DEBUGGING_BLURB)
 class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Desktop Chrome Memory System Health Benchmark."""
   PLATFORM = 'desktop'
@@ -168,7 +184,8 @@ class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
 
 @benchmark.Info(
     emails=['pasko@chromium.org', 'chrome-android-perf-status@chromium.org'],
-    documentation_url='https://bit.ly/system-health-benchmarks')
+    documentation_url='https://bit.ly/system-health-benchmarks',
+    info_blurb=MEMORY_DEBUGGING_BLURB)
 class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Mobile Chrome Memory System Health Benchmark."""
   PLATFORM = 'mobile'
@@ -186,6 +203,10 @@ class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
     # each time before Chrome starts so we effect even the first story
     # - avoiding the bug.
     options.flush_os_page_caches_on_start = True
+    # Force online state for the offline indicator so it doesn't show and affect
+    # the benchmarks on bots, which are offline by default.
+    options.AppendExtraBrowserArgs(
+        '--force-online-connection-state-for-indicator')
 
   @classmethod
   def Name(cls):
@@ -225,3 +246,30 @@ class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'system_health.webview_startup'
+
+
+@benchmark.Info(emails=['cduvall@chromium.org', 'weblayer-team@chromium.org'],
+                component='Internals>WebLayer',
+                documentation_url='https://bit.ly/36XBtpn')
+class WebLayerStartupSystemHealthBenchmark(WebviewStartupSystemHealthBenchmark):
+  """WebLayer startup time benchmark
+
+  Benchmark that measures how long WebLayer takes to start up
+  and load a blank page.
+  """
+  # TODO(rmhasan): Remove the SUPPORTED_PLATFORMS lists.
+  # SUPPORTED_PLATFORMS is deprecated, please put system specifier tags
+  # from expectations.config in SUPPORTED_PLATFORM_TAGS.
+  # TODO(crbug.com/1137468): Add WEBLAYER to telemetry platforms.
+  SUPPORTED_PLATFORM_TAGS = [platforms.MOBILE]
+  SUPPORTED_PLATFORMS = [story.expectations.ALL_MOBILE]
+
+  def CreateCoreTimelineBasedMeasurementOptions(self):
+    options = super(WebLayerStartupSystemHealthBenchmark,
+                    self).CreateCoreTimelineBasedMeasurementOptions()
+    options.config.atrace_config.app_name = 'org.chromium.weblayer.shell'
+    return options
+
+  @classmethod
+  def Name(cls):
+    return 'UNSCHEDULED_system_health.weblayer_startup'

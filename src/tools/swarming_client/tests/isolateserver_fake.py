@@ -119,12 +119,13 @@ class FakeIsolateServerHandler(httpserver.Handler):
       request = json.loads(body)
       namespace = request['namespace']['namespace']
       for index, i in enumerate(request['items']):
-        append_entry({
-            'd': i['digest'],
-            'i': i['is_isolated'],
-            'n': namespace,
-            's': i['size'],
-        }, index, response['items'])
+        append_entry(
+            {
+                'd': i['digest'],
+                'i': i['is_isolated'],
+                'n': namespace,
+                's': int(i['size']),
+            }, index, response['items'])
       logging.info('Returning %s' % response)
       self.send_json(response)
     elif self.path.startswith('/_ah/api/isolateservice/v1/store_inline'):
@@ -144,8 +145,8 @@ class FakeIsolateServerHandler(httpserver.Handler):
         })
         return
 
-      if not self.server.store_hash_instead:
-        data = base64.b64encode(data)
+      if data and not self.server.store_hash_instead:
+        data = base64.b64encode(data).decode()
 
       self.send_json({
           'content': data,
@@ -172,11 +173,12 @@ class FakeIsolateServerHandler(httpserver.Handler):
         self.server.contents.setdefault(namespace, {})[h] = body
 
       self.send_octet_stream(
-          '',
+          b'',
           headers={
               # This is to simulate
               # https://cloud.google.com/storage/docs/xml-api/reference-headers#xgooghash
-              'x-goog-hash': 'md5=' + base64.b64encode(md5_hash.digest()),
+              'x-goog-hash':
+                  'md5=' + base64.b64encode(md5_hash.digest()).decode(),
           })
     else:
       raise NotImplementedError(self.path)

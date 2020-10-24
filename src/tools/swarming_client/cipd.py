@@ -32,6 +32,11 @@ import local_caching
 # .exe on Windows.
 EXECUTABLE_SUFFIX = '.exe' if sys.platform == 'win32' else ''
 
+_DEFAULT_CIPD_SERVER = 'https://chrome-infra-packages.appspot.com'
+
+_DEFAULT_CIPD_CLIENT_PACKAGE = 'infra/tools/cipd/${platform}'
+
+_DEFAULT_CIPD_CLIENT_VERSION = 'latest'
 
 if sys.platform == 'win32':
 
@@ -54,26 +59,27 @@ def add_cipd_options(parser):
   group = optparse.OptionGroup(parser, 'CIPD')
   group.add_option(
       '--cipd-enabled',
-      help='Enable CIPD client bootstrap. Implied by --cipd-package.',
-      action='store_true',
-      default=False)
+      help='Enable CIPD client bootstrap. Implied by --cipd-package. Cannot '
+      'turn this off while specifying --cipd-package',
+      default=True)
   group.add_option(
       '--cipd-server',
       help='URL of the CIPD server. '
-      'Only relevant with --cipd-enabled or --cipd-package.')
+      'Only relevant with --cipd-enabled or --cipd-package.',
+      default=_DEFAULT_CIPD_SERVER)
   group.add_option(
       '--cipd-client-package',
       help='Package name of CIPD client with optional parameters described in '
       '--cipd-package help. '
       'Only relevant with --cipd-enabled or --cipd-package. '
       'Default: "%default"',
-      default='infra/tools/cipd/${platform}')
+      default=_DEFAULT_CIPD_CLIENT_PACKAGE)
   group.add_option(
       '--cipd-client-version',
       help='Version of CIPD client. '
       'Only relevant with --cipd-enabled or --cipd-package. '
       'Default: "%default"',
-      default='latest')
+      default=_DEFAULT_CIPD_CLIENT_VERSION)
   group.add_option(
       '--cipd-package',
       dest='cipd_packages',
@@ -97,10 +103,9 @@ def add_cipd_options(parser):
 
 def validate_cipd_options(parser, options):
   """Calls parser.error on first found error among cipd options."""
-  if options.cipd_packages:
-    options.cipd_enabled = True
-
   if not options.cipd_enabled:
+    if options.cipd_packages:
+      parser.error('Cannot install CIPD packages when --cipd-enable=false')
     return
 
   for pkg in options.cipd_packages:
@@ -182,9 +187,9 @@ class CipdClient(object):
           if '\n' in subdir:
             raise Error('Could not install packages; subdir %r contains newline'
                         % subdir)
-          os.write(ensure_file_handle, '@Subdir %s\n' % (subdir,))
+          os.write(ensure_file_handle, ('@Subdir %s\n' % (subdir,)).encode())
           for pkg, version in pkgs:
-            os.write(ensure_file_handle, '%s %s\n' % (pkg, version))
+            os.write(ensure_file_handle, ('%s %s\n' % (pkg, version)).encode())
       finally:
         os.close(ensure_file_handle)
 
@@ -258,7 +263,11 @@ def get_platform():
   # Normalize machine architecture. Some architectures are identical or
   # compatible with others. We collapse them into one.
   arch = platform.machine().lower()
-  if arch in ('arm64', 'aarch64'):
+  # TODO(crbug.com/1102967): mac-arm64 package isn't ready yet.
+  # Use mac-amd64 package for now.
+  if os_name == 'mac' and arch == 'arm64':
+    arch = 'amd64'
+  elif arch in ('arm64', 'aarch64'):
     arch = 'arm64'
   elif arch.startswith('armv') and arch.endswith('l'):
     # 32-bit ARM: Standardize on ARM v6 baseline.
@@ -356,7 +365,11 @@ def _fetch_cipd_client(disk_cache, instance_id, fetch_url, timeoutfn):
 
 
 @contextlib.contextmanager
-def get_client(service_url, package_template, version, cache_dir, timeout=None):
+def get_client(cache_dir,
+               service_url=_DEFAULT_CIPD_SERVER,
+               package_template=_DEFAULT_CIPD_CLIENT_PACKAGE,
+               version=_DEFAULT_CIPD_CLIENT_VERSION,
+               timeout=None):
   """Returns a context manager that yields a CipdClient. A blocking call.
 
   Upon exit from the context manager, the client binary may be deleted
@@ -402,14 +415,14 @@ def get_client(service_url, package_template, version, cache_dir, timeout=None):
     # Convert (package_name, version) to a string that may be used as a
     # filename in disk cache by hashing it.
     version_digest = hashlib.sha1(
-        '%s\n%s' % (package_name, version)).hexdigest()
+        six.ensure_binary('%s\n%s' % (package_name, version))).hexdigest()
     try:
       with version_cache.getfileobj(version_digest) as f:
         instance_id = f.read()
     except local_caching.CacheMiss:
       instance_id = resolve_version(
           service_url, package_name, version, timeout=timeoutfn())
-      version_cache.write(version_digest, instance_id)
+      version_cache.write(version_digest, [six.ensure_binary(instance_id)])
     version_cache.trim()
   else:  # it's a ref, hit the backend
     instance_id = resolve_version(

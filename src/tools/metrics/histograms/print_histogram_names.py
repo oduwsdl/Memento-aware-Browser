@@ -27,11 +27,21 @@ import merge_xml
 
 
 def get_names(xml_files):
+  """Returns all histogram names generated from a list of xml files.
+
+  Args:
+    xml_files: A list of open file objects containing histogram definitions.
+  Returns:
+    A tuple of (names, obsolete names), where the obsolete names is a subset of
+    all names.
+  """
   doc = merge_xml.MergeFiles(files=xml_files)
   histograms, had_errors = extract_histograms.ExtractHistogramsFromDom(doc)
   if had_errors:
-    raise Error("Error parsing inputs.")
-  return extract_histograms.ExtractNames(histograms)
+    raise ValueError("Error parsing inputs.")
+  names = set(extract_histograms.ExtractNames(histograms))
+  obsolete_names = set(extract_histograms.ExtractObsoleteNames(histograms))
+  return (names, obsolete_names)
 
 
 def histogram_xml_files():
@@ -45,8 +55,8 @@ def get_diff(revision):
     revision: A git revision as described in
       https://git-scm.com/docs/gitrevisions
   Returns:
-    A tuple of (added names, removed names), where each entry is sorted in
-    ascending order.
+    A tuple of (added names, removed names, obsoleted names), where each entry
+    is sorted in ascending order.
   """
 
   def get_file_at_revision(path):
@@ -59,24 +69,36 @@ def get_diff(revision):
     # _that_ big.
     return StringIO(contents)
 
-  current_histogram_names = set(get_names(histogram_xml_files()))
-  prev_histogram_names = set(
-      get_names(
-          [get_file_at_revision(p) for p in histogram_paths.ALL_XMLS_RELATIVE]))
+  prev_files = []
+  for p in histogram_paths.ALL_XMLS_RELATIVE:
+    try:
+      prev_files.append(get_file_at_revision(os.path.normpath(p)))
+    except subprocess.CalledProcessError:
+      # Paths might not exist in the provided revision.
+      continue
+
+  current_histogram_names, current_obsolete_names = get_names(
+      histogram_xml_files())
+  prev_histogram_names, prev_obsolete_names = get_names(prev_files)
 
   added_names = sorted(list(current_histogram_names - prev_histogram_names))
   removed_names = sorted(list(prev_histogram_names - current_histogram_names))
-  return (added_names, removed_names)
+  obsoleted_names = sorted(list(current_obsolete_names - prev_obsolete_names))
+  return (added_names, removed_names, obsoleted_names)
 
 
 def print_diff_names(revision):
-  added_names, removed_names = get_diff(revision)
+  added_names, removed_names, obsoleted_names = get_diff(revision)
   print("%d histograms added:" % len(added_names))
   for name in added_names:
     print(name)
 
   print("%d histograms removed:" % len(removed_names))
   for name in removed_names:
+    print(name)
+
+  print("%d histograms obsoleted:" % len(obsoleted_names))
+  for name in obsoleted_names:
     print(name)
 
 

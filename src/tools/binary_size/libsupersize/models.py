@@ -10,6 +10,8 @@ Description of common properties:
         May be 0 (e.g. for .bss or for SymbolGroups).
   * size: The number of bytes this symbol takes up, including padding that comes
         before |address|.
+  * aliases: List of symbols that represent the same bytes. The |aliases| of
+        each symbol in this list points to the same list instance.
   * num_aliases: The number of symbols with the same address (including self).
   * pss: size / num_aliases.
   * padding: The number of bytes of padding before |address| due to this symbol.
@@ -52,6 +54,8 @@ BUILD_CONFIG_KEYS = (
 
 METADATA_APK_FILENAME = 'apk_file_name'  # Path relative to output_directory.
 METADATA_APK_SIZE = 'apk_size'  # File size of apk in bytes.
+METADATA_ZIPALIGN_OVERHEAD = 'zipalign_padding'  # Overhead from zipalign.
+METADATA_SIGNING_BLOCK_SIZE = 'apk_signature_block_size'  # Size in bytes.
 METADATA_MAP_FILENAME = 'map_file_name'  # Path relative to output_directory.
 METADATA_ELF_ARCHITECTURE = 'elf_arch'  # "Machine" field from readelf -h
 METADATA_ELF_FILENAME = 'elf_file_name'  # Path relative to output_directory.
@@ -319,7 +323,7 @@ class BaseSizeInfo(object):
     return [c.metadata for c in self.containers]
 
   def ContainerForName(self, name, default=None):
-    return next((c for c in containers if c.name == name), default)
+    return next((c for c in self.containers if c.name == name), default)
 
 
 class SizeInfo(BaseSizeInfo):
@@ -594,13 +598,16 @@ class DeltaSymbol(BaseSymbol):
     self.after_symbol = after_symbol
 
   def __repr__(self):
-    before_container_name = self.before_symbol.container_name
-    after_container_name = self.after_symbol.container_name
-    if before_container_name != after_container_name:
-      container_str = '<~{}>'.format(after_container_name)
-    elif after_container_name != '':
-      container_str = '<{}>'.format(after_container_name)
-    else:
+    before_container_name = (self.before_symbol.container_name
+                             if self.before_symbol else None)
+    after_container_name = (self.after_symbol.container_name
+                            if self.after_symbol else None)
+    if after_container_name:
+      if before_container_name != after_container_name:
+        container_str = '<~{}>'.format(after_container_name)
+      else:
+        container_str = '<{}>'.format(after_container_name)
+    else:  # None or ''.
       container_str = ''
     template = ('{}{}{}@{:x}(size_without_padding={},padding={},full_name={},'
                 'object_path={},source_path={},flags={})')
@@ -1255,7 +1262,7 @@ class SymbolGroup(BaseSymbol):
         min_count=min_count, group_factory=group_factory)
 
   def GroupedByContainerAndSectionName(self):
-    return self.GroupedBy(lambda s: (s.container.name, s.section_name))
+    return self.GroupedBy(lambda s: (s.container_name, s.section_name))
 
   def GroupedBySectionName(self):
     return self.GroupedBy(lambda s: s.section_name)

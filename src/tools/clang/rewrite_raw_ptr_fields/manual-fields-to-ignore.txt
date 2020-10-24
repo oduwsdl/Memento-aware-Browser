@@ -14,10 +14,11 @@ base::CheckedContiguousIterator::current_
 base::CheckedContiguousIterator::end_
 base::CheckedContiguousIterator::start_
 base::CheckedContiguousRange::container_
+base::FeatureParam<base::TimeDelta, false>::feature
 base::FeatureParam<bool, false>::feature
 base::FeatureParam<double, false>::feature
 base::FeatureParam<int, false>::feature
-base::FeatureParam<std::__Cr::basic_string<char, std::__Cr::char_traits<char>, std::__Cr::allocator<char>>, false>::feature
+base::FeatureParam<std::__1::basic_string<char>, false>::feature
 base::FeatureParam<type-parameter-0-0, true>::feature
 base::FeatureParam<type-parameter-0-0, true>::options
 base::span::data_
@@ -32,6 +33,7 @@ safe_browsing::(anonymous namespace)::(anonymous struct)::feature
 tracing::MessageInfo::accepted_field_ids
 tracing::MessageInfo::sub_messages
 ui::(anonymous namespace)::I18nTestParam::test
+(anonymous namespace)::Node::next # from nt_registry.cc
 
 # Populated manually - double implicit-cast required.
 PaintManager::instance_
@@ -68,9 +70,13 @@ blink::Worklist::PrivateSegmentHolder::private_pop_segment
 blink::Worklist::PrivateSegmentHolder::private_push_segment
 content::(anonymous namespace)::AudioStreamMonitorTest::monitor_
 content::AudioStreamMonitor::clock_
+remoting::ChromotingHostTest::client1_
+remoting::ChromotingHostTest::client2_
+WTF::ICUConverterWrapper::converter
 
-# Populated manually - always holds OilPan pointers.
+# Populated manually - always holds a pointer to an OilPan-allocated memory.
 blink::PersistentBase::raw_
+blink::SVGFilterBuilder::last_effect_
 
 # Populated manually - the rewriter has trouble appending |.get()| inside macros
 # that work with |XDisplay*|.
@@ -78,6 +84,7 @@ extensions::GlobalShortcutListenerX11::x_display_
 gl::GLVisualPickerGLX::display_
 media::(anonymous namespace)::UserInputMonitorLinuxCore::x_record_display_
 media::cast::test::LinuxOutputWindow::display_
+remoting::(anonymous namespace)::InputInjectorX11::Core::display_
 remoting::(anonymous namespace)::LocalHotkeyInputMonitorX11::Core::x_record_display_
 remoting::(anonymous namespace)::LocalMouseInputMonitorX11::Core::x_record_display_
 remoting::ClipboardX11::display_
@@ -134,14 +141,14 @@ blink::PaintController::IdAsHashKey::client
 ui::AXPlatformNodeAuraLinux::document_parent_
 ui::AXPlatformNodeAuraLinux::atk_object_
 
-# Populated manually - to temporarily avoid passing CheckedPtr as
-# an argument to TRACE_EVENT* family of macros.
+# Populated manually - problems related to passing to a templated && parameter,
+# which is later forwarded to something that doesn't vibe with CheckedPtr. The
+# rewriter has no visibility into where the parameter is forwarded to.
 ProfileDestroyer::profile_
-content::RenderProcessHostImpl::browser_context_
-
-# Populated manually - problems related to testing::StrictMock and
-# testing::NiceMock (needs more investigation / problem not full understood).
 (anonymous namespace)::BluetoothLowEnergyApiTest::mock_adapter_
+base::trace_event::TraceValue::as_convertable
+content::RenderProcessHostImpl::browser_context_
+device::BluetoothDevice::adapter_
 
 # Populated manually - problems related to lambdas with no return type, where
 # the return value is CheckedPtr, but variable/parameter receiving the lambda
@@ -149,11 +156,107 @@ content::RenderProcessHostImpl::browser_context_
 vr::LocationBarState::vector_icon
 vr::OmniboxSuggestion::icon
 
+# Populated manually - assigned to |auto*| in ranged loop on an array
+# initializer literal comprising of those pointers.
+DownloadItemView::discard_button_
+DownloadItemView::open_now_button_
+DownloadItemView::save_button_
+DownloadItemView::scan_button_
+
+# Populated manually - other compile-time reasons
+logging::CheckOpResult::message_  # cyclic #include
+views::internal::ClassPropertySetter::property_  # passed to templated param T*
+(anonymous namespace)::ScopedFunctionHelper::function_ # function pointer template
+
+#######
+# CheckedPtr2/MTECheckedPtr-specific sections
+#######
+
 # Populated manually - these pointers are assigned invalid address (with top
 # bits sets), which CheckedPtr is unable to handle, leading to run-time crashes.
 (anonymous namespace)::TlsVectorEntry::data
-blink::(anonymous namespace)::ControlKey::name_
-blink::(anonymous namespace)::ControlKey::type_
 blink::(anonymous namespace)::ThreadMarker::creating_thread_
+blink::ControlKey::name_
 performance_manager::frame_priority::BoostingVoteAggregator::Edge::src_
 performance_manager::frame_priority::BoostingVoteAggregator::Edge::dst_
+
+# Populated manually - these pointers crash due to a mismatching tag.
+# Under investigation.
+base::internal::UnretainedWrapper::ptr_
+blink::NGPhysicalContainerFragment::buffer_
+blink::DisplayItem::client_
+cc::FrameSequenceMetrics::throughput_ukm_reporter_
+cc::(anonymous namespace)::RasterTaskImpl::tile_tracing_id_
+content::MediaPlayerId::render_frame_host
+content::RenderViewImpl::webview_
+mojo::core::WatcherDispatcher::last_watch_to_block_arming_
+net::IOBuffer::data_
+safe_browsing::RemoteSafeBrowsingDatabaseManager::ClientRequest::client_
+
+# Populated manually - this pointer crashes, because assigned address appears
+# unallocated.
+x11::ReadBuffer::fds
+
+#######
+# End of CheckedPtr2/MTECheckedPtr-specific sections
+#######
+
+#######
+# BackupRefPtr-specific sections
+#######
+
+# Populated manually - std::is_trivially_destructible static_assert failure
+blink::HTMLElementEquivalent::tag_name_
+blink::PrerendererClient::client_
+blink::weakness_marking_test::EphemeronCallbacksCounter::count_holder_
+sql::recover::InnerPageDecoder::db_reader_
+sql::recover::LeafPageDecoder::db_reader_
+WTF::ListHashSet::head_
+WTF::ListHashSet::tail_
+
+# Populated manually - exit-time destructor
+gpu::GpuControlList::Conditions::devices
+gpu::GpuControlList::Conditions::driver_info
+gpu::GpuControlList::Conditions::gl_strings
+gpu::GpuControlList::Conditions::machine_model_info
+gpu::GpuControlList::Conditions::intel_gpu_series_list
+gpu::GpuControlList::Conditions::more
+gpu::GpuControlList::Entry::features
+gpu::GpuControlList::Entry::disabled_extensions
+gpu::GpuControlList::Entry::disabled_webgl_extensions
+gpu::GpuControlList::Entry::cr_bugs
+gpu::GpuControlList::Entry::exceptions
+media::ListElementInfo::id_info_
+media::SupportedTypeInfo::codecs
+tracing::(anonymous namespace)::AllowlistEntry::arg_name_filter
+net::(anonymous namespace)::CTRequiredPolicy::roots
+net::(anonymous namespace)::CTRequiredPolicy::exceptions
+net::HttpCache::Transaction::SetRequest(const net::NetLogWithSource &)::(anonymous struct)::search
+net::TransportSecurityStateSource::Pinset::accepted_pins
+net::TransportSecurityStateSource::Pinset::rejected_pins
+net::TransportSecurityStateSource::expect_ct_report_uris
+net::TransportSecurityStateSource::pinsets
+WTF::StaticSingleton::InstanceStorage::pointer_
+
+# Populated manually - attempt to use a deleted function (union's destructor is
+# deleted, because an inner struct has CheckedPtr field)
+flags_ui::FeatureEntry::(anonymous union)::(anonymous struct)::feature
+ui::NativeTheme::MenuSeparatorExtraParams::paint_rect
+
+# Populated manually - flexible array with non-trivial destruction
+blink::ShapeResultView::(anonymous struct)::alignment
+
+# Populated manually - these pointers crash, because a base class ctor accesses
+# child class ptr fields before they're initialized.
+blink::CacheEntry::next_
+blink::CacheEntry::prev_
+WTF::LruCache::MappedListNodeWithKey::next_
+WTF::LruCache::MappedListNodeWithKey::prev_
+
+# Populated manually - these pointers crash, due to use-after-move.
+gpu::gles2::PassthroughProgramCache::ProgramCacheValue::program_cache_
+gpu::gles2::ProgramCache::ScopedCacheUse::cache_
+
+#######
+# End of BackupRefPtr-specific sections
+#######

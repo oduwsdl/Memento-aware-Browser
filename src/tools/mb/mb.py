@@ -27,10 +27,12 @@ import sys
 import subprocess
 import tempfile
 import traceback
-import urllib2
 import zipfile
 
-from collections import OrderedDict
+if sys.version_info.major == 2:
+  from urllib2 import urlopen
+else:
+  from urllib.request import urlopen
 
 CHROMIUM_SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
@@ -46,8 +48,6 @@ def DefaultVals():
   """Default mixin values"""
   return {
       'args_file': '',
-      # TODO(crbug.com/937821): Get rid of 'cros_passthrough'.
-      'cros_passthrough': False,
       'gn_args': '',
   }
 
@@ -151,6 +151,8 @@ class MetaBuildWrapper(object):
                              'the commands that will run)')
       subp.add_argument('-v', '--verbose', action='store_true',
                         help='verbose logging')
+      subp.add_argument('--root', help='Path to GN source root')
+      subp.add_argument('--dotfile', help='Path to GN dotfile')
 
       # TODO(crbug.com/1060857): Remove this once swarming task templates
       # support command prefixes.
@@ -201,6 +203,28 @@ class MetaBuildWrapper(object):
     subp.add_argument('-g', '--goma-dir',
                       help='path to goma directory')
     subp.set_defaults(func=self.CmdExport)
+
+    subp = subps.add_parser('train',
+                            description='Writes the expanded configuration '
+                            'for each builder as JSON files to a configured '
+                            'directory.')
+    subp.add_argument('-f',
+                      '--config-file',
+                      metavar='PATH',
+                      help='path to config file (default is mb_config.pyl')
+    subp.add_argument('--expectations-dir',
+                      metavar='PATH',
+                      help='path to dir containing expectation files')
+    subp.add_argument('-n',
+                      '--dryrun',
+                      action='store_true',
+                      help='Do a dry run (i.e., do nothing, just print '
+                      'the commands that will run)')
+    subp.add_argument('-v',
+                      '--verbose',
+                      action='store_true',
+                      help='verbose logging')
+    subp.set_defaults(func=self.CmdTrain)
 
     subp = subps.add_parser('gen',
                             description='Generate a new set of build files.')
@@ -297,6 +321,8 @@ class MetaBuildWrapper(object):
     subp.add_argument('-d', '--dimension', default=[], action='append', nargs=2,
                       dest='dimensions', metavar='FOO bar',
                       help='dimension to filter on')
+    subp.add_argument('--tags', default=[], action='append', metavar='FOO:BAR',
+                      help='Tags to assign to the swarming task')
     subp.add_argument('--no-default-dimensions', action='store_false',
                       dest='default_dimensions', default=True,
                       help='Do not automatically add dimensions to the task')
@@ -312,6 +338,9 @@ class MetaBuildWrapper(object):
                             description='Validate the config file.')
     subp.add_argument('-f', '--config-file', metavar='PATH',
                       help='path to config file (default is %(default)s)')
+    subp.add_argument('--expectations-dir',
+                      metavar='PATH',
+                      help='path to dir containing expectation files')
     subp.set_defaults(func=self.CmdValidate)
 
     subp = subps.add_parser('zip',
@@ -341,10 +370,12 @@ class MetaBuildWrapper(object):
 
     self.use_luci_auth = getattr(self.args, 'luci_auth', False)
 
-    if (self.args.func != self.CmdValidate
-        and getattr(self.args, 'config_file', None) is None):
+    if 'config_file' in self.args and self.args.config_file is None:
       self.args.config_file = self.default_config
 
+    if 'expectations_dir' in self.args and self.args.expectations_dir is None:
+      self.args.expectations_dir = os.path.join(
+          os.path.dirname(self.args.config_file), 'mb_config_expectations')
 
   def DumpInputFiles(self):
 
@@ -368,33 +399,28 @@ class MetaBuildWrapper(object):
     return self.RunGNAnalyze(vals)
 
   def CmdExport(self):
-    self.ReadConfigFile(self.args.config_file)
-    obj = {}
-    for master, builders in self.masters.items():
-      obj[master] = {}
-      for builder in builders:
-        config = self.masters[master][builder]
-        if not config:
-          continue
-
-        if isinstance(config, dict):
-          args = {
-              k: FlattenConfig(self.configs, self.mixins, v)['gn_args']
-              for k, v in config.items()
-          }
-        elif config.startswith('//'):
-          args = config
-        else:
-          args = FlattenConfig(self.configs, self.mixins, config)['gn_args']
-          if 'error' in args:
-            continue
-
-        obj[master][builder] = args
-
-    # Dump object and trim trailing whitespace.
-    s = '\n'.join(l.rstrip() for l in
-                  json.dumps(obj, sort_keys=True, indent=2).splitlines())
+    obj = self._ToJsonish()
+    s = json.dumps(obj, sort_keys=True, indent=2, separators=(',', ': '))
     self.Print(s)
+    return 0
+
+  def CmdTrain(self):
+    expectations_dir = self.args.expectations_dir
+    if not self.Exists(expectations_dir):
+      self.Print('Expectations dir (%s) does not exist.' % expectations_dir)
+      return 1
+    # Removing every expectation file then immediately re-generating them will
+    # clear out deleted groups.
+    for f in self.ListDir(expectations_dir):
+      self.RemoveFile(os.path.join(expectations_dir, f))
+    obj = self._ToJsonish()
+    for master, builder in sorted(obj.items()):
+      expectation_file = os.path.join(expectations_dir, master + '.json')
+      json_s = json.dumps(builder,
+                          indent=2,
+                          sort_keys=True,
+                          separators=(',', ': '))
+      self.WriteFile(expectation_file, json_s)
     return 0
 
   def CmdGen(self):
@@ -518,7 +544,8 @@ class MetaBuildWrapper(object):
 
     self.Print('')
     if self.args.swarmed:
-      return self._RunUnderSwarming(self.args.path, self.args.target)
+      cmd, _ = self.GetIsolateCommand(self.args.target, vals)
+      return self._RunUnderSwarming(self.args.path, self.args.target, cmd)
     else:
       return self._RunLocallyIsolated(self.args.path, self.args.target)
 
@@ -549,7 +576,7 @@ class MetaBuildWrapper(object):
       if zip_dir:
         self.RemoveDirectory(zip_dir)
 
-  def _RunUnderSwarming(self, build_dir, target):
+  def _RunUnderSwarming(self, build_dir, target, isolate_cmd):
     isolate_server = 'isolateserver.appspot.com'
     namespace = 'default-gzip'
     swarming_server = 'chromium-swarm.appspot.com'
@@ -615,18 +642,26 @@ class MetaBuildWrapper(object):
           file=sys.stderr)
       return 1
 
+    tags = ['--tags=%s' % tag for tag in self.args.tags]
+
     cmd = [
         self.executable,
         self.PathJoin('tools', 'swarming_client', 'swarming.py'),
-          'run',
-          '-s', isolated_hash,
-          '-I', isolate_server,
-          '--namespace', namespace,
-          '-S', swarming_server,
-          '--tags=purpose:user-debug-mb',
-      ] + dimensions
+        'run',
+        '-s',
+        isolated_hash,
+        '-I',
+        isolate_server,
+        '--namespace',
+        namespace,
+        '-S',
+        swarming_server,
+        '--tags=purpose:user-debug-mb',
+        '--relative-cwd',
+        self.ToSrcRelPath(build_dir),
+    ] + tags + dimensions + ['--raw-cmd', '--'] + list(isolate_cmd)
     if self.args.extra_args:
-      cmd += ['--'] + self.args.extra_args
+      cmd += self.args.extra_args
     self.Print('')
     ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
     return ret
@@ -662,15 +697,44 @@ class MetaBuildWrapper(object):
             ('cpu', 'x86-64'),
             os_dim]
 
+  def _ToJsonish(self):
+    """Dumps the config file into a json-friendly expanded dict.
+
+    Returns:
+      A dict with master -> builder -> all GN args mapping.
+    """
+    self.ReadConfigFile(self.args.config_file)
+    obj = {}
+    for master, builders in self.masters.items():
+      obj[master] = {}
+      for builder in builders:
+        config = self.masters[master][builder]
+        if not config:
+          continue
+        if isinstance(config, dict):
+          # This is a 'phased' builder. Each key in the config is a different
+          # phase of the builder.
+          args = {}
+          for k, v in config.items():
+            args[k] = gn_helpers.FromGNArgs(
+                FlattenConfig(self.configs, self.mixins, v)['gn_args'])
+        elif config.startswith('//'):
+          args = config
+        else:
+          flattened_config = FlattenConfig(self.configs, self.mixins, config)
+          if flattened_config['gn_args'] == 'error':
+            continue
+          args = {'gn_args': gn_helpers.FromGNArgs(flattened_config['gn_args'])}
+          if flattened_config.get('args_file'):
+            args['args_file'] = flattened_config['args_file']
+        obj[master][builder] = args
+
+    return obj
+
   def CmdValidate(self, print_ok=True):
     errs = []
 
-    # Validate master config if a specific one isn't specified
-    if getattr(self.args, 'config_file', None) is None:
-      # Read the file to make sure it parses.
-      self.ReadConfigFile(self.default_config)
-    else:
-      self.ReadConfigFile(self.args.config_file)
+    self.ReadConfigFile(self.args.config_file)
 
     # Build a list of all of the configs referenced by builders.
     all_configs = validation.GetAllConfigs(self.masters)
@@ -689,22 +753,27 @@ class MetaBuildWrapper(object):
     validation.CheckAllConfigsAndMixinsReferenced(errs, all_configs,
                                                   self.configs, self.mixins)
 
-    validation.EnsureNoProprietaryMixins(errs, self.default_config,
-                                         self.args.config_file, self.masters,
-                                         self.configs, self.mixins)
+    if self.args.config_file == self.default_config:
+      validation.EnsureNoProprietaryMixins(errs, self.masters, self.configs,
+                                           self.mixins)
 
     validation.CheckDuplicateConfigs(errs, self.configs, self.mixins,
                                      self.masters, FlattenConfig)
 
     if errs:
-      raise MBErr(('mb config file %s has problems:' %
-                   (self.args.config_file if self.args.config_file else self.
-                    default_config)) + '\n  ' + '\n  '.join(errs))
+      raise MBErr(('mb config file %s has problems:\n  ' %
+                   self.args.config_file) + '\n  '.join(errs))
+
+    expectations_dir = self.args.expectations_dir
+    # TODO(crbug.com/1117577): Force all versions of mb_config.pyl to have
+    # expectations. For now, just ignore those that don't have them.
+    if self.Exists(expectations_dir):
+      jsonish_blob = self._ToJsonish()
+      if not validation.CheckExpectations(self, jsonish_blob, expectations_dir):
+        raise MBErr("Expectations out of date. Please run 'mb.py train'.")
 
     if print_ok:
-      self.Print('mb config file %s looks ok.' %
-                 (self.args.config_file
-                  if self.args.config_file else self.default_config))
+      self.Print('mb config file %s looks ok.' % self.args.config_file)
     return 0
 
   def GetConfig(self):
@@ -1146,12 +1215,13 @@ class MetaBuildWrapper(object):
     label = labels[0]
 
     build_dir = self.args.path
+
     command, extra_files = self.GetIsolateCommand(target, vals)
 
-    # Any warning for an unused arg will get interleaved into the cmd's stdout.
-    # When that happens, the isolate step below will fail with an obscure error
-    # when it tries processing the lines of the warning. Fail quickly in that
-    # case to avoid confusion.
+    # Any warning for an unused arg will get interleaved into the cmd's
+    # stdout. When that happens, the isolate step below will fail with an
+    # obscure error when it tries processing the lines of the warning. Fail
+    # quickly in that case to avoid confusion
     cmd = self.GNCmd('desc', build_dir, label, 'runtime_deps',
                      '--fail-on-unused-args')
     ret, out, _ = self.Call(cmd)
@@ -1188,8 +1258,7 @@ class MetaBuildWrapper(object):
     # https://crbug.com/912946
     is_android = 'target_os="android"' in vals['gn_args']
     is_cros = ('target_os="chromeos"' in vals['gn_args']
-               or 'is_chromeos_device=true' in vals['gn_args']
-               or vals.get('cros_passthrough', False))
+               or 'is_chromeos_device=true' in vals['gn_args'])
     is_mac = self.platform == 'darwin'
     is_msan = 'is_msan=true' in vals['gn_args']
     is_ios = 'target_os="ios"' in vals['gn_args']
@@ -1220,11 +1289,11 @@ class MetaBuildWrapper(object):
               'chromevox_test_data/',
               'gen/ui/file_manager/file_manager/',
               'resources/chromeos/',
-              'resources/chromeos/accessibility/autoclick/',
+              'resources/chromeos/accessibility/accessibility_common/',
               'resources/chromeos/accessibility/chromevox/',
               'resources/chromeos/accessibility/select_to_speak/',
               'test_data/chrome/browser/resources/chromeos/accessibility/'
-              'autoclick/',
+              'accessibility_common/',
               'test_data/chrome/browser/resources/chromeos/accessibility/'
               'chromevox/',
               'test_data/chrome/browser/resources/chromeos/accessibility/'
@@ -1322,21 +1391,16 @@ class MetaBuildWrapper(object):
       subdir, exe = 'win', 'gn.exe'
 
     gn_path = self.PathJoin(self.chromium_src_dir, 'buildtools', subdir, exe)
-    return [gn_path, subcommand, path] + list(args)
+    cmd = [gn_path, subcommand]
+    if self.args.root:
+      cmd += ['--root=' + self.args.root]
+    if self.args.dotfile:
+      cmd += ['--dotfile=' + self.args.dotfile]
+    return cmd + [path] + list(args)
 
 
   def GNArgs(self, vals, expand_imports=False):
-    if vals['cros_passthrough']:
-      if not 'GN_ARGS' in os.environ:
-        raise MBErr('MB is expecting GN_ARGS to be in the environment')
-      gn_args = os.environ['GN_ARGS']
-      if not re.search('target_os.*=.*"chromeos"', gn_args):
-        raise MBErr('GN_ARGS is missing target_os = "chromeos": (GN_ARGS=%s)' %
-                    gn_args)
-      if vals['gn_args']:
-        gn_args += ' ' + vals['gn_args']
-    else:
-      gn_args = vals['gn_args']
+    gn_args = vals['gn_args']
 
     if self.args.goma_dir:
       gn_args += ' goma_dir="%s"' % self.args.goma_dir
@@ -1351,16 +1415,6 @@ class MetaBuildWrapper(object):
 
     args_gn_lines = []
     parsed_gn_args = {}
-
-    # If we're using the Simple Chrome SDK, add a comment at the top that
-    # points to the doc. This must happen after the gn_helpers.ToGNString()
-    # call above since gn_helpers strips comments.
-    if vals['cros_passthrough']:
-      args_gn_lines.extend([
-          '# These args are generated via the Simple Chrome SDK. See the link',
-          '# below for more details:',
-          '# https://chromium.googlesource.com/chromiumos/docs/+/master/simple_chrome_workflow.md',  # pylint: disable=line-too-long
-      ])
 
     args_file = vals.get('args_file', None)
     if args_file:
@@ -1383,12 +1437,39 @@ class MetaBuildWrapper(object):
 
     is_android = 'target_os="android"' in vals['gn_args']
     is_fuchsia = 'target_os="fuchsia"' in vals['gn_args']
-    is_cros = 'target_os="chromeos"' in vals['gn_args']
+    is_cros = ('target_os="chromeos"' in vals['gn_args']
+               or 'is_chromeos_device=true' in vals['gn_args'])
+    is_cros_device = 'is_chromeos_device=true' in vals['gn_args']
     is_ios = 'target_os="ios"' in vals['gn_args']
-    is_cros_device = ('is_chromeos_device=true' in vals['gn_args']
-                      or vals.get('cros_passthrough', False))
-    is_mac = self.platform == 'darwin'
+    is_mac = self.platform == 'darwin' and not is_ios
     is_win = self.platform == 'win32' or 'target_os="win"' in vals['gn_args']
+    is_lacros = 'chromeos_is_browser_only=true' in vals['gn_args']
+
+    test_type = isolate_map[target]['type']
+
+    if self.use_luci_auth:
+      cmdline = ['luci-auth.exe' if is_win else 'luci-auth', 'context', '--']
+    else:
+      cmdline = []
+
+    if test_type == 'generated_script' or is_ios or is_lacros:
+      assert 'script' not in isolate_map[target], (
+          'generated_scripts can no longer customize the script path')
+      if is_win:
+        default_script = 'bin\\run_{}.bat'.format(target)
+      else:
+        default_script = 'bin/run_{}'.format(target)
+      script = isolate_map[target].get('script', default_script)
+
+      # TODO(crbug.com/816629): remove any use of 'args' from
+      # generated_scripts.
+      cmdline += [script] + isolate_map[target].get('args', [])
+
+      return cmdline, []
+
+
+    # TODO(crbug.com/816629): Convert all targets to generated_scripts
+    # and delete the rest of this function.
 
     # This should be true if tests with type='windowed_test_launcher' are
     # expected to run using xvfb. For example, Linux Desktop, X11 CrOS and
@@ -1408,50 +1489,16 @@ class MetaBuildWrapper(object):
     clang_coverage = 'use_clang_coverage=true' in vals['gn_args']
     java_coverage = 'use_jacoco_coverage=true' in vals['gn_args']
 
-    test_type = isolate_map[target]['type']
-    use_python3 = isolate_map[target].get('use_python3', False)
-
     executable = isolate_map[target].get('executable', target)
     executable_suffix = isolate_map[target].get(
         'executable_suffix', '.exe' if is_win else '')
-
-    # TODO(crbug.com/1060857): Remove this once swarming task templates
-    # support command prefixes.
-    if self.use_luci_auth:
-      cmdline = ['luci-auth.exe' if is_win else 'luci-auth', 'context', '--']
-    else:
-      cmdline = []
-
-    if use_python3:
-      cmdline += ['vpython3']
-      extra_files = ['../../.vpython3']
-    else:
-      cmdline += ['vpython']
-      extra_files = ['../../.vpython']
+    cmdline += ['vpython']
+    extra_files = ['../../.vpython']
     extra_files += [
       '../../testing/test_env.py',
     ]
 
-    if test_type == 'nontest':
-      self.WriteFailureAndRaise('We should not be isolating %s.' % target,
-                                output_path=None)
-
-    if test_type == 'generated_script':
-      script = isolate_map[target]['script']
-      if self.platform == 'win32':
-        script += '.bat'
-      cmdline += [
-          '../../testing/test_env.py',
-          script,
-      ]
-    elif is_ios and test_type != "raw":
-      # iOS commands are all wrapped with generate_wrapper. Some targets
-      # shared with iOS aren't defined with generated_script (ie/ basic_
-      # unittests) so we force those to follow iOS' execution process by
-      # mimicking what generated_script would do
-      script = 'bin/run_{}'.format(target)
-      cmdline += ['../../testing/test_env.py', script]
-    elif is_android and test_type != 'script':
+    if is_android and test_type != 'script':
       if asan:
         cmdline += [os.path.join('bin', 'run_with_asan'), '--']
       cmdline += [
@@ -1473,6 +1520,7 @@ class MetaBuildWrapper(object):
       cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
+          '--logs-dir=${ISOLATED_OUTDIR}',
       ]
     elif use_xvfb and test_type == 'windowed_test_launcher':
       extra_files.append('../../testing/xvfb.py')
@@ -1512,12 +1560,13 @@ class MetaBuildWrapper(object):
         cmdline += [
             os.path.join('bin', 'cros_test_wrapper'),
             '--logs-dir=${ISOLATED_OUTDIR}',
+            '--',
         ]
       cmdline += [
           '../../testing/test_env.py',
           '../../' + self.ToSrcRelPath(isolate_map[target]['script'])
       ]
-    elif test_type in ('raw', 'additional_compile_target'):
+    elif test_type == 'additional_compile_target':
       cmdline = [
           './' + str(target) + executable_suffix,
       ]
@@ -1791,15 +1840,19 @@ class MetaBuildWrapper(object):
 
   def Fetch(self, url):
     # This function largely exists so it can be overridden for testing.
-    f = urllib2.urlopen(url)
+    f = urlopen(url)
     contents = f.read()
     f.close()
     return contents
 
+  def ListDir(self, path):
+    # This function largely exists so it can be overridden for testing.
+    return os.listdir(path)
+
   def MaybeMakeDirectory(self, path):
     try:
       os.makedirs(path)
-    except OSError, e:
+    except OSError as e:
       if e.errno != errno.EEXIST:
         raise
 
@@ -1892,8 +1945,6 @@ def FlattenMixins(mixin_pool, mixins_to_flatten, vals, visited):
 
     mixin_vals = mixin_pool[m]
 
-    if 'cros_passthrough' in mixin_vals:
-      vals['cros_passthrough'] = mixin_vals['cros_passthrough']
     if 'args_file' in mixin_vals:
       if vals['args_file']:
         raise MBErr('args_file specified multiple times in mixins '

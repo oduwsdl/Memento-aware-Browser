@@ -206,7 +206,7 @@ def _expand_symlinks(indir, relfile):
 
 
 @tools.profile
-def expand_directory_and_symlink(indir, relfile, blacklist, follow_symlinks):
+def expand_directory_and_symlink(indir, relfile, denylist, follow_symlinks):
   """Expands a single input. It can result in multiple outputs.
 
   This function is recursive when relfile is a directory.
@@ -273,19 +273,19 @@ def expand_directory_and_symlink(indir, relfile, blacklist, follow_symlinks):
     try:
       for filename in fs.listdir(infile):
         inner_relfile = os.path.join(relfile, filename)
-        if blacklist and blacklist(inner_relfile):
+        if denylist and denylist(inner_relfile):
           continue
         if fs.isdir(os.path.join(indir, inner_relfile)):
           inner_relfile += os.path.sep
         # Apply recursively.
         for i, is_symlink in expand_directory_and_symlink(
-            indir, inner_relfile, blacklist, follow_symlinks):
+            indir, inner_relfile, denylist, follow_symlinks):
           yield i, is_symlink
     except OSError as e:
       raise MappingError(
           u'Unable to iterate over directory %s.\n%s' % (infile, e))
   else:
-    # Always add individual files even if they were blacklisted.
+    # Always add individual files even if they were in the denylist.
     if fs.isdir(infile):
       raise MappingError(
           u'Input directory %s must have a trailing slash' % infile)
@@ -297,7 +297,7 @@ def expand_directory_and_symlink(indir, relfile, blacklist, follow_symlinks):
 
 
 @tools.profile
-def file_to_metadata(filepath, read_only, collapse_symlinks):
+def file_to_metadata(filepath, collapse_symlinks):
   """Processes an input file, a dependency, and return meta data about it.
 
   Behaviors:
@@ -307,10 +307,6 @@ def file_to_metadata(filepath, read_only, collapse_symlinks):
 
   Arguments:
     filepath: File to act on.
-    read_only: If 1 or 2, the file mode is manipulated. In practice, only save
-               one of 4 modes: 0755 (rwx), 0644 (rw), 0555 (rx), 0444 (r). On
-               windows, mode is not set since all files are 'executable' by
-               default.
     collapse_symlinks: True if symlinked files should be treated like they were
                        the normal underlying file.
 
@@ -318,8 +314,6 @@ def file_to_metadata(filepath, read_only, collapse_symlinks):
     The necessary dict to create a entry in the 'files' section of an .isolated
     file *except* 'h' for files.
   """
-  # TODO(maruel): None is not a valid value.
-  assert read_only in (None, 0, 1, 2), read_only
   out = {}
   # Always check the file stat and check if it is a link.
   try:
@@ -339,8 +333,6 @@ def file_to_metadata(filepath, read_only, collapse_symlinks):
     filemode = stat.S_IMODE(filestats.st_mode)
     # Remove write access for group and all access to 'others'.
     filemode &= ~(stat.S_IWGRP | stat.S_IRWXO)
-    if read_only:
-      filemode &= ~stat.S_IWUSR
     if filemode & (stat.S_IXUSR|stat.S_IRGRP) == (stat.S_IXUSR|stat.S_IRGRP):
       # Only keep x group bit if both x user bit and group read bit are set.
       filemode |= stat.S_IXGRP

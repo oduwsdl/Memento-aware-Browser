@@ -339,11 +339,11 @@ contact someone from the OWNERS file.
 
 ## Histogram Expiry
 
-Histogram expiry is specified by **'expires_after'** attribute in histogram
-descriptions in histograms.xml. The attribute can be specified as date in
-**YYYY-MM-DD** format or as Chrome milestone in **M**\*(e.g. M68) format. In the
-latter case, the actual expiry date is about 12 weeks after that branch is cut,
-or basically when it is replaced on the "stable" channel by the following
+Histogram expiry/expiration is specified by the `expires_after` attribute in
+histogram descriptions in histograms.xml. The attribute can be specified as date
+in **YYYY-MM-DD** format or as Chrome milestone in **M**\*(e.g. M68) format. In
+the latter case, the actual expiry date is about 12 weeks after that branch is
+cut, or basically when it is replaced on the "stable" channel by the following
 release.
 
 After a histogram expires, it will cease to be displayed on the dashboard.
@@ -483,6 +483,17 @@ logged on Mac.
 Histogram descriptions should clearly state when the histogram is emitted
 (profile open? network request received? etc.).
 
+### Provide Clear Units or Enum Labels
+
+For enumerated histograms, including boolean and sparse histograms, provide an
+`enum=` attribute mapping enum values to semantically contentful labels. Define
+the `<enum>` in enums.xml if none of the existing enums are a good fit. Use
+labels whenever they would be clearer than raw numeric values.
+
+For non-enumerated histograms, include a `units=` attribute. Be specific:
+e.g. distinguish "MB" vs. "MiB", refine generic labels like "counts" to more
+precise labels like "pages", etc.
+
 ### Owners
 
 Histograms need owners, who are the experts on the metric and the points of
@@ -505,14 +516,29 @@ usefulness. When a histogram is nearing expiry, a robot will file a reminder
 bug in Monorail. It's important that somebody familiar with the histogram
 notices and triages such bugs!
 
+### Components
+
+Histograms may be associated with components, which can help make sure that
+histogram expiry bugs don't fall through the cracks.
+
+There are two ways in which components may be associated with a histogram. The
+first and recommended way is to add a tag to a histogram or histogram suffix,
+e.g. <component>UI&gt;Shell</component>. The second way is to specify an OWNERS
+file as a secondary owner for a histogram. If the OWNERS file contains a
+component, then the component is associated with the histogram. If the specified
+OWNERS file doesn't have a component, but an OWNERS file in a parent directory
+does, then the parent directory's component is used.
+
 ### Cleaning Up Histogram Entries
 
 Do not delete histograms from histograms.xml. Instead, mark unused
 histograms as obsolete and annotate them with the date or milestone in
 the `<obsolete>` tag entry.
 
-If the histogram used [histogram suffixes](#Histogram-Suffixes), mark
-the suffix entry for the histogram as obsolete as well.
+If deprecating only some variants of a
+[patterned histogram](#Patterned-Histograms), mark each deprecated `<variant>`
+as obsolete as well. Similarly, if the histogram used histogram suffixes, mark
+the suffix entry for the histogram as obsolete.
 
 If the histogram is being replaced by a new version:
 
@@ -535,39 +561,92 @@ coming in.  It's also useful to keep obsolete histogram descriptions in
 histogram to answer a particular question, they can learn if there was a
 histogram at some point that did so even if it isn't active now.
 
-### Histogram Suffixes
+*Exception:* It is ok to delete the metadata for any histogram that has never
+been recorded to. For example, it's fine to correct a typo where the histogram
+name in the metadata does not match the name in the Chromium source code.
+
+### Patterned Histograms
 
 It is sometimes useful to record several closely related metrics, which measure
-the same type of data, with some minor variations. It is often useful to use one
-or more <histogram_suffixes> elements to save on redundant verbosity
-in [histograms.xml](./histograms.xml). If a root `<histogram>` or a `<suffix>`
-element is used only to construct a partial name, to be completed by further
-suffixes, annotate the element with the attribute `base="true"`. This instructs
-tools not to treat the partial base name as a distinct histogram. Note that
-suffixes can be applied recursively.
+the same type of data, with some minor variations. You can declare the metadata
+for these concisely using patterned histograms. For example:
 
-You can also declare ownership of `<histogram_suffixes>`. If there's no owner
-specified, the generated histograms will inherit owners from the parents.
+```xml
+<histogram name="Pokemon.{Character}.EfficacyAgainst{OpponentType}" ...>
+  <owner>individual@chromium.org</owner>
+  <owner>team@chromium.org</owner>
+  <summary>
+    The efficacy multiplier for {Character} against an opponent of
+    {OpponentType} type.
+  </summary>
+  <token key="Character">
+    <variant name="Bulbasaur"/>
+    <variant name="Charizard"/>
+    <variant name="Mewtwo"/>
+  </token>
+  <token key="OpponentType">
+    <variant name="Dragon" summary="dragon"/>
+    <variant name="Flying" summary="flappity-flap"/>
+    <variant name="Psychic" summary="psychic"/>
+    <variant name="Water" summary="water"/>
+  </token>
+</histogram>
+```
+
+This example defines metadata for 12 (= 3 x 4) concrete histograms, such as
+
+```xml
+<histogram name="Pokemon.Charizard.EfficacyAgainstWater" ...>
+  <owner>individual@chromium.org</owner>
+  <owner>team@chromium.org</owner>
+  <summary>
+    The efficacy multiplier for Charizard against an opponent of water type.
+  </summary>
+</histogram>
+```
+
+Note that each token `<variant>` defines what text should be substituted for it,
+both in the histogram name and in the summary text. As shorthand, a `<variant>`
+that omits the `summary` attribute will substitute the value of the `name`
+attribute in the histogram's `<summary>` text as well.
+
+*** promo
+Tip: You can declare an optional token by listing an empty name: `<variant
+name="" summary="aggregated across all breakdowns"/>`. This can be useful when
+recording a "parent" histogram that aggregates across a set of breakdowns.
+***
+
+You can use the `<variants>` tag to define a set of `<variant>`s out-of-line.
+This is useful for token substitutions that are shared among multiple families
+of histograms. See
+[histograms.xml](https://source.chromium.org/search?q=file:histograms.xml%20%3Cvariants)
+for examples.
+
+By default, a `<variant>` will inherit the owners declared for the patterned
+histogram. Each variant can optionally override the inherited list with custom
+owners:
+```xml
+<variant name="SubteamBreakdown" ...>
+  <owner>subteam-lead@chromium.org</owner>
+  <owner>subteam@chromium.org</owner>
+</variant>
+```
 
 As [with histogram entries](#Cleaning-Up-Histogram-Entries), never delete
-histogram suffixes. If the suffix expansion is no longer used, mark it as
-obsolete.  You can also mark individual histograms within the suffix as
-obsolete, indicating the expansion for that histogram is obsolete yet the
-expansion for other histograms with the same suffix are not.
+variants. If the variant expansion is no longer used, mark it as `<obsolete>`.
 
-Histogram suffixes can be difficult to use, especially if they are applied
-recursively. Consider using the `print_histogram_names.py --diff` tool to
-enumerate all the histogram names that are generated by a particular CL. e.g.
-(from the repo root):
+*** promo
+Tip: You can run `print_histogram_names.py --diff` to enumerate all the
+histogram names that are generated by a particular CL. For example, this can be
+run (from the repo root) as:
 ```
 ./tools/metrics/histograms/print_histogram_names.py --diff origin/master
 ```
+***
 
-### Enum labels
-
-_All_ histograms, including boolean and sparse histograms, may have enum labels
-provided via [enums.xml](./enums.xml). Using labels is encouraged whenever
-labels would be clearer than raw numeric values.
+For documentation about the `<histogram_suffixes>` syntax, which is deprecated,
+see
+https://chromium.googlesource.com/chromium/src/+/refs/tags/87.0.4270.1/tools/metrics/histograms/one-pager.md#histogram-suffixes-deprecated-in-favor-of-pattern-histograms
 
 ## When To Use Sparse Histograms
 

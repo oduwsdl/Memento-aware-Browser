@@ -166,10 +166,10 @@ class _Session(object):
     shortname = os.path.basename(os.path.normpath(to_file))
     msg = (
         'Saved locally to {local}. To share, run:\n'
-        '> gsutil.py cp {local} gs://chrome-supersize/oneoffs && gsutil.py -m '
-        'acl ch -u AllUsers:R gs://chrome-supersize/oneoffs/{shortname}\n'
-        '  Then view it at https://storage.googleapis.com/chrome-supersize'
-        '/viewer.html?load_url=oneoffs%2F{shortname}')
+        '> gsutil.py cp -a public-read {local} gs://chrome-supersize/oneoffs\n'
+        '  Then view it at https://chrome-supersize.firebaseapp.com/viewer.html'
+        '?load_url=https://storage.googleapis.com/chrome-supersize/oneoffs/'
+        '{shortname}')
     print(msg.format(local=to_file, shortname=shortname))
 
   def _SaveDeltaSizeInfo(self, size_info, to_file=None):
@@ -323,15 +323,16 @@ class _Session(object):
     tool_prefix = self._ToolPrefixForSymbol(size_info)
     elf_path = self._ElfPathForSymbol(size_info, container, tool_prefix,
                                       elf_path)
-    # Always use Android NDK's objdump because llvm-objdump does not seem to
-    # correctly disassemble.
+    # Always use Android NDK's objdump because llvm-objdump does not print
+    # the target of jump instructions, which is really useful.
     output_directory_finder = self._output_directory_finder
     if not output_directory_finder.Tentative():
       output_directory_finder = path_util.OutputDirectoryFinder(
           any_path_within_output_directory=elf_path)
-    tool_prefix = path_util.ToolPrefixFinder(
-        output_directory_finder=output_directory_finder,
-        linker_name='ld').Finalized()
+    if output_directory_finder.Tentative():
+      tool_prefix = path_util.ToolPrefixFinder(
+          output_directory=output_directory_finder.Finalized(),
+          linker_name='ld').Finalized()
 
     args = [
         path_util.GetObjDumpPath(tool_prefix),
@@ -485,18 +486,24 @@ def AddArguments(parser):
 
 
 def Run(args, on_config_error):
+  # Up-front check for faster error-checking.
   for path in args.inputs:
-    if not path.endswith('.size'):
-      on_config_error('All inputs must end with ".size"')
+    if not path.endswith('.size') and not path.endswith('.sizediff'):
+      on_config_error('All inputs must end with ".size" or ".sizediff"')
 
-  size_infos = [archive.LoadAndPostProcessSizeInfo(p) for p in args.inputs]
+  size_infos = []
+  for path in args.inputs:
+    if path.endswith('.sizediff'):
+      size_infos.extend(archive.LoadAndPostProcessDeltaSizeInfo(path))
+    else:
+      size_infos.append(archive.LoadAndPostProcessSizeInfo(path))
   output_directory_finder = path_util.OutputDirectoryFinder(
       value=args.output_directory,
       any_path_within_output_directory=args.inputs[0])
   linker_name = size_infos[-1].build_config.get(models.BUILD_CONFIG_LINKER_NAME)
   tool_prefix_finder = path_util.ToolPrefixFinder(
       value=args.tool_prefix,
-      output_directory_finder=output_directory_finder,
+      output_directory=output_directory_finder.Tentative(),
       linker_name=linker_name)
   session = _Session(size_infos, output_directory_finder, tool_prefix_finder)
 
