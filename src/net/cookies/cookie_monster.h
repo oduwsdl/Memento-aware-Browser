@@ -448,9 +448,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // Inserts |cc| into cookies_. Returns an iterator that points to the inserted
   // cookie in cookies_. Guarantee: all iterators to cookies_ remain valid.
-  CookieMap::iterator InternalInsertCookie(const std::string& key,
-                                           std::unique_ptr<CanonicalCookie> cc,
-                                           bool sync_to_store);
+  CookieMap::iterator InternalInsertCookie(
+      const std::string& key,
+      std::unique_ptr<CanonicalCookie> cc,
+      bool sync_to_store,
+      const CookieAccessResult& access_result);
 
   // Sets all cookies from |list| after deleting any equivalent cookie.
   // For data gathering purposes, this routine is treated as if it is
@@ -594,7 +596,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   // Histogram variables; see CookieMonster::InitializeHistograms() in
   // cookie_monster.cc for details.
-  base::HistogramBase* histogram_expiration_duration_minutes_;
+  base::HistogramBase* histogram_expiration_duration_minutes_secure_;
+  base::HistogramBase* histogram_expiration_duration_minutes_non_secure_;
   base::HistogramBase* histogram_count_;
   base::HistogramBase* histogram_cookie_type_;
   base::HistogramBase* histogram_cookie_source_scheme_;

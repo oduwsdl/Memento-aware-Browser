@@ -211,12 +211,7 @@ void Bbr2NetworkModel::OnCongestionEventFinish(
   bandwidth_sampler_.RemoveObsoletePackets(least_unacked_packet);
 }
 
-void Bbr2NetworkModel::UpdateNetworkParameters(QuicBandwidth bandwidth,
-                                               QuicTime::Delta rtt) {
-  if (!bandwidth.IsInfinite() && bandwidth > MaxBandwidth()) {
-    max_bandwidth_filter_.Update(bandwidth);
-  }
-
+void Bbr2NetworkModel::UpdateNetworkParameters(QuicTime::Delta rtt) {
   if (!rtt.IsZero()) {
     min_rtt_filter_.Update(rtt, MinRttTimestamp());
   }
@@ -248,10 +243,15 @@ bool Bbr2NetworkModel::IsCongestionWindowLimited(
 }
 
 bool Bbr2NetworkModel::IsInflightTooHigh(
-    const Bbr2CongestionEvent& congestion_event) const {
+    const Bbr2CongestionEvent& congestion_event,
+    int64_t max_loss_events) const {
   const SendTimeState& send_state = congestion_event.last_packet_send_state;
   if (!send_state.is_valid) {
     // Not enough information.
+    return false;
+  }
+
+  if (loss_events_in_round() < max_loss_events) {
     return false;
   }
 
@@ -261,8 +261,11 @@ bool Bbr2NetworkModel::IsInflightTooHigh(
   // bytes_lost_in_round_, OTOH, is the total bytes lost in the "current" round.
   const QuicByteCount bytes_lost_in_round = bytes_lost_in_round_;
 
-  QUIC_DVLOG(3) << "IsInflightTooHigh: bytes_lost_in_round:"
-                << bytes_lost_in_round << ", lost_in_round_threshold:"
+  QUIC_DVLOG(3) << "IsInflightTooHigh: loss_events_in_round:"
+                << loss_events_in_round()
+
+                << " bytes_lost_in_round:" << bytes_lost_in_round
+                << ", lost_in_round_threshold:"
                 << inflight_at_send * Params().loss_threshold;
 
   if (inflight_at_send > 0 && bytes_lost_in_round > 0) {

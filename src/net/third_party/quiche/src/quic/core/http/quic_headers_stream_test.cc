@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/quic/core/http/spdy_utils.h"
 #include "net/third_party/quiche/src/quic/core/quic_data_writer.h"
 #include "net/third_party/quiche/src/quic/core/quic_utils.h"
@@ -23,9 +24,8 @@
 #include "net/third_party/quiche/src/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_stream_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_endian.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_str_cat.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
+#include "net/third_party/quiche/src/common/quiche_endian.h"
 #include "net/third_party/quiche/src/spdy/core/http2_frame_decoder_adapter.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_alt_svc_wire_format.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
@@ -61,6 +61,7 @@ using spdy::SpdyStreamId;
 using spdy::SpdyWindowUpdateIR;
 using spdy::test::TestHeadersHandler;
 using testing::_;
+using testing::AnyNumber;
 using testing::AtLeast;
 using testing::InSequence;
 using testing::Invoke;
@@ -87,7 +88,8 @@ class MockVisitor : public SpdyFramerVisitorInterface {
  public:
   MOCK_METHOD(void,
               OnError,
-              (http2::Http2DecoderAdapter::SpdyFramerError error),
+              (http2::Http2DecoderAdapter::SpdyFramerError error,
+               std::string detailed_error),
               (override));
   MOCK_METHOD(void,
               OnDataFrameHeader,
@@ -148,7 +150,7 @@ class MockVisitor : public SpdyFramerVisitorInterface {
       void,
       OnAltSvc,
       (SpdyStreamId stream_id,
-       quiche::QuicheStringPiece origin,
+       absl::string_view origin,
        const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector),
       (override));
   MOCK_METHOD(void,
@@ -222,6 +224,7 @@ class QuicHeadersStreamTest : public QuicTestWithParam<TestParams> {
             ""),
         next_promised_stream_id_(2) {
     QuicSpdySessionPeer::SetMaxInboundHeaderListSize(&session_, 256 * 1024);
+    EXPECT_CALL(session_, OnCongestionWindowChange(_)).Times(AnyNumber());
     session_.Initialize();
     headers_stream_ = QuicSpdySessionPeer::GetHeadersStream(&session_);
     headers_[":status"] = "200 Ok";
@@ -268,7 +271,7 @@ class QuicHeadersStreamTest : public QuicTestWithParam<TestParams> {
     return true;
   }
 
-  void SaveHeaderDataStringPiece(quiche::QuicheStringPiece data) {
+  void SaveHeaderDataStringPiece(absl::string_view data) {
     saved_header_data_.append(data.data(), data.length());
   }
 
@@ -660,7 +663,7 @@ TEST_P(QuicHeadersStreamTest, RespectHttp2SettingsFrameSupportedFields) {
   // Respect supported settings frames SETTINGS_HEADER_TABLE_SIZE,
   // SETTINGS_MAX_HEADER_LIST_SIZE.
   data.AddSetting(SETTINGS_HEADER_TABLE_SIZE, kTestHeaderTableSize);
-  data.AddSetting(SETTINGS_MAX_HEADER_LIST_SIZE, 2000);
+  data.AddSetting(spdy::SETTINGS_MAX_HEADER_LIST_SIZE, 2000);
   SpdySerializedFrame frame(framer_->SerializeFrame(data));
   stream_frame_.data_buffer = frame.data();
   stream_frame_.data_length = frame.size();

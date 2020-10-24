@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "net/third_party/quiche/src/quic/core/crypto/proof_verifier.h"
 #include "net/third_party/quiche/src/quic/core/crypto/quic_crypto_client_config.h"
@@ -18,7 +19,6 @@
 #include "net/third_party/quiche/src/quic/core/quic_crypto_stream.h"
 #include "net/third_party/quiche/src/quic/core/tls_handshaker.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_export.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 
 namespace quic {
 
@@ -46,6 +46,7 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   int num_sent_client_hellos() const override;
   bool IsResumption() const override;
   bool EarlyDataAccepted() const override;
+  ssl_early_data_reason_t EarlyDataReason() const override;
   bool ReceivedInchoateReject() const override;
   int num_scup_messages_received() const override;
   std::string chlo_hash() const override;
@@ -58,6 +59,10 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   CryptoMessageParser* crypto_message_parser() override;
   HandshakeState GetHandshakeState() const override;
   size_t BufferSizeLimitForLevel(EncryptionLevel level) const override;
+  bool KeyUpdateSupportedLocally() const override;
+  std::unique_ptr<QuicDecrypter> AdvanceKeysAndCreateCurrentOneRttDecrypter()
+      override;
+  std::unique_ptr<QuicEncrypter> CreateCurrentOneRttEncrypter() override;
   void OnOneRttPacketAcknowledged() override;
   void OnHandshakePacketSent() override;
   void OnConnectionClosed(QuicErrorCode error,
@@ -68,8 +73,7 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
                       const std::vector<uint8_t>& write_secret) override;
 
   // Override to drop initial keys if trying to write ENCRYPTION_HANDSHAKE data.
-  void WriteMessage(EncryptionLevel level,
-                    quiche::QuicheStringPiece data) override;
+  void WriteMessage(EncryptionLevel level, absl::string_view data) override;
 
   void SetServerApplicationStateForResumption(
       std::unique_ptr<ApplicationState> application_state) override;
@@ -176,7 +180,9 @@ class QUIC_EXPORT_PRIVATE TlsClientHandshaker
   bool allow_invalid_sni_for_tests_ = false;
 
   const bool has_application_state_;
-  bool attempting_zero_rtt_;
+  // Contains the state for performing a resumption, if one is attempted. This
+  // will always be non-null if a 0-RTT resumption is attempted.
+  std::unique_ptr<QuicResumptionState> cached_state_;
 
   TlsClientConnection tls_connection_;
 

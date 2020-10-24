@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/optional.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
@@ -29,6 +30,25 @@ enum HttpssvcDnsRcode {
   kNotImp,
   kRefused,
   kMaxValue = kRefused,
+};
+
+// Helper that classifies domains as experimental, control, or other. Queries
+// feature params and caches result to avoid repeated parsing.
+class NET_EXPORT_PRIVATE HttpssvcExperimentDomainCache {
+ public:
+  HttpssvcExperimentDomainCache();
+  ~HttpssvcExperimentDomainCache();
+  bool IsExperimental(base::StringPiece domain);
+  bool IsControl(base::StringPiece domain);
+
+ private:
+  bool ListContainsDomain(
+      const std::string& domain_list,
+      base::StringPiece domain,
+      base::Optional<base::flat_set<std::string>>& in_out_cached_list);
+
+  base::Optional<base::flat_set<std::string>> experimental_list_;
+  base::Optional<base::flat_set<std::string>> control_list_;
 };
 
 // Translate an RCODE value to the |HttpssvcDnsRcode| enum, which is used for
@@ -61,6 +81,9 @@ class NET_EXPORT_PRIVATE HttpssvcMetrics {
                         enum HttpssvcDnsRcode rcode,
                         const std::vector<bool>& condensed_records,
                         base::TimeDelta integrity_resolve_time);
+  void SaveForHttps(base::Optional<std::string> doh_provider_id,
+                    enum HttpssvcDnsRcode rcode,
+                    base::TimeDelta https_resolve_time);
 
  private:
   std::string BuildMetricName(base::StringPiece leaf_name) const;
@@ -73,10 +96,10 @@ class NET_EXPORT_PRIVATE HttpssvcMetrics {
 
   void set_doh_provider_id(base::Optional<std::string> doh_provider_id);
 
+  const bool expect_intact_;
   // RecordIntegrityMetrics() will do nothing when |disqualified_| is true.
   bool disqualified_ = false;
-  const bool expect_intact_;
-  bool in_progress_ = true;
+  bool already_recorded_ = false;
   base::Optional<std::string> doh_provider_id_;
   base::Optional<enum HttpssvcDnsRcode> rcode_integrity_;
   size_t num_integrity_records_ = 0;

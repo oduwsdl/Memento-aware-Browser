@@ -47,9 +47,21 @@ struct QUIC_EXPORT_PRIVATE QuicConnectionStats {
   QuicPacketCount packets_lost = 0;
   QuicPacketCount packet_spuriously_detected_lost = 0;
 
-  // The sum of the detection time of all lost packets. The detection time of a
-  // lost packet is defined as: T(detection) - T(send).
-  QuicTime::Delta total_loss_detection_time = QuicTime::Delta::Zero();
+  // The sum of loss detection response times of all lost packets, in number of
+  // round trips.
+  // Given a packet detected as lost:
+  //   T(S)                            T(1Rtt)    T(D)
+  //     |_________________________________|_______|
+  // Where
+  //   T(S) is the time when the packet is sent.
+  //   T(1Rtt) is one rtt after T(S), using the rtt at the time of detection.
+  //   T(D) is the time of detection, i.e. when the packet is declared as lost.
+  // The loss detection response time is defined as
+  //     (T(D) - T(S)) / (T(1Rtt) - T(S))
+  //
+  // The average loss detection response time is this number divided by
+  // |packets_lost|. Smaller result means detection is faster.
+  float total_loss_detection_response_time = 0.0;
 
   // Number of times this connection went through the slow start phase.
   uint32_t slowstart_count = 0;
@@ -117,6 +129,9 @@ struct QUIC_EXPORT_PRIVATE QuicConnectionStats {
   // Creation time, as reported by the QuicClock.
   QuicTime connection_creation_time = QuicTime::Zero();
 
+  // Handshake completion time.
+  QuicTime handshake_completion_time = QuicTime::Zero();
+
   uint64_t blocked_frames_received = 0;
   uint64_t blocked_frames_sent = 0;
 
@@ -146,6 +161,19 @@ struct QUIC_EXPORT_PRIVATE QuicConnectionStats {
 
   // Max consecutive retransmission timeout before making forward progress.
   size_t max_consecutive_rto_with_forward_progress = 0;
+
+  // Number of sent packets that were encapsulated using Legacy Version
+  // Encapsulation.
+  QuicPacketCount sent_legacy_version_encapsulated_packets = 0;
+
+  // Number of times when the connection tries to send data but gets throttled
+  // by amplification factor.
+  size_t num_amplification_throttling = 0;
+
+  // Number of key phase updates that have occurred. In the case of a locally
+  // initiated key update, this is incremented when the keys are updated, before
+  // the peer has acknowledged the key update.
+  uint32_t key_update_count = 0;
 };
 
 }  // namespace quic

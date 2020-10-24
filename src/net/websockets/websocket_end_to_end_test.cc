@@ -292,15 +292,15 @@ class WebSocketEndToEndTest : public TestWithTaskEnvironment {
     url::Origin origin = url::Origin::Create(GURL("http://localhost"));
     net::SiteForCookies site_for_cookies =
         net::SiteForCookies::FromOrigin(origin);
-    IsolationInfo isolation_info = IsolationInfo::Create(
-        IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-        SiteForCookies::FromOrigin(origin));
+    IsolationInfo isolation_info =
+        IsolationInfo::Create(IsolationInfo::RequestType::kOther, origin,
+                              origin, SiteForCookies::FromOrigin(origin));
     event_interface_ = new ConnectTestingEventInterface();
     channel_ = std::make_unique<WebSocketChannel>(
         base::WrapUnique(event_interface_), &context_);
-    channel_->SendAddChannelRequest(GURL(socket_url), sub_protocols_, origin,
-                                    site_for_cookies, isolation_info,
-                                    HttpRequestHeaders());
+    channel_->SendAddChannelRequest(
+        GURL(socket_url), sub_protocols_, origin, site_for_cookies,
+        isolation_info, HttpRequestHeaders(), TRAFFIC_ANNOTATION_FOR_TESTS);
     event_interface_->WaitForResponse();
     return !event_interface_->failed();
   }
@@ -437,7 +437,7 @@ std::unique_ptr<HttpResponse> ProxyPacHandler(const HttpRequest& request) {
 // TODO(ricea): Remove this test if --winhttp-proxy-resolver flag is removed.
 // See crbug.com/644030.
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_APPLE)
 #define MAYBE_ProxyPacUsed ProxyPacUsed
 #else
 #define MAYBE_ProxyPacUsed DISABLED_ProxyPacUsed

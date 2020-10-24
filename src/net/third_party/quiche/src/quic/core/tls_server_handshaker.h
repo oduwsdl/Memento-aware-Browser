@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "net/third_party/quiche/src/quic/core/crypto/quic_crypto_server_config.h"
@@ -16,7 +17,6 @@
 #include "net/third_party/quiche/src/quic/core/quic_crypto_stream.h"
 #include "net/third_party/quiche/src/quic/core/tls_handshaker.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_export.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 
 namespace quic {
 
@@ -53,8 +53,10 @@ class QUIC_EXPORT_PRIVATE TlsServerHandshaker
                           ConnectionCloseSource source) override;
   void OnHandshakeDoneReceived() override;
   bool ShouldSendExpectCTHeader() const override;
+  const ProofSource::Details* ProofSourceDetails() const override;
 
   // From QuicCryptoServerStreamBase and TlsHandshaker
+  ssl_early_data_reason_t EarlyDataReason() const override;
   bool encryption_established() const override;
   bool one_rtt_keys_available() const override;
   const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
@@ -64,6 +66,10 @@ class QUIC_EXPORT_PRIVATE TlsServerHandshaker
   void SetServerApplicationStateForResumption(
       std::unique_ptr<ApplicationState> state) override;
   size_t BufferSizeLimitForLevel(EncryptionLevel level) const override;
+  bool KeyUpdateSupportedLocally() const override;
+  std::unique_ptr<QuicDecrypter> AdvanceKeysAndCreateCurrentOneRttDecrypter()
+      override;
+  std::unique_ptr<QuicEncrypter> CreateCurrentOneRttEncrypter() override;
   void SetWriteSecret(EncryptionLevel level,
                       const SSL_CIPHER* cipher,
                       const std::vector<uint8_t>& write_secret) override;
@@ -77,16 +83,16 @@ class QUIC_EXPORT_PRIVATE TlsServerHandshaker
     return &tls_connection_;
   }
 
-  ProofSource::Details* proof_source_details() const {
-    return proof_source_details_.get();
-  }
-
   virtual void ProcessAdditionalTransportParameters(
       const TransportParameters& /*params*/) {}
 
   // Called when a new message is received on the crypto stream and is available
   // for the TLS stack to read.
   void AdvanceHandshake() override;
+
+  // Called when a potentially async operation is done and the done callback
+  // needs to advance the handshake.
+  void AdvanceHandshakeFromCallback();
   void CloseConnection(QuicErrorCode error,
                        const std::string& reason_phrase) override;
 
@@ -96,12 +102,11 @@ class QUIC_EXPORT_PRIVATE TlsServerHandshaker
                  uint8_t* out_len,
                  const uint8_t* in,
                  unsigned in_len) override;
-  ssl_private_key_result_t PrivateKeySign(
-      uint8_t* out,
-      size_t* out_len,
-      size_t max_out,
-      uint16_t sig_alg,
-      quiche::QuicheStringPiece in) override;
+  ssl_private_key_result_t PrivateKeySign(uint8_t* out,
+                                          size_t* out_len,
+                                          size_t max_out,
+                                          uint16_t sig_alg,
+                                          absl::string_view in) override;
   ssl_private_key_result_t PrivateKeyComplete(uint8_t* out,
                                               size_t* out_len,
                                               size_t max_out) override;
@@ -109,12 +114,11 @@ class QUIC_EXPORT_PRIVATE TlsServerHandshaker
   int SessionTicketSeal(uint8_t* out,
                         size_t* out_len,
                         size_t max_out_len,
-                        quiche::QuicheStringPiece in) override;
-  ssl_ticket_aead_result_t SessionTicketOpen(
-      uint8_t* out,
-      size_t* out_len,
-      size_t max_out_len,
-      quiche::QuicheStringPiece in) override;
+                        absl::string_view in) override;
+  ssl_ticket_aead_result_t SessionTicketOpen(uint8_t* out,
+                                             size_t* out_len,
+                                             size_t max_out_len,
+                                             absl::string_view in) override;
   TlsConnection::Delegate* ConnectionDelegate() override { return this; }
 
  private:

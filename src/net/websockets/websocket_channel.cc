@@ -30,6 +30,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/log/net_log_with_source.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/websockets/websocket_errors.h"
 #include "net/websockets/websocket_event_interface.h"
 #include "net/websockets/websocket_frame.h"
@@ -44,9 +45,9 @@ namespace {
 
 using base::StreamingUtf8Validator;
 
-const size_t kWebSocketCloseCodeLength = 2;
+constexpr size_t kWebSocketCloseCodeLength = 2;
 // Timeout for waiting for the server to acknowledge a closing handshake.
-const int kClosingHandshakeTimeoutSeconds = 60;
+constexpr int kClosingHandshakeTimeoutSeconds = 60;
 // We wait for the server to close the underlying connection as recommended in
 // https://tools.ietf.org/html/rfc6455#section-7.1.1
 // We don't use 2MSL since there're server implementations that don't follow
@@ -54,14 +55,14 @@ const int kClosingHandshakeTimeoutSeconds = 60;
 // connection. It leads to unnecessarily long time before CloseEvent
 // invocation. We want to avoid this rather than strictly following the spec
 // recommendation.
-const int kUnderlyingConnectionCloseTimeoutSeconds = 2;
+constexpr int kUnderlyingConnectionCloseTimeoutSeconds = 2;
 
 using ChannelState = WebSocketChannel::ChannelState;
 
 // Maximum close reason length = max control frame payload -
 //                               status code length
 //                             = 125 - 2
-const size_t kMaximumCloseReasonLength = 125 - kWebSocketCloseCodeLength;
+constexpr size_t kMaximumCloseReasonLength = 125 - kWebSocketCloseCodeLength;
 
 // Check a close status code for strict compliance with RFC6455. This is only
 // used for close codes received from a renderer that we are intending to send
@@ -311,10 +312,11 @@ void WebSocketChannel::SendAddChannelRequest(
     const url::Origin& origin,
     const SiteForCookies& site_for_cookies,
     const IsolationInfo& isolation_info,
-    const HttpRequestHeaders& additional_headers) {
+    const HttpRequestHeaders& additional_headers,
+    NetworkTrafficAnnotationTag traffic_annotation) {
   SendAddChannelRequestWithSuppliedCallback(
       socket_url, requested_subprotocols, origin, site_for_cookies,
-      isolation_info, additional_headers,
+      isolation_info, additional_headers, traffic_annotation,
       base::BindOnce(&WebSocketStream::CreateAndConnectStream));
 }
 
@@ -374,12 +376,6 @@ WebSocketChannel::ChannelState WebSocketChannel::SendFrame(
   return SendFrameInternal(fin, op_code, std::move(buffer), buffer_size);
   // |this| may have been deleted.
 }
-
-// Overrides default quota resend threshold size for WebSocket. This flag will
-// be used to investigate the performance issue of crbug.com/865001 and be
-// deleted later on.
-const char kWebSocketReceiveQuotaThreshold[] =
-    "websocket-renderer-receive-quota-max";
 
 ChannelState WebSocketChannel::StartClosingHandshake(
     uint16_t code,
@@ -446,10 +442,12 @@ void WebSocketChannel::SendAddChannelRequestForTesting(
     const SiteForCookies& site_for_cookies,
     const IsolationInfo& isolation_info,
     const HttpRequestHeaders& additional_headers,
+    NetworkTrafficAnnotationTag traffic_annotation,
     WebSocketStreamRequestCreationCallback callback) {
   SendAddChannelRequestWithSuppliedCallback(
       socket_url, requested_subprotocols, origin, site_for_cookies,
-      isolation_info, additional_headers, std::move(callback));
+      isolation_info, additional_headers, traffic_annotation,
+      std::move(callback));
 }
 
 void WebSocketChannel::SetClosingHandshakeTimeoutForTesting(
@@ -469,6 +467,7 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCallback(
     const SiteForCookies& site_for_cookies,
     const IsolationInfo& isolation_info,
     const HttpRequestHeaders& additional_headers,
+    NetworkTrafficAnnotationTag traffic_annotation,
     WebSocketStreamRequestCreationCallback callback) {
   DCHECK_EQ(FRESHLY_CONSTRUCTED, state_);
   if (!socket_url.SchemeIsWSOrWSS()) {
@@ -483,7 +482,7 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCallback(
   stream_request_ = std::move(callback).Run(
       socket_url_, requested_subprotocols, origin, site_for_cookies,
       isolation_info, additional_headers, url_request_context_,
-      NetLogWithSource(), std::move(connect_delegate));
+      NetLogWithSource(), traffic_annotation, std::move(connect_delegate));
   SetState(CONNECTING);
 }
 

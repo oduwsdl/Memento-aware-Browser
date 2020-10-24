@@ -317,7 +317,7 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
   FRIEND_TEST_ALL_PREFIXES(HttpCacheTest, SplitCacheWithFrameOrigin);
   FRIEND_TEST_ALL_PREFIXES(HttpCacheTest, NonSplitCache);
   FRIEND_TEST_ALL_PREFIXES(HttpCacheTest, SplitCache);
-  FRIEND_TEST_ALL_PREFIXES(HttpCacheTest, SplitCacheWithRegistrableDomain);
+  FRIEND_TEST_ALL_PREFIXES(HttpCacheTest, SplitCacheUsesRegistrableDomain);
 
   using TransactionList = std::list<Transaction*>;
   using TransactionSet = std::unordered_set<Transaction*>;
@@ -396,7 +396,6 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
       std::unordered_map<std::string, std::unique_ptr<ActiveEntry>>;
   using PendingOpsMap = std::unordered_map<std::string, PendingOp*>;
   using ActiveEntriesSet = std::map<ActiveEntry*, std::unique_ptr<ActiveEntry>>;
-  using PlaybackCacheMap = std::unordered_map<std::string, int>;
 
   // Methods ------------------------------------------------------------------
 
@@ -665,8 +664,6 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
 
   // The set of entries "under construction".
   PendingOpsMap pending_ops_;
-
-  std::unique_ptr<PlaybackCacheMap> playback_cache_map_;
 
   // A clock that can be swapped out for testing.
   base::Clock* clock_;

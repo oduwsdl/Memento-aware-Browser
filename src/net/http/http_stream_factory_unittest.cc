@@ -32,6 +32,7 @@
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/dns/public/secure_dns_mode.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/bidirectional_stream_request_info.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -911,25 +912,25 @@ class TestBidirectionalDelegate : public BidirectionalStreamImpl::Delegate {
  public:
   void WaitUntilDone() { loop_.Run(); }
 
-  const spdy::SpdyHeaderBlock& response_headers() const {
+  const spdy::Http2HeaderBlock& response_headers() const {
     return response_headers_;
   }
 
  private:
   void OnStreamReady(bool request_headers_sent) override {}
   void OnHeadersReceived(
-      const spdy::SpdyHeaderBlock& response_headers) override {
+      const spdy::Http2HeaderBlock& response_headers) override {
     response_headers_ = response_headers.Clone();
     loop_.Quit();
   }
   void OnDataRead(int bytes_read) override { NOTREACHED(); }
   void OnDataSent() override { NOTREACHED(); }
-  void OnTrailersReceived(const spdy::SpdyHeaderBlock& trailers) override {
+  void OnTrailersReceived(const spdy::Http2HeaderBlock& trailers) override {
     NOTREACHED();
   }
   void OnFailed(int error) override { NOTREACHED(); }
   base::RunLoop loop_;
-  spdy::SpdyHeaderBlock response_headers_;
+  spdy::Http2HeaderBlock response_headers_;
 };
 
 // Helper class to encapsulate MockReads and MockWrites for QUIC.
@@ -972,261 +973,7 @@ class MockQuicData {
   std::unique_ptr<SequencedSocketData> socket_data_;
 };
 
-void SetupForQuicAlternativeProxyTest(
-    HttpNetworkSession::Params* session_params,
-    HttpNetworkSession::Context* session_context,
-    MockClientSocketFactory* socket_factory,
-    ProxyResolutionService* proxy_resolution_service,
-    TestProxyDelegate* test_proxy_delegate,
-    HttpServerProperties* http_server_properties,
-    MockCertVerifier* cert_verifier,
-    CTPolicyEnforcer* ct_policy_enforcer,
-    MultiLogCTVerifier* ct_verifier,
-    SSLConfigServiceDefaults* ssl_config_service,
-    MockHostResolver* host_resolver,
-    TransportSecurityState* transport_security_state,
-    QuicContext* quic_context,
-    bool set_alternative_proxy_server) {
-  session_params->enable_quic = true;
-
-  session_context->client_socket_factory = socket_factory;
-  session_context->host_resolver = host_resolver;
-  session_context->transport_security_state = transport_security_state;
-  session_context->proxy_resolution_service = proxy_resolution_service;
-  session_context->ssl_config_service = ssl_config_service;
-  session_context->http_server_properties = http_server_properties;
-  session_context->cert_verifier = cert_verifier;
-  session_context->ct_policy_enforcer = ct_policy_enforcer;
-  session_context->cert_transparency_verifier = ct_verifier;
-  session_context->quic_context = quic_context;
-
-  if (set_alternative_proxy_server) {
-    test_proxy_delegate->set_alternative_proxy_server(
-        ProxyServer::FromPacString("QUIC badproxy:99"));
-  }
-
-  proxy_resolution_service->SetProxyDelegate(test_proxy_delegate);
-}
-
 }  // namespace
-
-// Tests that a HTTPS proxy that supports QUIC alternative proxy server is
-// marked as bad if connecting to both the default proxy and the alternative
-// proxy is unsuccessful.
-TEST_F(HttpStreamFactoryTest, WithQUICAlternativeProxyMarkedAsBad) {
-  const bool set_alternative_proxy_server_values[] = {
-      false, true,
-  };
-
-  for (auto mock_error : quic_proxy_test_mock_errors) {
-    for (auto set_alternative_proxy_server :
-         set_alternative_proxy_server_values) {
-      HttpNetworkSession::Params session_params;
-      HttpNetworkSession::Context session_context;
-      MockClientSocketFactory socket_factory;
-      std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
-          ConfiguredProxyResolutionService::CreateFixedFromPacResult(
-              "HTTPS badproxy:99; HTTPS badfallbackproxy:98; DIRECT",
-              TRAFFIC_ANNOTATION_FOR_TESTS);
-      TestProxyDelegate test_proxy_delegate;
-      HttpServerProperties http_server_properties;
-      MockCertVerifier cert_verifier;
-      DefaultCTPolicyEnforcer ct_policy_enforcer;
-      MultiLogCTVerifier ct_verifier;
-      SSLConfigServiceDefaults ssl_config_service;
-      MockHostResolver host_resolver;
-      TransportSecurityState transport_security_state;
-      QuicContext quic_context;
-      SetupForQuicAlternativeProxyTest(
-          &session_params, &session_context, &socket_factory,
-          proxy_resolution_service.get(), &test_proxy_delegate,
-          &http_server_properties, &cert_verifier, &ct_policy_enforcer,
-          &ct_verifier, &ssl_config_service, &host_resolver,
-          &transport_security_state, &quic_context,
-          set_alternative_proxy_server);
-
-      auto session =
-          std::make_unique<HttpNetworkSession>(session_params, session_context);
-
-      // Before starting the test, verify that there are no proxies marked as
-      // bad.
-      ASSERT_TRUE(
-          session->proxy_resolution_service()->proxy_retry_info().empty())
-          << mock_error;
-
-      StaticSocketDataProvider socket_data_proxy_main_job;
-      socket_data_proxy_main_job.set_connect_data(
-          MockConnect(ASYNC, mock_error));
-      socket_factory.AddSocketDataProvider(&socket_data_proxy_main_job);
-
-      StaticSocketDataProvider socket_data_proxy_alternate_job;
-      if (set_alternative_proxy_server) {
-        // Mock socket used by the QUIC job.
-        socket_data_proxy_alternate_job.set_connect_data(
-            MockConnect(ASYNC, mock_error));
-        socket_factory.AddSocketDataProvider(&socket_data_proxy_alternate_job);
-      }
-
-      // When retrying the job using the second proxy (badFallback:98),
-      // alternative job must not be created. So, socket data for only the
-      // main job is needed.
-      StaticSocketDataProvider socket_data_proxy_main_job_2;
-      socket_data_proxy_main_job_2.set_connect_data(
-          MockConnect(ASYNC, mock_error));
-      socket_factory.AddSocketDataProvider(&socket_data_proxy_main_job_2);
-
-      SSLSocketDataProvider ssl_data(ASYNC, OK);
-
-      // First request would use DIRECT, and succeed.
-      StaticSocketDataProvider socket_data_direct_first_request;
-      socket_data_direct_first_request.set_connect_data(MockConnect(ASYNC, OK));
-      socket_factory.AddSocketDataProvider(&socket_data_direct_first_request);
-      socket_factory.AddSSLSocketDataProvider(&ssl_data);
-
-      // Second request would use DIRECT, and succeed.
-      StaticSocketDataProvider socket_data_direct_second_request;
-      socket_data_direct_second_request.set_connect_data(
-          MockConnect(ASYNC, OK));
-      socket_factory.AddSocketDataProvider(&socket_data_direct_second_request);
-      socket_factory.AddSSLSocketDataProvider(&ssl_data);
-
-      // Now request a stream. It should succeed using the DIRECT.
-      HttpRequestInfo request_info;
-      request_info.method = "GET";
-      request_info.url = GURL("http://www.google.com");
-      request_info.traffic_annotation =
-          MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
-
-      SSLConfig ssl_config;
-      StreamRequestWaiter waiter;
-
-      EXPECT_EQ(set_alternative_proxy_server,
-                test_proxy_delegate.alternative_proxy_server().is_quic());
-
-      // Start two requests. The first request should consume data from
-      // |socket_data_proxy_main_job|,
-      // |socket_data_proxy_alternate_job| and
-      // |socket_data_direct_first_request|. The second request should consume
-      // data from |socket_data_direct_second_request|.
-      for (size_t i = 0; i < 2; ++i) {
-        std::unique_ptr<HttpStreamRequest> request(
-            session->http_stream_factory()->RequestStream(
-                request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
-                /* enable_ip_based_pooling = */ true,
-                /* enable_alternative_services = */ true, NetLogWithSource()));
-        waiter.WaitForStream();
-
-        // Verify that request was fetched without proxy.
-        EXPECT_TRUE(waiter.used_proxy_info().is_direct());
-
-        // The proxies that failed should now be known to the proxy service as
-        // bad.
-        const ProxyRetryInfoMap& retry_info =
-            session->proxy_resolution_service()->proxy_retry_info();
-        EXPECT_THAT(retry_info, SizeIs(set_alternative_proxy_server ? 3 : 2));
-        EXPECT_THAT(retry_info, Contains(Key("https://badproxy:99")));
-        EXPECT_THAT(retry_info, Contains(Key("https://badfallbackproxy:98")));
-
-        if (set_alternative_proxy_server)
-          EXPECT_THAT(retry_info, Contains(Key("quic://badproxy:99")));
-      }
-    }
-  }
-}
-
-// Tests that a HTTPS proxy that supports QUIC alternative proxy server is
-// not marked as bad if only the alternative proxy server job fails.
-TEST_F(HttpStreamFactoryTest, WithQUICAlternativeProxyNotMarkedAsBad) {
-  for (auto mock_error : quic_proxy_test_mock_errors) {
-    HttpNetworkSession::Params session_params;
-    HttpNetworkSession::Context session_context;
-    MockClientSocketFactory socket_factory;
-    std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
-        ConfiguredProxyResolutionService::CreateFixedFromPacResult(
-            "HTTPS badproxy:99; DIRECT", TRAFFIC_ANNOTATION_FOR_TESTS);
-    TestProxyDelegate test_proxy_delegate;
-    HttpServerProperties http_server_properties;
-    MockCertVerifier cert_verifier;
-    DefaultCTPolicyEnforcer ct_policy_enforcer;
-    MultiLogCTVerifier ct_verifier;
-
-    SSLConfigServiceDefaults ssl_config_service;
-    MockHostResolver host_resolver;
-    TransportSecurityState transport_security_state;
-    QuicContext quic_context;
-
-    SetupForQuicAlternativeProxyTest(
-        &session_params, &session_context, &socket_factory,
-        proxy_resolution_service.get(), &test_proxy_delegate,
-        &http_server_properties, &cert_verifier, &ct_policy_enforcer,
-        &ct_verifier, &ssl_config_service, &host_resolver,
-        &transport_security_state, &quic_context, true);
-
-    HostPortPair host_port_pair("badproxy", 99);
-    auto session =
-        std::make_unique<HttpNetworkSession>(session_params, session_context);
-
-    // Before starting the test, verify that there are no proxies marked as
-    // bad.
-    ASSERT_TRUE(session->proxy_resolution_service()->proxy_retry_info().empty())
-        << mock_error;
-
-    StaticSocketDataProvider socket_data_proxy_main_job;
-    socket_data_proxy_main_job.set_connect_data(MockConnect(ASYNC, mock_error));
-    socket_factory.AddSocketDataProvider(&socket_data_proxy_main_job);
-
-    SSLSocketDataProvider ssl_data(ASYNC, OK);
-
-    // Next connection attempt would use HTTPS proxy, and succeed.
-    StaticSocketDataProvider socket_data_https_first;
-    socket_data_https_first.set_connect_data(MockConnect(ASYNC, OK));
-    socket_factory.AddSocketDataProvider(&socket_data_https_first);
-    socket_factory.AddSSLSocketDataProvider(&ssl_data);
-
-    // Next connection attempt would use HTTPS proxy, and succeed.
-    StaticSocketDataProvider socket_data_https_second;
-    socket_data_https_second.set_connect_data(MockConnect(ASYNC, OK));
-    socket_factory.AddSocketDataProvider(&socket_data_https_second);
-    socket_factory.AddSSLSocketDataProvider(&ssl_data);
-
-    // Now request a stream. It should succeed using the second proxy in the
-    // list.
-    HttpRequestInfo request_info;
-    request_info.method = "GET";
-    request_info.url = GURL("http://www.google.com");
-    request_info.traffic_annotation =
-        MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
-
-    SSLConfig ssl_config;
-    StreamRequestWaiter waiter;
-
-    EXPECT_THAT(session->proxy_resolution_service()->proxy_retry_info(),
-                IsEmpty());
-    EXPECT_TRUE(test_proxy_delegate.alternative_proxy_server().is_quic());
-
-    // Start two requests. The first request should consume data from
-    // |socket_data_proxy_main_job| and |socket_data_https_first|.
-    // The second request should consume data from |socket_data_https_second|.
-    for (size_t i = 0; i < 2; ++i) {
-      std::unique_ptr<HttpStreamRequest> request(
-          session->http_stream_factory()->RequestStream(
-              request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
-              /* enable_ip_based_pooling = */ true,
-              /* enable_alternative_services = */ true, NetLogWithSource()));
-      waiter.WaitForStream();
-
-      // Verify that request was fetched using proxy.
-      EXPECT_TRUE(waiter.used_proxy_info().is_https());
-      EXPECT_TRUE(host_port_pair.Equals(
-          waiter.used_proxy_info().proxy_server().host_port_pair()));
-
-      // Alternative proxy server should be marked as bad so that it is not
-      // used for subsequent requests.
-      EXPECT_THAT(session->proxy_resolution_service()->proxy_retry_info(),
-                  ElementsAre(Key("quic://badproxy:99")));
-    }
-  }
-}
 
 TEST_F(HttpStreamFactoryTest, UsePreConnectIfNoZeroRTT) {
   for (int num_streams = 1; num_streams < 3; ++num_streams) {
@@ -1458,7 +1205,7 @@ TEST_F(HttpStreamFactoryTest, DisableSecureDnsUsesDifferentSocketPoolGroup) {
   waiter.WaitForStream();
 
   EXPECT_EQ(
-      net::DnsConfig::SecureDnsMode::OFF,
+      net::SecureDnsMode::kOff,
       session_deps.host_resolver->last_secure_dns_mode_override().value());
   EXPECT_EQ(GetSocketPoolGroupCount(ssl_pool), 2);
 }
@@ -2364,9 +2111,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
   // TODO(https://crbug.com/1059250): Implement PRIORITY_UPDATE in
   // BidirectionalStreamQuicImpl.
   spdy::SpdyPriority priority =
-      version().UsesHttp3()
-          ? 1
-          : ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
+      ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
   size_t spdy_headers_frame_length;
   int packet_num = 1;
   if (VersionUsesHttp3(version().transport_version)) {
@@ -2501,9 +2246,7 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
   // TODO(https://crbug.com/1059250): Implement PRIORITY_UPDATE in
   // BidirectionalStreamQuicImpl.
   spdy::SpdyPriority priority =
-      version().UsesHttp3()
-          ? 1
-          : ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
+      ConvertRequestPriorityToQuicPriority(DEFAULT_PRIORITY);
   size_t spdy_headers_frame_length;
   int packet_num = 1;
   if (VersionUsesHttp3(version().transport_version)) {

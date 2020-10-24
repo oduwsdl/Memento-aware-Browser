@@ -9,10 +9,13 @@
 #include <memory>
 #include <string>
 
+#include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "third_party/boringssl/src/include/openssl/base.h"
 #include "third_party/boringssl/src/include/openssl/bytestring.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
 #include "third_party/boringssl/src/include/openssl/ec.h"
+#include "third_party/boringssl/src/include/openssl/ec_key.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/nid.h"
 #include "third_party/boringssl/src/include/openssl/rsa.h"
@@ -23,17 +26,13 @@
 #include "net/third_party/quiche/src/quic/platform/api/quic_bug_tracker.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_ip_address.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_logging.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_optional.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_str_cat.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_time_utils.h"
 #include "net/third_party/quiche/src/common/quiche_data_reader.h"
 
 namespace {
 
-using ::quiche::QuicheOptional;
-using ::quiche::QuicheStringPiece;
 using ::quiche::QuicheTextUtils;
 
 // The literals below were encoded using `ascii2der | xxd -i`.  The comments
@@ -90,7 +89,7 @@ PublicKeyType PublicKeyTypeFromSignatureAlgorithm(
     case SSL_SIGN_RSA_PSS_RSAE_SHA256:
       return PublicKeyType::kRsa;
     case SSL_SIGN_ECDSA_SECP256R1_SHA256:
-      return PublicKeyType::kP384;
+      return PublicKeyType::kP256;
     case SSL_SIGN_ECDSA_SECP384R1_SHA384:
       return PublicKeyType::kP384;
     case SSL_SIGN_ED25519:
@@ -104,11 +103,11 @@ PublicKeyType PublicKeyTypeFromSignatureAlgorithm(
 
 namespace quic {
 
-QuicheOptional<quic::QuicWallTime> ParseDerTime(unsigned tag,
-                                                QuicheStringPiece payload) {
+absl::optional<quic::QuicWallTime> ParseDerTime(unsigned tag,
+                                                absl::string_view payload) {
   if (tag != CBS_ASN1_GENERALIZEDTIME && tag != CBS_ASN1_UTCTIME) {
     QUIC_BUG << "Invalid tag supplied for a DER timestamp";
-    return QUICHE_NULLOPT;
+    return absl::nullopt;
   }
 
   const size_t year_length = tag == CBS_ASN1_GENERALIZEDTIME ? 4 : 2;
@@ -120,7 +119,7 @@ QuicheOptional<quic::QuicWallTime> ParseDerTime(unsigned tag,
       !reader.ReadDecimal64(2, &second) ||
       reader.ReadRemainingPayload() != "Z") {
     QUIC_DLOG(WARNING) << "Failed to parse the DER timestamp";
-    return QUICHE_NULLOPT;
+    return absl::nullopt;
   }
 
   if (tag == CBS_ASN1_UTCTIME) {
@@ -128,25 +127,25 @@ QuicheOptional<quic::QuicWallTime> ParseDerTime(unsigned tag,
     year += (year >= 50) ? 1900 : 2000;
   }
 
-  const QuicheOptional<int64_t> unix_time =
+  const absl::optional<int64_t> unix_time =
       quiche::QuicheUtcDateTimeToUnixSeconds(year, month, day, hour, minute,
                                              second);
   if (!unix_time.has_value() || *unix_time < 0) {
-    return QUICHE_NULLOPT;
+    return absl::nullopt;
   }
   return QuicWallTime::FromUNIXSeconds(*unix_time);
 }
 
 PemReadResult ReadNextPemMessage(std::istream* input) {
-  constexpr QuicheStringPiece kPemBegin = "-----BEGIN ";
-  constexpr QuicheStringPiece kPemEnd = "-----END ";
-  constexpr QuicheStringPiece kPemDashes = "-----";
+  constexpr absl::string_view kPemBegin = "-----BEGIN ";
+  constexpr absl::string_view kPemEnd = "-----END ";
+  constexpr absl::string_view kPemDashes = "-----";
 
   std::string line_buffer, encoded_message_contents, expected_end;
   bool pending_message = false;
   PemReadResult result;
   while (std::getline(*input, line_buffer)) {
-    QuicheStringPiece line(line_buffer);
+    absl::string_view line(line_buffer);
     QuicheTextUtils::RemoveLeadingAndTrailingWhitespace(&line);
 
     // Handle BEGIN lines.
@@ -162,7 +161,7 @@ PemReadResult ReadNextPemMessage(std::istream* input) {
 
     // Handle END lines.
     if (pending_message && line == expected_end) {
-      QuicheOptional<std::string> data =
+      absl::optional<std::string> data =
           QuicheTextUtils::Base64Decode(encoded_message_contents);
       if (data.has_value()) {
         result.status = PemReadResult::kOk;
@@ -183,7 +182,7 @@ PemReadResult ReadNextPemMessage(std::istream* input) {
 }
 
 std::unique_ptr<CertificateView> CertificateView::ParseSingleCertificate(
-    QuicheStringPiece certificate) {
+    absl::string_view certificate) {
   std::unique_ptr<CertificateView> result(new CertificateView());
   CBS top = StringPieceToCbs(certificate);
 
@@ -265,9 +264,9 @@ std::unique_ptr<CertificateView> CertificateView::ParseSingleCertificate(
     QUIC_DLOG(WARNING) << "Failed to extract the validity dates";
     return nullptr;
   }
-  QuicheOptional<QuicWallTime> not_before_parsed =
+  absl::optional<QuicWallTime> not_before_parsed =
       ParseDerTime(not_before_tag, CbsToStringPiece(not_before));
-  QuicheOptional<QuicWallTime> not_after_parsed =
+  absl::optional<QuicWallTime> not_after_parsed =
       ParseDerTime(not_after_tag, CbsToStringPiece(not_after));
   if (!not_before_parsed.has_value() || !not_after_parsed.has_value()) {
     QUIC_DLOG(WARNING) << "Failed to parse validity dates";
@@ -347,7 +346,7 @@ bool CertificateView::ParseExtensions(CBS extensions) {
           return false;
         }
 
-        QuicheStringPiece alt_name = CbsToStringPiece(alt_name_cbs);
+        absl::string_view alt_name = CbsToStringPiece(alt_name_cbs);
         QuicIpAddress ip_address;
         // GeneralName ::= CHOICE {
         switch (alt_name_tag) {
@@ -416,8 +415,8 @@ bool CertificateView::ValidatePublicKeyParameters() {
   }
 }
 
-bool CertificateView::VerifySignature(QuicheStringPiece data,
-                                      QuicheStringPiece signature,
+bool CertificateView::VerifySignature(absl::string_view data,
+                                      absl::string_view signature,
                                       uint16_t signature_algorithm) const {
   if (PublicKeyTypeFromSignatureAlgorithm(signature_algorithm) !=
       PublicKeyTypeFromKey(public_key_.get())) {
@@ -447,7 +446,7 @@ bool CertificateView::VerifySignature(QuicheStringPiece data,
 }
 
 std::unique_ptr<CertificatePrivateKey> CertificatePrivateKey::LoadFromDer(
-    QuicheStringPiece private_key) {
+    absl::string_view private_key) {
   std::unique_ptr<CertificatePrivateKey> result(new CertificatePrivateKey());
   CBS private_key_cbs = StringPieceToCbs(private_key);
   result->private_key_.reset(EVP_parse_private_key(&private_key_cbs));
@@ -459,6 +458,7 @@ std::unique_ptr<CertificatePrivateKey> CertificatePrivateKey::LoadFromDer(
 
 std::unique_ptr<CertificatePrivateKey> CertificatePrivateKey::LoadPemFromStream(
     std::istream* input) {
+skip:
   PemReadResult result = ReadNextPemMessage(input);
   if (result.status != PemReadResult::kOk) {
     return nullptr;
@@ -480,14 +480,33 @@ std::unique_ptr<CertificatePrivateKey> CertificatePrivateKey::LoadPemFromStream(
     EVP_PKEY_assign_RSA(key->private_key_.get(), rsa.release());
     return key;
   }
+  // EC keys are sometimes generated with "openssl ecparam -genkey". If the user
+  // forgets -noout, OpenSSL will output a redundant copy of the EC parameters.
+  // Skip those.
+  if (result.type == "EC PARAMETERS") {
+    goto skip;
+  }
+  // Legacy OpenSSL format: RFC 5915 ECPrivateKey message.
+  if (result.type == "EC PRIVATE KEY") {
+    CBS private_key_cbs = StringPieceToCbs(result.contents);
+    bssl::UniquePtr<EC_KEY> ec_key(
+        EC_KEY_parse_private_key(&private_key_cbs, /*group=*/nullptr));
+    if (ec_key == nullptr || CBS_len(&private_key_cbs) != 0) {
+      return nullptr;
+    }
+
+    std::unique_ptr<CertificatePrivateKey> key(new CertificatePrivateKey());
+    key->private_key_.reset(EVP_PKEY_new());
+    EVP_PKEY_assign_EC_KEY(key->private_key_.get(), ec_key.release());
+    return key;
+  }
   // Unknown format.
   return nullptr;
 }
 
-std::string CertificatePrivateKey::Sign(QuicheStringPiece input,
+std::string CertificatePrivateKey::Sign(absl::string_view input,
                                         uint16_t signature_algorithm) {
-  if (PublicKeyTypeFromSignatureAlgorithm(signature_algorithm) !=
-      PublicKeyTypeFromKey(private_key_.get())) {
+  if (!ValidForSignatureAlgorithm(signature_algorithm)) {
     QUIC_BUG << "Mismatch between the requested signature algorithm and the "
                 "type of the private key.";
     return "";
@@ -527,6 +546,12 @@ std::string CertificatePrivateKey::Sign(QuicheStringPiece input,
 
 bool CertificatePrivateKey::MatchesPublicKey(const CertificateView& view) {
   return EVP_PKEY_cmp(view.public_key(), private_key_.get()) == 1;
+}
+
+bool CertificatePrivateKey::ValidForSignatureAlgorithm(
+    uint16_t signature_algorithm) {
+  return PublicKeyTypeFromSignatureAlgorithm(signature_algorithm) ==
+         PublicKeyTypeFromKey(private_key_.get());
 }
 
 }  // namespace quic

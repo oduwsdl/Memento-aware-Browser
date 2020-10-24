@@ -153,6 +153,14 @@ class EmbeddedTestServer {
     // and rerunning net/data/ssl/scripts/generate-test-certs.sh.
     CERT_TEST_NAMES,
 
+    // An RSA certificate with the keyUsage extension specifying that the key
+    // is only for encipherment.
+    CERT_KEY_USAGE_RSA_ENCIPHERMENT,
+
+    // An RSA certificate with the keyUsage extension specifying that the key
+    // is only for digital signatures.
+    CERT_KEY_USAGE_RSA_DIGITAL_SIGNATURE,
+
     // A certificate will be generated at runtime. A ServerCertificateConfig
     // passed to SetSSLConfig may be used to configure the details of the
     // generated certificate.
@@ -417,6 +425,10 @@ class EmbeddedTestServer {
   // |directory| directory, relative to DIR_SOURCE_ROOT.
   void AddDefaultHandlers(const base::FilePath& directory);
 
+  // Adds all default handlers except, without serving additional files from any
+  // directory.
+  void AddDefaultHandlers();
+
   // Adds a request handler that can perform any general-purpose processing.
   // |callback| will be invoked on the server's IO thread. Note that:
   // 1. All handlers must be registered before the server is Start()ed.
@@ -482,7 +494,8 @@ class EmbeddedTestServer {
   // Called when |connection| is finished writing the response and the socket
   // can be closed, allowing for |connnection_listener_| to take it if the
   // socket is still open.
-  void OnResponseCompleted(HttpConnection* connection);
+  void OnResponseCompleted(HttpConnection* connection,
+                           std::unique_ptr<HttpResponse> response);
 
   // Closes and removes the connection upon error or completion.
   void DidClose(HttpConnection* connection);

@@ -27,7 +27,7 @@ class GeneralLossAlgorithmTest : public QuicTest {
     rtt_stats_.UpdateRtt(QuicTime::Delta::FromMilliseconds(100),
                          QuicTime::Delta::Zero(), clock_.Now());
     EXPECT_LT(0, rtt_stats_.smoothed_rtt().ToMicroseconds());
-    loss_algorithm_.SetPacketNumberSpace(HANDSHAKE_DATA);
+    loss_algorithm_.Initialize(HANDSHAKE_DATA, nullptr);
   }
 
   ~GeneralLossAlgorithmTest() override {}
@@ -43,7 +43,7 @@ class GeneralLossAlgorithmTest : public QuicTest {
                             encrypted_length, false, false);
     packet.retransmittable_frames.push_back(QuicFrame(frame));
     unacked_packets_.AddSentPacket(&packet, NOT_RETRANSMISSION, clock_.Now(),
-                                   true);
+                                   true, true);
   }
 
   void SendDataPacket(uint64_t packet_number) {
@@ -55,23 +55,22 @@ class GeneralLossAlgorithmTest : public QuicTest {
                             PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
                             true, false);
     unacked_packets_.AddSentPacket(&packet, NOT_RETRANSMISSION, clock_.Now(),
-                                   false);
+                                   false, true);
   }
 
   void VerifyLosses(uint64_t largest_newly_acked,
                     const AckedPacketVector& packets_acked,
                     const std::vector<uint64_t>& losses_expected) {
     return VerifyLosses(largest_newly_acked, packets_acked, losses_expected,
-                        quiche::QuicheOptional<QuicPacketCount>(),
-                        quiche::QuicheOptional<QuicPacketCount>());
+                        absl::nullopt, absl::nullopt);
   }
 
   void VerifyLosses(
       uint64_t largest_newly_acked,
       const AckedPacketVector& packets_acked,
       const std::vector<uint64_t>& losses_expected,
-      quiche::QuicheOptional<QuicPacketCount> max_sequence_reordering_expected,
-      quiche::QuicheOptional<QuicPacketCount>
+      absl::optional<QuicPacketCount> max_sequence_reordering_expected,
+      absl::optional<QuicPacketCount>
           num_borderline_time_reorderings_expected) {
     unacked_packets_.MaybeUpdateLargestAckedOfPacketNumberSpace(
         APPLICATION_DATA, QuicPacketNumber(largest_newly_acked));

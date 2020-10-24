@@ -5,6 +5,16 @@
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")
 
+# Since //net and //net/third_party/quiche have a circular dependency on each
+# other, exporting dependencies from the :quiche target directly does not work.
+# Thus, all public dependencies for QUICHE should go into the target below,
+# which is in turn propagated to all of //net source sets.
+source_set("quiche_public_deps") {
+  visibility = [ "//net:net_public_deps" ]
+
+  public_deps = [ "//third_party/abseil-cpp:absl" ]
+}
+
 source_set("quiche") {
   sources = [
     "src/quic/core/quic_error_codes.cc",
@@ -13,13 +23,8 @@ source_set("quiche") {
 
   if (!is_nacl) {
     sources += [
-      "src/common/platform/api/quiche_arraysize.h",
-      "src/common/platform/api/quiche_endian.h",
       "src/common/platform/api/quiche_export.h",
       "src/common/platform/api/quiche_logging.h",
-      "src/common/platform/api/quiche_map_util.h",
-      "src/common/platform/api/quiche_optional.h",
-      "src/common/platform/api/quiche_ptr_util.h",
       "src/common/platform/api/quiche_str_cat.h",
       "src/common/platform/api/quiche_string_piece.h",
       "src/common/platform/api/quiche_text_utils.h",
@@ -29,6 +34,7 @@ source_set("quiche") {
       "src/common/quiche_data_reader.h",
       "src/common/quiche_data_writer.cc",
       "src/common/quiche_data_writer.h",
+      "src/common/quiche_endian.h",
       "src/common/simple_linked_hash_map.h",
       "src/http2/decoder/decode_buffer.cc",
       "src/http2/decoder/decode_buffer.h",
@@ -254,6 +260,8 @@ source_set("quiche") {
       "src/quic/core/crypto/transport_parameters.h",
       "src/quic/core/frames/quic_ack_frame.cc",
       "src/quic/core/frames/quic_ack_frame.h",
+      "src/quic/core/frames/quic_ack_frequency_frame.cc",
+      "src/quic/core/frames/quic_ack_frequency_frame.h",
       "src/quic/core/frames/quic_blocked_frame.cc",
       "src/quic/core/frames/quic_blocked_frame.h",
       "src/quic/core/frames/quic_connection_close_frame.cc",
@@ -432,6 +440,8 @@ source_set("quiche") {
       "src/quic/core/quic_interval.h",
       "src/quic/core/quic_interval_deque.h",
       "src/quic/core/quic_interval_set.h",
+      "src/quic/core/quic_legacy_version_encapsulator.cc",
+      "src/quic/core/quic_legacy_version_encapsulator.h",
       "src/quic/core/quic_lru_cache.h",
       "src/quic/core/quic_mtu_discovery.cc",
       "src/quic/core/quic_mtu_discovery.h",
@@ -600,7 +610,6 @@ source_set("quiche") {
       "src/spdy/core/zero_copy_output_buffer.h",
       "src/spdy/platform/api/spdy_bug_tracker.h",
       "src/spdy/platform/api/spdy_containers.h",
-      "src/spdy/platform/api/spdy_endianness_util.h",
       "src/spdy/platform/api/spdy_estimate_memory_usage.h",
       "src/spdy/platform/api/spdy_flags.h",
       "src/spdy/platform/api/spdy_logging.h",
@@ -648,7 +657,7 @@ proto_library("net_quic_test_tools_proto") {
   extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   source_set("epoll_server_core") {
     sources = [
       "src/epoll_server/platform/api/epoll_bug.h",
@@ -980,7 +989,7 @@ source_set("quic_test_tools_core") {
     "//third_party/quic_trace:quic_trace_proto",
   ]
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "src/epoll_server/fake_simple_epoll_server.cc",
       "src/epoll_server/fake_simple_epoll_server.h",
@@ -1230,10 +1239,10 @@ source_set("quiche_tests") {
 
     # TODO(rch): Re-enable once the SLOW_TEST annotation is added.
     # "src/quic/core/congestion_control/bbr2_simulator_test.cc",
-    "src/common/platform/api/quiche_endian_test.cc",
     "src/common/platform/api/quiche_str_cat_test.cc",
     "src/common/platform/api/quiche_text_utils_test.cc",
     "src/common/platform/api/quiche_time_utils_test.cc",
+    "src/common/quiche_endian_test.cc",
     "src/quic/core/congestion_control/bbr_sender_test.cc",
     "src/quic/core/congestion_control/cubic_bytes_test.cc",
     "src/quic/core/congestion_control/general_loss_algorithm_test.cc",
@@ -1333,6 +1342,7 @@ source_set("quiche_tests") {
     "src/quic/core/quic_interval_deque_test.cc",
     "src/quic/core/quic_interval_set_test.cc",
     "src/quic/core/quic_interval_test.cc",
+    "src/quic/core/quic_legacy_version_encapsulator_test.cc",
     "src/quic/core/quic_lru_cache_test.cc",
     "src/quic/core/quic_network_blackhole_detector_test.cc",
     "src/quic/core/quic_one_block_arena_test.cc",
@@ -1362,7 +1372,6 @@ source_set("quiche_tests") {
     "src/quic/core/quic_versions_test.cc",
     "src/quic/core/quic_write_blocked_list_test.cc",
     "src/quic/core/tls_chlo_extractor_test.cc",
-    "src/quic/core/tls_handshaker_test.cc",
     "src/quic/core/uber_quic_stream_id_manager_test.cc",
     "src/quic/core/uber_received_packet_manager_test.cc",
     "src/quic/platform/api/quic_containers_test.cc",
@@ -1442,10 +1451,10 @@ source_set("quiche_tests") {
   ]
   public_deps = []
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     public_deps += [ "//net:epoll_quic_tools" ]
   }
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "src/epoll_server/simple_epoll_server_test.cc",
       "src/quic/core/chlo_extractor_test.cc",

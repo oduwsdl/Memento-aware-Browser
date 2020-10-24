@@ -9,6 +9,7 @@
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "net/base/features.h"
 #include "net/dns/dns_util.h"
@@ -34,6 +35,36 @@ enum HttpssvcDnsRcode TranslateDnsRcodeForHttpssvcExperiment(uint8_t rcode) {
       return HttpssvcDnsRcode::kUnrecognizedRcode;
   }
   NOTREACHED();
+}
+
+HttpssvcExperimentDomainCache::HttpssvcExperimentDomainCache() = default;
+HttpssvcExperimentDomainCache::~HttpssvcExperimentDomainCache() = default;
+
+bool HttpssvcExperimentDomainCache::ListContainsDomain(
+    const std::string& domain_list,
+    base::StringPiece domain,
+    base::Optional<base::flat_set<std::string>>& in_out_cached_list) {
+  if (!in_out_cached_list) {
+    in_out_cached_list = base::SplitString(
+        domain_list, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  }
+  return in_out_cached_list->find(domain) != in_out_cached_list->end();
+}
+
+bool HttpssvcExperimentDomainCache::IsExperimental(base::StringPiece domain) {
+  if (!base::FeatureList::IsEnabled(features::kDnsHttpssvc))
+    return false;
+  return ListContainsDomain(features::kDnsHttpssvcExperimentDomains.Get(),
+                            domain, experimental_list_);
+}
+
+bool HttpssvcExperimentDomainCache::IsControl(base::StringPiece domain) {
+  if (!base::FeatureList::IsEnabled(features::kDnsHttpssvc))
+    return false;
+  if (features::kDnsHttpssvcControlDomainWildcard.Get())
+    return !IsExperimental(domain);
+  return ListContainsDomain(features::kDnsHttpssvcControlDomains.Get(), domain,
+                            control_list_);
 }
 
 HttpssvcMetrics::HttpssvcMetrics(bool expect_intact)
@@ -85,6 +116,12 @@ void HttpssvcMetrics::SaveForIntegrity(
   integrity_resolve_time_ = integrity_resolve_time;
 }
 
+void HttpssvcMetrics::SaveForHttps(base::Optional<std::string> doh_provider_id,
+                                   enum HttpssvcDnsRcode rcode,
+                                   base::TimeDelta https_resolve_time) {
+  // TODO(crbug.com/1138620): Implement.
+}
+
 void HttpssvcMetrics::set_doh_provider_id(
     base::Optional<std::string> new_doh_provider_id) {
   // "Other" never gets updated.
@@ -119,10 +156,11 @@ void HttpssvcMetrics::RecordIntegrityMetrics() {
   // The HTTPSSVC experiment and its feature param indicating INTEGRITY must
   // both be enabled.
   DCHECK(base::FeatureList::IsEnabled(features::kDnsHttpssvc));
-  DCHECK(features::kDnsHttpssvcUseIntegrity.Get());
+  DCHECK(features::kDnsHttpssvcUseIntegrity.Get() ||
+         features::kDnsHttpssvcUseHttpssvc.Get());
 
-  DCHECK(in_progress_);
-  in_progress_ = false;
+  DCHECK(!already_recorded_);
+  already_recorded_ = true;
 
   // We really have no metrics to record without |integrity_resolve_time_| and
   // |non_integrity_resolve_times_|. If this HttpssvcMetrics is in an
@@ -166,14 +204,19 @@ void HttpssvcMetrics::RecordIntegrityCommonMetrics() {
                        non_integrity_resolve_times_.end());
   DCHECK(slowest_non_integrity_resolve != non_integrity_resolve_times_.end());
 
+  // It's possible to get here with a zero resolve time in tests.  Avoid
+  // divide-by-zero below by returning early; this data point is invalid anyway.
+  if (slowest_non_integrity_resolve->is_zero())
+    return;
+
   // Compute a percentage showing how much larger the INTEGRITY resolve time was
   // compared to the slowest A or AAAA query.
   //
   // Computation happens on TimeDelta objects, which use CheckedNumeric. This
   // will crash if the system clock leaps forward several hundred millennia
   // (numeric_limits<int64_t>::max() microseconds ~= 292,000 years).
-  const int64_t resolve_time_percent =
-      (100 * *integrity_resolve_time_) / *slowest_non_integrity_resolve;
+  const int64_t resolve_time_percent = base::ClampFloor<int64_t>(
+      *integrity_resolve_time_ / *slowest_non_integrity_resolve * 100);
 
   // Scale the value of |resolve_time_percent| by dividing by |kPercentScale|.
   // Sample values are bounded between 1 and 20. A recorded sample of 10 means

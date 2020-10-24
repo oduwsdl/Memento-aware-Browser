@@ -34,8 +34,8 @@ using ConnectionType = NetworkChangeNotifier::ConnectionType;
 NetworkInterface NetworkInterfaceFromAddress(
     const fuchsia::netstack::NetInterface& interface,
     size_t address_index) {
-  // TODO(sergeyu): attributes field is used to return address state for IPv6
-  // addresses. Currently Netstack doesn't provide this information.
+  // TODO(crbug.com/1131220): attributes field is used to return address state
+  // for IPv6 addresses. Currently Netstack doesn't provide this information.
   const int attributes = 0;
 
   IPAddress address;
@@ -60,9 +60,11 @@ NetworkInterface NetworkInterfaceFromAddress(
 
 NetworkChangeNotifier::ConnectionType ConvertConnectionType(
     const fuchsia::netstack::NetInterface& iface) {
-  if (!(iface.flags & fuchsia::netstack::NetInterfaceFlagUp)) {
+  if ((iface.flags & fuchsia::netstack::Flags::UP) !=
+      fuchsia::netstack::Flags::UP) {
     return NetworkChangeNotifier::CONNECTION_NONE;
-  } else if (iface.features & fuchsia::hardware::ethernet::INFO_FEATURE_WLAN) {
+  } else if ((iface.features & fuchsia::hardware::ethernet::Features::WLAN) ==
+             fuchsia::hardware::ethernet::Features::WLAN) {
     return NetworkChangeNotifier::CONNECTION_WIFI;
   }
   return NetworkChangeNotifier::CONNECTION_UNKNOWN;
@@ -109,7 +111,8 @@ bool GetNetworkList(NetworkInterfaceList* networks, int policy) {
   fuchsia::netstack::NetstackSyncPtr netstack;
   base::ComponentContextForProcess()->svc()->Connect(netstack.NewRequest());
 
-  // TODO(kmarshall): Use NetworkChangeNotifier's cached interface list.
+  // TODO(crbug.com/1131238): Use NetworkChangeNotifier's cached interface
+  // list.
   std::vector<fuchsia::netstack::NetInterface> interfaces;
   zx_status_t status = netstack->GetInterfaces(&interfaces);
   if (status != ZX_OK) {
@@ -121,7 +124,8 @@ bool GetNetworkList(NetworkInterfaceList* networks, int policy) {
     if ((internal::ConvertConnectionType(interface) ==
          NetworkChangeNotifier::CONNECTION_NONE) ||
         (interface.features &
-         fuchsia::hardware::ethernet::INFO_FEATURE_LOOPBACK)) {
+         fuchsia::hardware::ethernet::Features::LOOPBACK) ==
+            fuchsia::hardware::ethernet::Features::LOOPBACK) {
       continue;
     }
 

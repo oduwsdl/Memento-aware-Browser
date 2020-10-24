@@ -65,7 +65,10 @@ void QuicSpdyClientSessionBase::OnPromiseHeaderList(
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return;
   }
-  if (promised_stream_id !=
+  // In HTTP3, push promises are received on individual streams, so they could
+  // be arrive out of order.
+  if (!VersionUsesHttp3(transport_version()) &&
+      promised_stream_id !=
           QuicUtils::GetInvalidStreamId(transport_version()) &&
       largest_promised_stream_id_ !=
           QuicUtils::GetInvalidStreamId(transport_version()) &&
@@ -177,9 +180,9 @@ QuicClientPromisedInfo* QuicSpdyClientSessionBase::GetPromisedById(
 
 QuicSpdyStream* QuicSpdyClientSessionBase::GetPromisedStream(
     const QuicStreamId id) {
-  StreamMap::iterator it = stream_map().find(id);
-  if (it != stream_map().end()) {
-    return static_cast<QuicSpdyStream*>(it->second.get());
+  QuicStream* stream = GetActiveStream(id);
+  if (stream != nullptr) {
+    return static_cast<QuicSpdyStream*>(stream);
   }
   return nullptr;
 }
@@ -204,16 +207,9 @@ void QuicSpdyClientSessionBase::ResetPromised(
     QuicStreamId id,
     QuicRstStreamErrorCode error_code) {
   DCHECK(QuicUtils::IsServerInitiatedStreamId(transport_version(), id));
-  ResetStream(id, error_code, 0);
+  ResetStream(id, error_code);
   if (!IsOpenStream(id) && !IsClosedStream(id)) {
     MaybeIncreaseLargestPeerStreamId(id);
-  }
-}
-
-void QuicSpdyClientSessionBase::CloseStream(QuicStreamId stream_id) {
-  QuicSpdySession::CloseStream(stream_id);
-  if (!VersionUsesHttp3(transport_version())) {
-    headers_stream()->MaybeReleaseSequencerBuffer();
   }
 }
 
@@ -236,12 +232,12 @@ bool QuicSpdyClientSessionBase::ShouldKeepConnectionAlive() const {
 bool QuicSpdyClientSessionBase::OnSettingsFrame(const SettingsFrame& frame) {
   if (!was_zero_rtt_rejected()) {
     if (max_outbound_header_list_size() != std::numeric_limits<size_t>::max() &&
-        frame.values.find(SETTINGS_MAX_HEADER_LIST_SIZE) ==
+        frame.values.find(SETTINGS_MAX_FIELD_SECTION_SIZE) ==
             frame.values.end()) {
       CloseConnectionWithDetails(
           QUIC_HTTP_ZERO_RTT_RESUMPTION_SETTINGS_MISMATCH,
           "Server accepted 0-RTT but omitted non-default "
-          "SETTINGS_MAX_HEADER_LIST_SIZE");
+          "SETTINGS_MAX_FIELD_SECTION_SIZE");
       return false;
     }
 

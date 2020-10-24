@@ -75,6 +75,7 @@ class NET_EXPORT HttpResponseInfo {
     CONNECTION_INFO_QUIC_DRAFT_27 = 36,
     CONNECTION_INFO_QUIC_DRAFT_28 = 37,
     CONNECTION_INFO_QUIC_DRAFT_29 = 38,
+    CONNECTION_INFO_QUIC_T051 = 39,
     NUM_OF_CONNECTION_INFOS,
   };
 
@@ -208,12 +209,6 @@ class NET_EXPORT HttpResponseInfo {
 
   // The type of connection used for this response.
   ConnectionInfo connection_info;
-
-  // Whether or not the current page is a Memento
-  bool memento_info = false;
-
-  // Datetime if the page is a Memento
-  std::string memento_datetime = "";
 
   // The time at which the request was made that resulted in this response.
   // For cached responses, this is the last time the cache entry was validated.

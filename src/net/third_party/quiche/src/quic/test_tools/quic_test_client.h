@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/quic/core/proto/cached_network_parameters_proto.h"
 #include "net/third_party/quiche/src/quic/core/quic_framer.h"
 #include "net/third_party/quiche/src/quic/core/quic_packet_creator.h"
@@ -18,7 +19,6 @@
 #include "net/third_party/quiche/src/quic/platform/api/quic_map_util.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/tools/quic_client.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 
 namespace quic {
 
@@ -141,19 +141,19 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   // Sends a request containing |headers| and |body| and returns the number of
   // bytes sent (the size of the serialized request headers and body).
   ssize_t SendMessage(const spdy::SpdyHeaderBlock& headers,
-                      quiche::QuicheStringPiece body);
+                      absl::string_view body);
   // Sends a request containing |headers| and |body| with the fin bit set to
   // |fin| and returns the number of bytes sent (the size of the serialized
   // request headers and body).
   ssize_t SendMessage(const spdy::SpdyHeaderBlock& headers,
-                      quiche::QuicheStringPiece body,
+                      absl::string_view body,
                       bool fin);
   // Sends a request containing |headers| and |body| with the fin bit set to
   // |fin| and returns the number of bytes sent (the size of the serialized
   // request headers and body). If |flush| is true, will wait for the message to
   // be flushed before returning.
   ssize_t SendMessage(const spdy::SpdyHeaderBlock& headers,
-                      quiche::QuicheStringPiece body,
+                      absl::string_view body,
                       bool fin,
                       bool flush);
   // Sends a request containing |headers| and |body|, waits for the response,
@@ -170,7 +170,7 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   QuicSocketAddress local_address() const;
   void ClearPerRequestState();
   bool WaitUntil(int timeout_ms, std::function<bool()> trigger);
-  ssize_t Send(quiche::QuicheStringPiece data);
+  ssize_t Send(absl::string_view data);
   bool connected() const;
   bool buffer_body() const;
   void set_buffer_body(bool buffer_body);
@@ -264,14 +264,15 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
   // null, only the body will be sent on the stream.
   ssize_t GetOrCreateStreamAndSendRequest(
       const spdy::SpdyHeaderBlock* headers,
-      quiche::QuicheStringPiece body,
+      absl::string_view body,
       bool fin,
       QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   QuicRstStreamErrorCode stream_error() { return stream_error_; }
   QuicErrorCode connection_error();
 
-  MockableQuicClient* client();
+  MockableQuicClient* client() { return client_.get(); }
+  const MockableQuicClient* client() const { return client_.get(); }
 
   // cert_common_name returns the common name value of the server's certificate,
   // or the empty std::string if no certificate was presented.
@@ -332,14 +333,16 @@ class QuicTestClient : public QuicSpdyStream::Visitor,
  protected:
   QuicTestClient();
   QuicTestClient(const QuicTestClient&) = delete;
+  QuicTestClient(const QuicTestClient&&) = delete;
   QuicTestClient& operator=(const QuicTestClient&) = delete;
+  QuicTestClient& operator=(const QuicTestClient&&) = delete;
 
  private:
   class TestClientDataToResend : public QuicClient::QuicDataToResend {
    public:
     TestClientDataToResend(
         std::unique_ptr<spdy::SpdyHeaderBlock> headers,
-        quiche::QuicheStringPiece body,
+        absl::string_view body,
         bool fin,
         QuicTestClient* test_client,
         QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);

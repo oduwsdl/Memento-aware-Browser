@@ -9,7 +9,7 @@
 #include <iostream>
 
 namespace quiche {
-QuicheOptional<int64_t> QuicheUtcDateTimeToUnixSecondsInner(int year,
+absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsInner(int year,
                                                             int month,
                                                             int day,
                                                             int hour,
@@ -22,12 +22,12 @@ QuicheOptional<int64_t> QuicheUtcDateTimeToUnixSecondsInner(int year,
   };
   base::Time time;
   if (!base::Time::FromUTCExploded(exploded, &time)) {
-    return base::nullopt;
+    return absl::nullopt;
   }
   return (time - base::Time::UnixEpoch()).InSeconds();
 }
 
-QuicheOptional<int64_t> QuicheUtcDateTimeToUnixSecondsImpl(int year,
+absl::optional<int64_t> QuicheUtcDateTimeToUnixSecondsImpl(int year,
                                                            int month,
                                                            int day,
                                                            int hour,
@@ -38,7 +38,7 @@ QuicheOptional<int64_t> QuicheUtcDateTimeToUnixSecondsImpl(int year,
     auto previous_second = QuicheUtcDateTimeToUnixSecondsInner(
         year, month, day, hour, minute, second - 1);
     if (!previous_second.has_value()) {
-      return base::nullopt;
+      return absl::nullopt;
     }
     return *previous_second + 1;
   }

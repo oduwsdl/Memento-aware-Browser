@@ -54,7 +54,6 @@ std::string GetResponseHeaderLines(const HttpResponseHeaders& headers) {
 // values.
 bool HeadersContainMultipleCopiesOfField(const HttpResponseHeaders& headers,
                                          const std::string& field_name) {
-
   size_t it = 0;
   std::string field_value;
   if (!headers.EnumerateHeader(&it, field_name, &field_value))
@@ -460,7 +459,7 @@ int HttpStreamParser::DoLoop(int result) {
     }
   } while (result != ERR_IO_PENDING &&
            (io_state_ != STATE_DONE && io_state_ != STATE_NONE));
-  
+
   return result;
 }
 
@@ -1053,7 +1052,6 @@ int HttpStreamParser::ParseResponseHeaders(int end_offset) {
            << response_->headers->GetContentLength() << "\n\""
            << " headers = \"" << GetResponseHeaderLines(*response_->headers)
            << "\"";
-
   return OK;
 }
 

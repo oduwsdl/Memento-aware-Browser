@@ -4,12 +4,12 @@
 
 #include "net/third_party/quiche/src/quic/core/quic_versions.h"
 
+#include "absl/base/macros.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_expect_bug.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_logging.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_mock_log.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_arraysize.h"
 
 namespace quic {
 namespace test {
@@ -52,8 +52,9 @@ TEST_F(QuicVersionsTest, QuicVersionToQuicVersionLabel) {
 }
 
 TEST_F(QuicVersionsTest, QuicVersionToQuicVersionLabelUnsupported) {
-  EXPECT_QUIC_BUG(CreateQuicVersionLabel(UnsupportedQuicVersion()),
-                  "Invalid HandshakeProtocol: 0");
+  EXPECT_QUIC_BUG(
+      CreateQuicVersionLabel(UnsupportedQuicVersion()),
+      "Unsupported version QUIC_VERSION_UNSUPPORTED PROTOCOL_UNSUPPORTED");
 }
 
 TEST_F(QuicVersionsTest, KnownAndValid) {
@@ -210,8 +211,6 @@ TEST_F(QuicVersionsTest, ParseQuicVersionLabel) {
             ParseQuicVersionLabel(MakeVersionLabel('Q', '0', '4', '3')));
   EXPECT_EQ(ParsedQuicVersion::Q046(),
             ParseQuicVersionLabel(MakeVersionLabel('Q', '0', '4', '6')));
-  EXPECT_EQ(ParsedQuicVersion::Q048(),
-            ParseQuicVersionLabel(MakeVersionLabel('Q', '0', '4', '8')));
   EXPECT_EQ(ParsedQuicVersion::Q050(),
             ParseQuicVersionLabel(MakeVersionLabel('Q', '0', '5', '0')));
   EXPECT_EQ(ParsedQuicVersion::T050(),
@@ -224,7 +223,6 @@ TEST_F(QuicVersionsTest, ParseQuicVersionString) {
             ParseQuicVersionString("QUIC_VERSION_46"));
   EXPECT_EQ(ParsedQuicVersion::Q046(), ParseQuicVersionString("46"));
   EXPECT_EQ(ParsedQuicVersion::Q046(), ParseQuicVersionString("Q046"));
-  EXPECT_EQ(ParsedQuicVersion::Q048(), ParseQuicVersionString("Q048"));
   EXPECT_EQ(ParsedQuicVersion::Q050(), ParseQuicVersionString("Q050"));
   EXPECT_EQ(ParsedQuicVersion::Q050(), ParseQuicVersionString("50"));
   EXPECT_EQ(ParsedQuicVersion::Q050(), ParseQuicVersionString("h3-Q050"));
@@ -238,25 +236,24 @@ TEST_F(QuicVersionsTest, ParseQuicVersionString) {
   EXPECT_EQ(ParsedQuicVersion::T050(), ParseQuicVersionString("T050"));
   EXPECT_EQ(ParsedQuicVersion::T050(), ParseQuicVersionString("h3-T050"));
   EXPECT_EQ(ParsedQuicVersion::Draft29(), ParseQuicVersionString("ff00001d"));
+  EXPECT_EQ(ParsedQuicVersion::Draft29(), ParseQuicVersionString("draft29"));
   EXPECT_EQ(ParsedQuicVersion::Draft29(), ParseQuicVersionString("h3-29"));
-  EXPECT_EQ(ParsedQuicVersion::Draft28(), ParseQuicVersionString("ff00001c"));
-  EXPECT_EQ(ParsedQuicVersion::Draft28(), ParseQuicVersionString("h3-28"));
   EXPECT_EQ(ParsedQuicVersion::Draft27(), ParseQuicVersionString("ff00001b"));
+  EXPECT_EQ(ParsedQuicVersion::Draft27(), ParseQuicVersionString("draft27"));
   EXPECT_EQ(ParsedQuicVersion::Draft27(), ParseQuicVersionString("h3-27"));
-  EXPECT_EQ(ParsedQuicVersion::Draft25(), ParseQuicVersionString("ff000019"));
-  EXPECT_EQ(ParsedQuicVersion::Draft25(), ParseQuicVersionString("h3-25"));
+
+  for (const ParsedQuicVersion& version : AllSupportedVersions()) {
+    EXPECT_EQ(version,
+              ParseQuicVersionString(ParsedQuicVersionToString(version)));
+  }
 }
 
 TEST_F(QuicVersionsTest, ParseQuicVersionVectorString) {
   ParsedQuicVersion version_q046(PROTOCOL_QUIC_CRYPTO, QUIC_VERSION_46);
   ParsedQuicVersion version_q050(PROTOCOL_QUIC_CRYPTO, QUIC_VERSION_50);
   ParsedQuicVersion version_t050(PROTOCOL_TLS1_3, QUIC_VERSION_50);
-  ParsedQuicVersion version_draft_25(PROTOCOL_TLS1_3,
-                                     QUIC_VERSION_IETF_DRAFT_25);
   ParsedQuicVersion version_draft_27(PROTOCOL_TLS1_3,
                                      QUIC_VERSION_IETF_DRAFT_27);
-  ParsedQuicVersion version_draft_28(PROTOCOL_TLS1_3,
-                                     QUIC_VERSION_IETF_DRAFT_28);
   ParsedQuicVersion version_draft_29 = ParsedQuicVersion::Draft29();
 
   EXPECT_THAT(ParseQuicVersionVectorString(""), IsEmpty());
@@ -268,18 +265,14 @@ TEST_F(QuicVersionsTest, ParseQuicVersionVectorString) {
   EXPECT_THAT(ParseQuicVersionVectorString("h3-T050"),
               ElementsAre(version_t050));
 
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-25, h3-27"),
-              ElementsAre(version_draft_25, version_draft_27));
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-25,h3-27"),
-              ElementsAre(version_draft_25, version_draft_27));
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-25,h3-27,h3-25"),
-              ElementsAre(version_draft_25, version_draft_27));
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-25,h3-27, h3-25"),
-              ElementsAre(version_draft_25, version_draft_27));
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-27,h3-25"),
-              ElementsAre(version_draft_27, version_draft_25));
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-28,h3-27"),
-              ElementsAre(version_draft_28, version_draft_27));
+  EXPECT_THAT(ParseQuicVersionVectorString("h3-27, h3-29"),
+              ElementsAre(version_draft_27, version_draft_29));
+  EXPECT_THAT(ParseQuicVersionVectorString("h3-29,h3-27,h3-29"),
+              ElementsAre(version_draft_29, version_draft_27));
+  EXPECT_THAT(ParseQuicVersionVectorString("h3-29,h3-27, h3-29"),
+              ElementsAre(version_draft_29, version_draft_27));
+  EXPECT_THAT(ParseQuicVersionVectorString("h3-27,h3-29"),
+              ElementsAre(version_draft_27, version_draft_29));
   EXPECT_THAT(ParseQuicVersionVectorString("h3-29,h3-27"),
               ElementsAre(version_draft_29, version_draft_27));
 
@@ -322,8 +315,8 @@ TEST_F(QuicVersionsTest, ParseQuicVersionVectorString) {
   EXPECT_THAT(ParseQuicVersionVectorString("99"), IsEmpty());
   EXPECT_THAT(ParseQuicVersionVectorString("70"), IsEmpty());
   EXPECT_THAT(ParseQuicVersionVectorString("h3-01"), IsEmpty());
-  EXPECT_THAT(ParseQuicVersionVectorString("h3-01,h3-25"),
-              ElementsAre(version_draft_25));
+  EXPECT_THAT(ParseQuicVersionVectorString("h3-01,h3-29"),
+              ElementsAre(version_draft_29));
 }
 
 TEST_F(QuicVersionsTest, CreateQuicVersionLabel) {
@@ -331,8 +324,6 @@ TEST_F(QuicVersionsTest, CreateQuicVersionLabel) {
             CreateQuicVersionLabel(ParsedQuicVersion::Q043()));
   EXPECT_EQ(MakeVersionLabel('Q', '0', '4', '6'),
             CreateQuicVersionLabel(ParsedQuicVersion::Q046()));
-  EXPECT_EQ(MakeVersionLabel('Q', '0', '4', '8'),
-            CreateQuicVersionLabel(ParsedQuicVersion::Q048()));
   EXPECT_EQ(MakeVersionLabel('Q', '0', '5', '0'),
             CreateQuicVersionLabel(ParsedQuicVersion::Q050()));
 
@@ -341,16 +332,16 @@ TEST_F(QuicVersionsTest, CreateQuicVersionLabel) {
             CreateQuicVersionLabel(ParsedQuicVersion::T050()));
 
   // Make sure the negotiation reserved version is in the IETF reserved space.
-  EXPECT_EQ(MakeVersionLabel(0xda, 0x5a, 0x3a, 0x3a) & 0x0f0f0f0f,
-            CreateQuicVersionLabel(ParsedQuicVersion(
-                PROTOCOL_QUIC_CRYPTO, QUIC_VERSION_RESERVED_FOR_NEGOTIATION)) &
-                0x0f0f0f0f);
+  EXPECT_EQ(
+      MakeVersionLabel(0xda, 0x5a, 0x3a, 0x3a) & 0x0f0f0f0f,
+      CreateQuicVersionLabel(ParsedQuicVersion::ReservedForNegotiation()) &
+          0x0f0f0f0f);
 
   // Make sure that disabling randomness works.
   SetQuicFlag(FLAGS_quic_disable_version_negotiation_grease_randomness, true);
-  EXPECT_EQ(MakeVersionLabel(0xda, 0x5a, 0x3a, 0x3a),
-            CreateQuicVersionLabel(ParsedQuicVersion(
-                PROTOCOL_QUIC_CRYPTO, QUIC_VERSION_RESERVED_FOR_NEGOTIATION)));
+  EXPECT_EQ(
+      MakeVersionLabel(0xda, 0x5a, 0x3a, 0x3a),
+      CreateQuicVersionLabel(ParsedQuicVersion::ReservedForNegotiation()));
 }
 
 TEST_F(QuicVersionsTest, QuicVersionLabelToString) {
@@ -380,7 +371,7 @@ TEST_F(QuicVersionsTest, QuicVersionToString) {
 
   QuicTransportVersion single_version[] = {QUIC_VERSION_43};
   QuicTransportVersionVector versions_vector;
-  for (size_t i = 0; i < QUICHE_ARRAYSIZE(single_version); ++i) {
+  for (size_t i = 0; i < ABSL_ARRAYSIZE(single_version); ++i) {
     versions_vector.push_back(single_version[i]);
   }
   EXPECT_EQ("QUIC_VERSION_43",
@@ -389,7 +380,7 @@ TEST_F(QuicVersionsTest, QuicVersionToString) {
   QuicTransportVersion multiple_versions[] = {QUIC_VERSION_UNSUPPORTED,
                                               QUIC_VERSION_43};
   versions_vector.clear();
-  for (size_t i = 0; i < QUICHE_ARRAYSIZE(multiple_versions); ++i) {
+  for (size_t i = 0; i < ABSL_ARRAYSIZE(multiple_versions); ++i) {
     versions_vector.push_back(multiple_versions[i]);
   }
   EXPECT_EQ("QUIC_VERSION_UNSUPPORTED,QUIC_VERSION_43",
@@ -407,15 +398,19 @@ TEST_F(QuicVersionsTest, QuicVersionToString) {
 }
 
 TEST_F(QuicVersionsTest, ParsedQuicVersionToString) {
-  ParsedQuicVersion unsupported = UnsupportedQuicVersion();
-  ParsedQuicVersion version43(PROTOCOL_QUIC_CRYPTO, QUIC_VERSION_43);
-  EXPECT_EQ("Q043", ParsedQuicVersionToString(version43));
-  EXPECT_EQ("0", ParsedQuicVersionToString(unsupported));
+  EXPECT_EQ("0", ParsedQuicVersionToString(ParsedQuicVersion::Unsupported()));
+  EXPECT_EQ("Q043", ParsedQuicVersionToString(ParsedQuicVersion::Q043()));
+  EXPECT_EQ("Q046", ParsedQuicVersionToString(ParsedQuicVersion::Q046()));
+  EXPECT_EQ("Q050", ParsedQuicVersionToString(ParsedQuicVersion::Q050()));
+  EXPECT_EQ("T050", ParsedQuicVersionToString(ParsedQuicVersion::T050()));
+  EXPECT_EQ("draft27", ParsedQuicVersionToString(ParsedQuicVersion::Draft27()));
+  EXPECT_EQ("draft29", ParsedQuicVersionToString(ParsedQuicVersion::Draft29()));
 
-  ParsedQuicVersionVector versions_vector = {version43};
+  ParsedQuicVersionVector versions_vector = {ParsedQuicVersion::Q043()};
   EXPECT_EQ("Q043", ParsedQuicVersionVectorToString(versions_vector));
 
-  versions_vector = {unsupported, version43};
+  versions_vector = {ParsedQuicVersion::Unsupported(),
+                     ParsedQuicVersion::Q043()};
   EXPECT_EQ("0,Q043", ParsedQuicVersionVectorToString(versions_vector));
   EXPECT_EQ("0:Q043", ParsedQuicVersionVectorToString(versions_vector, ":",
                                                       versions_vector.size()));
@@ -499,37 +494,25 @@ TEST_F(QuicVersionsTest, ParsedVersionsToTransportVersions) {
 // yet a typo was made in doing the #defines and it was caught
 // only in some test far removed from here... Better safe than sorry.
 TEST_F(QuicVersionsTest, CheckTransportVersionNumbersForTypos) {
-  static_assert(SupportedTransportVersions().size() == 9u,
+  static_assert(SupportedTransportVersions().size() == 6u,
                 "Supported versions out of sync");
   EXPECT_EQ(QUIC_VERSION_43, 43);
   EXPECT_EQ(QUIC_VERSION_46, 46);
-  EXPECT_EQ(QUIC_VERSION_48, 48);
-  EXPECT_EQ(QUIC_VERSION_49, 49);
   EXPECT_EQ(QUIC_VERSION_50, 50);
-  EXPECT_EQ(QUIC_VERSION_IETF_DRAFT_25, 70);
+  EXPECT_EQ(QUIC_VERSION_51, 51);
   EXPECT_EQ(QUIC_VERSION_IETF_DRAFT_27, 71);
-  EXPECT_EQ(QUIC_VERSION_IETF_DRAFT_28, 72);
   EXPECT_EQ(QUIC_VERSION_IETF_DRAFT_29, 73);
 }
 
 TEST_F(QuicVersionsTest, AlpnForVersion) {
-  static_assert(SupportedVersions().size() == 10u,
+  static_assert(SupportedVersions().size() == 7u,
                 "Supported versions out of sync");
-  ParsedQuicVersion parsed_version_q048 = ParsedQuicVersion::Q048();
-  ParsedQuicVersion parsed_version_q049 = ParsedQuicVersion::Q049();
-  ParsedQuicVersion parsed_version_q050 = ParsedQuicVersion::Q050();
-  ParsedQuicVersion parsed_version_t050 = ParsedQuicVersion::T050();
-  ParsedQuicVersion parsed_version_draft_25 = ParsedQuicVersion::Draft25();
-  ParsedQuicVersion parsed_version_draft_27 = ParsedQuicVersion::Draft27();
-  ParsedQuicVersion parsed_version_draft_28 = ParsedQuicVersion::Draft28();
-
-  EXPECT_EQ("h3-Q048", AlpnForVersion(parsed_version_q048));
-  EXPECT_EQ("h3-Q049", AlpnForVersion(parsed_version_q049));
-  EXPECT_EQ("h3-Q050", AlpnForVersion(parsed_version_q050));
-  EXPECT_EQ("h3-T050", AlpnForVersion(parsed_version_t050));
-  EXPECT_EQ("h3-25", AlpnForVersion(parsed_version_draft_25));
-  EXPECT_EQ("h3-27", AlpnForVersion(parsed_version_draft_27));
-  EXPECT_EQ("h3-28", AlpnForVersion(parsed_version_draft_28));
+  EXPECT_EQ("h3-Q043", AlpnForVersion(ParsedQuicVersion::Q043()));
+  EXPECT_EQ("h3-Q046", AlpnForVersion(ParsedQuicVersion::Q046()));
+  EXPECT_EQ("h3-Q050", AlpnForVersion(ParsedQuicVersion::Q050()));
+  EXPECT_EQ("h3-T050", AlpnForVersion(ParsedQuicVersion::T050()));
+  EXPECT_EQ("h3-T051", AlpnForVersion(ParsedQuicVersion::T051()));
+  EXPECT_EQ("h3-27", AlpnForVersion(ParsedQuicVersion::Draft27()));
   EXPECT_EQ("h3-29", AlpnForVersion(ParsedQuicVersion::Draft29()));
 }
 

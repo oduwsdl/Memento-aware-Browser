@@ -71,6 +71,10 @@ bool QuicCryptoClientStream::EarlyDataAccepted() const {
   return handshaker_->EarlyDataAccepted();
 }
 
+ssl_early_data_reason_t QuicCryptoClientStream::EarlyDataReason() const {
+  return handshaker_->EarlyDataReason();
+}
+
 bool QuicCryptoClientStream::ReceivedInchoateReject() const {
   return handshaker_->ReceivedInchoateReject();
 }
@@ -103,6 +107,20 @@ HandshakeState QuicCryptoClientStream::GetHandshakeState() const {
 size_t QuicCryptoClientStream::BufferSizeLimitForLevel(
     EncryptionLevel level) const {
   return handshaker_->BufferSizeLimitForLevel(level);
+}
+
+bool QuicCryptoClientStream::KeyUpdateSupportedLocally() const {
+  return handshaker_->KeyUpdateSupportedLocally();
+}
+
+std::unique_ptr<QuicDecrypter>
+QuicCryptoClientStream::AdvanceKeysAndCreateCurrentOneRttDecrypter() {
+  return handshaker_->AdvanceKeysAndCreateCurrentOneRttDecrypter();
+}
+
+std::unique_ptr<QuicEncrypter>
+QuicCryptoClientStream::CreateCurrentOneRttEncrypter() {
+  return handshaker_->CreateCurrentOneRttEncrypter();
 }
 
 std::string QuicCryptoClientStream::chlo_hash() const {

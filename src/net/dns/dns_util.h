@@ -8,15 +8,16 @@
 #include <string>
 #include <vector>
 
+#include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "net/base/address_family.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
-#include "net/dns/dns_config.h"
 #include "net/dns/public/dns_over_https_server_config.h"
 #include "net/dns/public/dns_query_type.h"
+#include "net/dns/public/secure_dns_mode.h"
 
 namespace net {
 
@@ -63,9 +64,11 @@ NET_EXPORT_PRIVATE bool IsValidUnrestrictedDNSDomain(
 // not be NET_EXPORT_PRIVATE.
 NET_EXPORT_PRIVATE bool IsValidHostLabelCharacter(char c, bool is_first_char);
 
-// DNSDomainToString converts a domain in DNS format to a dotted string.
-// Excludes the dot at the end.
-NET_EXPORT std::string DNSDomainToString(const base::StringPiece& domain);
+// Converts a domain in DNS format to a dotted string. Excludes the dot at the
+// end. Assumes the standard terminating zero-length label at the end if not
+// included in the input. Returns nullopt on malformed input.
+NET_EXPORT base::Optional<std::string> DnsDomainToString(
+    base::StringPiece dns_name);
 
 // Return the expanded template when no variables have corresponding values.
 NET_EXPORT_PRIVATE std::string GetURLFromTemplateWithoutParameters(
@@ -140,7 +143,7 @@ NET_EXPORT_PRIVATE std::string GetDohProviderIdForHistogramFromNameserver(
     const IPEndPoint& nameserver);
 
 NET_EXPORT_PRIVATE std::string SecureDnsModeToString(
-    const DnsConfig::SecureDnsMode secure_dns_mode);
+    const SecureDnsMode secure_dns_mode);
 
 }  // namespace net
 

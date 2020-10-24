@@ -4,8 +4,8 @@
 
 #include "net/third_party/quiche/src/quic/core/qpack/qpack_encoder_stream_receiver.h"
 
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 
 using testing::Eq;
@@ -21,19 +21,17 @@ class MockDelegate : public QpackEncoderStreamReceiver::Delegate {
 
   MOCK_METHOD(void,
               OnInsertWithNameReference,
-              (bool is_static,
-               uint64_t name_index,
-               quiche::QuicheStringPiece value),
+              (bool is_static, uint64_t name_index, absl::string_view value),
               (override));
   MOCK_METHOD(void,
               OnInsertWithoutNameReference,
-              (quiche::QuicheStringPiece name, quiche::QuicheStringPiece value),
+              (absl::string_view name, absl::string_view value),
               (override));
   MOCK_METHOD(void, OnDuplicate, (uint64_t index), (override));
   MOCK_METHOD(void, OnSetDynamicTableCapacity, (uint64_t capacity), (override));
   MOCK_METHOD(void,
               OnErrorDetected,
-              (quiche::QuicheStringPiece error_message),
+              (QuicErrorCode error_code, absl::string_view error_message),
               (override));
 };
 
@@ -42,7 +40,7 @@ class QpackEncoderStreamReceiverTest : public QuicTest {
   QpackEncoderStreamReceiverTest() : stream_(&delegate_) {}
   ~QpackEncoderStreamReceiverTest() override = default;
 
-  void Decode(quiche::QuicheStringPiece data) { stream_.Decode(data); }
+  void Decode(absl::string_view data) { stream_.Decode(data); }
   StrictMock<MockDelegate>* delegate() { return &delegate_; }
 
  private:
@@ -73,13 +71,17 @@ TEST_F(QpackEncoderStreamReceiverTest, InsertWithNameReference) {
 }
 
 TEST_F(QpackEncoderStreamReceiverTest, InsertWithNameReferenceIndexTooLarge) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("Encoded integer too large.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+                              Eq("Encoded integer too large.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("bfffffffffffffffffffffff"));
 }
 
 TEST_F(QpackEncoderStreamReceiverTest, InsertWithNameReferenceValueTooLong) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("Encoded integer too large.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+                              Eq("Encoded integer too large.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("c57fffffffffffffffffffff"));
 }
@@ -111,7 +113,9 @@ TEST_F(QpackEncoderStreamReceiverTest, InsertWithoutNameReference) {
 // Name Length value is too large for varint decoder to decode.
 TEST_F(QpackEncoderStreamReceiverTest,
        InsertWithoutNameReferenceNameTooLongForVarintDecoder) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("Encoded integer too large.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+                              Eq("Encoded integer too large.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("5fffffffffffffffffffff"));
 }
@@ -119,7 +123,9 @@ TEST_F(QpackEncoderStreamReceiverTest,
 // Name Length value can be decoded by varint decoder but exceeds 1 MB limit.
 TEST_F(QpackEncoderStreamReceiverTest,
        InsertWithoutNameReferenceNameExceedsLimit) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("String literal too long.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_STRING_LITERAL_TOO_LONG,
+                              Eq("String literal too long.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("5fffff7f"));
 }
@@ -127,7 +133,9 @@ TEST_F(QpackEncoderStreamReceiverTest,
 // Value Length value is too large for varint decoder to decode.
 TEST_F(QpackEncoderStreamReceiverTest,
        InsertWithoutNameReferenceValueTooLongForVarintDecoder) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("Encoded integer too large.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+                              Eq("Encoded integer too large.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("436261727fffffffffffffffffffff"));
 }
@@ -135,7 +143,9 @@ TEST_F(QpackEncoderStreamReceiverTest,
 // Value Length value can be decoded by varint decoder but exceeds 1 MB limit.
 TEST_F(QpackEncoderStreamReceiverTest,
        InsertWithoutNameReferenceValueExceedsLimit) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("String literal too long.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_STRING_LITERAL_TOO_LONG,
+                              Eq("String literal too long.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("436261727fffff7f"));
 }
@@ -150,7 +160,9 @@ TEST_F(QpackEncoderStreamReceiverTest, Duplicate) {
 }
 
 TEST_F(QpackEncoderStreamReceiverTest, DuplicateIndexTooLarge) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("Encoded integer too large.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+                              Eq("Encoded integer too large.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("1fffffffffffffffffffff"));
 }
@@ -165,9 +177,19 @@ TEST_F(QpackEncoderStreamReceiverTest, SetDynamicTableCapacity) {
 }
 
 TEST_F(QpackEncoderStreamReceiverTest, SetDynamicTableCapacityTooLarge) {
-  EXPECT_CALL(*delegate(), OnErrorDetected(Eq("Encoded integer too large.")));
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+                              Eq("Encoded integer too large.")));
 
   Decode(quiche::QuicheTextUtils::HexDecode("3fffffffffffffffffffff"));
+}
+
+TEST_F(QpackEncoderStreamReceiverTest, InvalidHuffmanEncoding) {
+  EXPECT_CALL(*delegate(),
+              OnErrorDetected(QUIC_QPACK_ENCODER_STREAM_HUFFMAN_ENCODING_ERROR,
+                              Eq("Error in Huffman-encoded string.")));
+
+  Decode(quiche::QuicheTextUtils::HexDecode("c281ff"));
 }
 
 }  // namespace

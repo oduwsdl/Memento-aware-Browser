@@ -7,10 +7,10 @@
 #include <memory>
 #include <string>
 
+#include "absl/base/macros.h"
+#include "absl/strings/string_view.h"
 #include "third_party/boringssl/src/include/openssl/sha.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_flag_utils.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_arraysize.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
@@ -157,11 +157,12 @@ void QuicCryptoServerStream::
         const std::string& error_details,
         std::unique_ptr<CryptoHandshakeMessage> reply,
         std::unique_ptr<DiversificationNonce> diversification_nonce,
-        std::unique_ptr<ProofSource::Details> /*proof_source_details*/) {
+        std::unique_ptr<ProofSource::Details> proof_source_details) {
   // Clear the callback that got us here.
   DCHECK(process_client_hello_cb_ != nullptr);
   DCHECK(validate_client_hello_cb_ == nullptr);
   process_client_hello_cb_ = nullptr;
+  proof_source_details_ = std::move(proof_source_details);
 
   const CryptoHandshakeMessage& message = result.client_hello;
   if (error != QUIC_NO_ERROR) {
@@ -285,8 +286,8 @@ void QuicCryptoServerStream::FinishSendServerConfigUpdate(
                 << message.DebugString();
   if (!QuicVersionUsesCryptoFrames(transport_version())) {
     const QuicData& data = message.GetSerialized();
-    WriteOrBufferData(quiche::QuicheStringPiece(data.data(), data.length()),
-                      false, nullptr);
+    WriteOrBufferData(absl::string_view(data.data(), data.length()), false,
+                      nullptr);
   } else {
     SendHandshakeMessage(message);
   }
@@ -338,6 +339,10 @@ bool QuicCryptoServerStream::ShouldSendExpectCTHeader() const {
   return signed_config_->proof.send_expect_ct_header;
 }
 
+const ProofSource::Details* QuicCryptoServerStream::ProofSourceDetails() const {
+  return proof_source_details_.get();
+}
+
 bool QuicCryptoServerStream::GetBase64SHA256ClientChannelID(
     std::string* output) const {
   if (!encryption_established() ||
@@ -350,9 +355,18 @@ bool QuicCryptoServerStream::GetBase64SHA256ClientChannelID(
   SHA256(reinterpret_cast<const uint8_t*>(channel_id.data()), channel_id.size(),
          digest);
 
-  quiche::QuicheTextUtils::Base64Encode(digest, QUICHE_ARRAYSIZE(digest),
-                                        output);
+  quiche::QuicheTextUtils::Base64Encode(digest, ABSL_ARRAYSIZE(digest), output);
   return true;
+}
+
+ssl_early_data_reason_t QuicCryptoServerStream::EarlyDataReason() const {
+  if (IsZeroRtt()) {
+    return ssl_early_data_accepted;
+  }
+  if (zero_rtt_attempted_) {
+    return ssl_early_data_session_not_resumed;
+  }
+  return ssl_early_data_no_session_offered;
 }
 
 bool QuicCryptoServerStream::encryption_established() const {
@@ -387,11 +401,30 @@ size_t QuicCryptoServerStream::BufferSizeLimitForLevel(
   return QuicCryptoHandshaker::BufferSizeLimitForLevel(level);
 }
 
+bool QuicCryptoServerStream::KeyUpdateSupportedLocally() const {
+  return false;
+}
+
+std::unique_ptr<QuicDecrypter>
+QuicCryptoServerStream::AdvanceKeysAndCreateCurrentOneRttDecrypter() {
+  // Key update is only defined in QUIC+TLS.
+  DCHECK(false);
+  return nullptr;
+}
+
+std::unique_ptr<QuicEncrypter>
+QuicCryptoServerStream::CreateCurrentOneRttEncrypter() {
+  // Key update is only defined in QUIC+TLS.
+  DCHECK(false);
+  return nullptr;
+}
+
 void QuicCryptoServerStream::ProcessClientHello(
     QuicReferenceCountedPointer<ValidateClientHelloResultCallback::Result>
         result,
-    std::unique_ptr<ProofSource::Details> /*proof_source_details*/,
+    std::unique_ptr<ProofSource::Details> proof_source_details,
     std::unique_ptr<ProcessClientHelloResultCallback> done_cb) {
+  proof_source_details_ = std::move(proof_source_details);
   const CryptoHandshakeMessage& message = result->client_hello;
   std::string error_details;
   if (!helper_->CanAcceptClientHello(
@@ -402,14 +435,10 @@ void QuicCryptoServerStream::ProcessClientHello(
     return;
   }
 
-  if (GetQuicReloadableFlag(quic_save_user_agent_in_quic_session)) {
-    QUIC_RELOADABLE_FLAG_COUNT_N(quic_save_user_agent_in_quic_session, 1, 3);
-    quiche::QuicheStringPiece user_agent_id;
-    message.GetStringPiece(quic::kUAID, &user_agent_id);
-    if (!session()->user_agent_id().has_value()) {
-      std::string uaid = user_agent_id.empty() ? "" : user_agent_id.data();
-      session()->SetUserAgentId(std::move(uaid));
-    }
+  absl::string_view user_agent_id;
+  message.GetStringPiece(quic::kUAID, &user_agent_id);
+  if (!session()->user_agent_id().has_value() && !user_agent_id.empty()) {
+    session()->SetUserAgentId(std::string(user_agent_id));
   }
 
   if (!result->info.server_nonce.empty()) {
@@ -418,7 +447,7 @@ void QuicCryptoServerStream::ProcessClientHello(
 
   if (num_handshake_messages_ == 1) {
     // Client attempts zero RTT handshake by sending a non-inchoate CHLO.
-    quiche::QuicheStringPiece public_value;
+    absl::string_view public_value;
     zero_rtt_attempted_ = message.GetStringPiece(kPUBS, &public_value);
   }
 

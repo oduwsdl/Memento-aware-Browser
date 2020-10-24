@@ -52,8 +52,6 @@ class MockQuicSpdyClientSession : public QuicSpdyClientSession {
 
   void set_authorized(bool authorized) { authorized_ = authorized; }
 
-  MOCK_METHOD(void, CloseStream, (QuicStreamId stream_id), (override));
-
  private:
   QuicCryptoClientConfig crypto_config_;
 
@@ -328,7 +326,7 @@ TEST_F(QuicClientPromisedInfoTest, PushPromiseDataClosed) {
   EXPECT_CALL(*connection_, SendControlFrame(_));
   EXPECT_CALL(*connection_,
               OnStreamReset(promise_id_, QUIC_STREAM_PEER_GOING_AWAY));
-  session_.ResetStream(promise_id_, QUIC_STREAM_PEER_GOING_AWAY, 0);
+  session_.ResetStream(promise_id_, QUIC_STREAM_PEER_GOING_AWAY);
 
   // Now initiate rendezvous.
   TestPushPromiseDelegate delegate(/*match=*/true);

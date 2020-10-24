@@ -21,11 +21,11 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "net/base/net_errors.h"
+#include "net/base/net_info_source_list.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/proxy_delegate.h"
 #include "net/base/url_util.h"
 #include "net/log/net_log.h"
-#include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_util.h"
 #include "net/log/net_log_with_source.h"
@@ -44,7 +44,7 @@
 #elif defined(OS_IOS)
 #include "net/proxy_resolution/proxy_config_service_ios.h"
 #include "net/proxy_resolution/proxy_resolver_mac.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "net/proxy_resolution/proxy_config_service_mac.h"
 #include "net/proxy_resolution/proxy_resolver_mac.h"
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -60,7 +60,7 @@ namespace net {
 
 namespace {
 
-#if defined(OS_WIN) || defined(OS_IOS) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_APPLE) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 constexpr net::NetworkTrafficAnnotationTag kSystemProxyConfigTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("proxy_config_system", R"(
@@ -257,7 +257,7 @@ class ProxyResolverFactoryForSystem : public MultiThreadedProxyResolverFactory {
   std::unique_ptr<ProxyResolverFactory> CreateProxyResolverFactory() override {
 #if defined(OS_WIN)
     return std::make_unique<ProxyResolverFactoryWinHttp>();
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
     return std::make_unique<ProxyResolverFactoryMac>();
 #else
     NOTREACHED();
@@ -266,7 +266,7 @@ class ProxyResolverFactoryForSystem : public MultiThreadedProxyResolverFactory {
   }
 
   static bool IsSupported() {
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_APPLE)
     return true;
 #else
     return false;
@@ -1348,39 +1348,37 @@ void ConfiguredProxyResolutionService::ForceReloadProxyConfig() {
   ApplyProxyConfigIfAvailable();
 }
 
-std::unique_ptr<base::DictionaryValue>
-ConfiguredProxyResolutionService::GetProxyNetLogValues(int info_sources) {
-  std::unique_ptr<base::DictionaryValue> net_info_dict(
-      new base::DictionaryValue());
+base::Value ConfiguredProxyResolutionService::GetProxyNetLogValues() {
+  base::Value net_info_dict(base::Value::Type::DICTIONARY);
 
-  if (info_sources & NET_INFO_PROXY_SETTINGS) {
-    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  // Log Proxy Settings.
+  {
+    base::Value dict(base::Value::Type::DICTIONARY);
     if (fetched_config_)
-      dict->SetKey("original", fetched_config_->value().ToValue());
+      dict.SetKey("original", fetched_config_->value().ToValue());
     if (config_)
-      dict->SetKey("effective", config_->value().ToValue());
+      dict.SetKey("effective", config_->value().ToValue());
 
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_PROXY_SETTINGS),
-                       std::move(dict));
+    net_info_dict.SetKey(kNetInfoProxySettings, std::move(dict));
   }
 
-  if (info_sources & NET_INFO_BAD_PROXIES) {
-    auto list = std::make_unique<base::ListValue>();
+  // Log Bad Proxies.
+  {
+    base::Value list(base::Value::Type::LIST);
 
-    for (auto& it : proxy_retry_info_) {
+    for (const auto& it : proxy_retry_info_) {
       const std::string& proxy_uri = it.first;
       const ProxyRetryInfo& retry_info = it.second;
 
-      auto dict = std::make_unique<base::DictionaryValue>();
-      dict->SetString("proxy_uri", proxy_uri);
-      dict->SetString("bad_until",
-                      NetLog::TickCountToString(retry_info.bad_until));
+      base::Value dict(base::Value::Type::DICTIONARY);
+      dict.SetStringKey("proxy_uri", proxy_uri);
+      dict.SetStringKey("bad_until",
+                        NetLog::TickCountToString(retry_info.bad_until));
 
-      list->Append(std::move(dict));
+      list.Append(std::move(dict));
     }
 
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_BAD_PROXIES),
-                       std::move(list));
+    net_info_dict.SetKey(kNetInfoBadProxies, std::move(list));
   }
 
   return net_info_dict;
@@ -1402,7 +1400,7 @@ ConfiguredProxyResolutionService::CreateSystemProxyConfigService(
 #elif defined(OS_IOS)
   return std::make_unique<ProxyConfigServiceIOS>(
       kSystemProxyConfigTrafficAnnotation);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return std::make_unique<ProxyConfigServiceMac>(
       main_task_runner, kSystemProxyConfigTrafficAnnotation);
 #elif defined(OS_CHROMEOS)

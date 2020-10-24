@@ -23,7 +23,7 @@ struct NetworkInterface;
 class SystemDnsConfigChangeNotifier;
 typedef std::vector<NetworkInterface> NetworkInterfaceList;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 namespace internal {
 class AddressTrackerLinux;
 }
@@ -52,9 +52,10 @@ class NET_EXPORT NetworkChangeNotifier {
     CONNECTION_2G = 3,
     CONNECTION_3G = 4,
     CONNECTION_4G = 5,
-    CONNECTION_NONE = 6,     // No connection.
+    CONNECTION_NONE = 6,  // No connection.
     CONNECTION_BLUETOOTH = 7,
-    CONNECTION_LAST = CONNECTION_BLUETOOTH
+    CONNECTION_5G = 8,
+    CONNECTION_LAST = CONNECTION_5G
   };
 
   // This is the NetInfo v3 set of connection technologies as seen in
@@ -65,6 +66,9 @@ class NET_EXPORT NetworkChangeNotifier {
   //
   // A Java counterpart will be generated for this enum.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.net
+  //
+  // TODO(crbug.com/1127134): Introduce subtypes for 5G networks once they can
+  // be detected.
   enum ConnectionSubtype {
     SUBTYPE_UNKNOWN = 0,
     SUBTYPE_NONE,
@@ -366,7 +370,7 @@ class NET_EXPORT NetworkChangeNotifier {
   // Chrome net code.
   static SystemDnsConfigChangeNotifier* GetSystemDnsConfigNotifier();
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Returns the AddressTrackerLinux if present.
   static const internal::AddressTrackerLinux* GetAddressTracker();
 #endif
@@ -507,13 +511,18 @@ class NET_EXPORT NetworkChangeNotifier {
   };
 
   // If |system_dns_config_notifier| is null (the default), a shared singleton
-  // will be used that will be leaked on shutdown.
-  NetworkChangeNotifier(
+  // will be used that will be leaked on shutdown. If
+  // |omit_observers_in_constructor_for_testing| is true, internal observers
+  // aren't added during construction - this is used to skip registering
+  // observers from MockNetworkChangeNotifier, and allow its construction when
+  // SequencedTaskRunnerHandle isn't set.
+  explicit NetworkChangeNotifier(
       const NetworkChangeCalculatorParams& params =
           NetworkChangeCalculatorParams(),
-      SystemDnsConfigChangeNotifier* system_dns_config_notifier = nullptr);
+      SystemDnsConfigChangeNotifier* system_dns_config_notifier = nullptr,
+      bool omit_observers_in_constructor_for_testing = false);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Returns the AddressTrackerLinux if present.
   // TODO(szym): Retrieve AddressMap from NetworkState. http://crbug.com/144212
   virtual const internal::AddressTrackerLinux*
@@ -602,6 +611,10 @@ class NET_EXPORT NetworkChangeNotifier {
 
   // Indicates if this instance cleared g_network_change_notifier_ yet.
   bool cleared_global_pointer_ = false;
+
+  // Whether observers can be added. This may only be false during construction
+  // in tests. See comment above the constructor.
+  bool can_add_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkChangeNotifier);
 };

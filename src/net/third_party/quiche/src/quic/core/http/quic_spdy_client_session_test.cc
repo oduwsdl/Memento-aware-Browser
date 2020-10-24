@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/macros.h"
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/quic/core/crypto/null_decrypter.h"
 #include "net/third_party/quiche/src/quic/core/crypto/null_encrypter.h"
 #include "net/third_party/quiche/src/quic/core/http/http_constants.h"
@@ -33,11 +35,10 @@
 #include "net/third_party/quiche/src/quic/test_tools/quic_packet_creator_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_session_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_spdy_session_peer.h"
+#include "net/third_party/quiche/src/quic/test_tools/quic_stream_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
 #include "net/third_party/quiche/src/quic/test_tools/simple_session_cache.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_arraysize.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_str_cat.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 
 using spdy::SpdyHeaderBlock;
 using ::testing::_;
@@ -96,9 +97,7 @@ class QuicSpdyClientSessionTest : public QuicTestWithParam<ParsedQuicVersion> {
             QuicUtils::GetInvalidStreamId(GetParam().transport_version)) {
     auto client_cache = std::make_unique<test::SimpleSessionCache>();
     client_session_cache_ = client_cache.get();
-    SetQuicReloadableFlag(quic_enable_tls_resumption, true);
-    SetQuicReloadableFlag(quic_enable_zero_rtt_for_tls, true);
-    SetQuicReloadableFlag(quic_fix_gquic_stream_type, true);
+    SetQuicRestartFlag(quic_enable_zero_rtt_for_tls_v2, true);
     client_crypto_config_ = std::make_unique<QuicCryptoClientConfig>(
         crypto_test_utils::ProofVerifierForTesting(), std::move(client_cache));
     server_crypto_config_ = crypto_test_utils::CryptoServerConfigForTesting();
@@ -204,7 +203,7 @@ class QuicSpdyClientSessionTest : public QuicTestWithParam<ParsedQuicVersion> {
     if (session_->version().UsesHttp3()) {
       SettingsFrame settings;
       settings.values[SETTINGS_QPACK_MAX_TABLE_CAPACITY] = 2;
-      settings.values[SETTINGS_MAX_HEADER_LIST_SIZE] = 5;
+      settings.values[SETTINGS_MAX_FIELD_SECTION_SIZE] = 5;
       settings.values[256] = 4;  // unknown setting
       session_->OnSettingsFrame(settings);
     }
@@ -226,10 +225,18 @@ class QuicSpdyClientSessionTest : public QuicTestWithParam<ParsedQuicVersion> {
   test::SimpleSessionCache* client_session_cache_;
 };
 
+std::string ParamNameFormatter(
+    const testing::TestParamInfo<QuicSpdyClientSessionTest::ParamType>& info) {
+  const ParsedQuicVersion& version = info.param;
+  return quiche::QuicheStrCat(
+      QuicVersionToString(version.transport_version), "_",
+      HandshakeProtocolToString(version.handshake_protocol));
+}
+
 INSTANTIATE_TEST_SUITE_P(Tests,
                          QuicSpdyClientSessionTest,
                          ::testing::ValuesIn(AllSupportedVersions()),
-                         ::testing::PrintToStringParamName());
+                         ParamNameFormatter);
 
 TEST_P(QuicSpdyClientSessionTest, CryptoConnect) {
   CompleteCryptoHandshake();
@@ -273,8 +280,8 @@ TEST_P(QuicSpdyClientSessionTest, NoEncryptionAfterInitialEncryption) {
   // Verify that no data may be send on existing streams.
   char data[] = "hello world";
   EXPECT_QUIC_BUG(
-      session_->WritevData(stream->id(), QUICHE_ARRAYSIZE(data), 0, NO_FIN,
-                           NOT_RETRANSMISSION, QUICHE_NULLOPT),
+      session_->WritevData(stream->id(), ABSL_ARRAYSIZE(data), 0, NO_FIN,
+                           NOT_RETRANSMISSION, absl::nullopt),
       "Client: Try to send data of stream");
 }
 
@@ -287,8 +294,8 @@ TEST_P(QuicSpdyClientSessionTest, MaxNumStreamsWithNoFinOrRst) {
   EXPECT_FALSE(session_->CreateOutgoingBidirectionalStream());
 
   // Close the stream, but without having received a FIN or a RST_STREAM
-  // or MAX_STREAMS (V99) and check that a new one can not be created.
-  session_->CloseStream(stream->id());
+  // or MAX_STREAMS (IETF QUIC) and check that a new one can not be created.
+  session_->ResetStream(stream->id(), QUIC_STREAM_CANCELLED);
   EXPECT_EQ(1u, QuicSessionPeer::GetNumOpenDynamicStreams(session_.get()));
 
   stream = session_->CreateOutgoingBidirectionalStream();
@@ -304,13 +311,13 @@ TEST_P(QuicSpdyClientSessionTest, MaxNumStreamsWithRst) {
   EXPECT_EQ(nullptr, session_->CreateOutgoingBidirectionalStream());
 
   // Close the stream and receive an RST frame to remove the unfinished stream
-  session_->CloseStream(stream->id());
+  session_->ResetStream(stream->id(), QUIC_STREAM_CANCELLED);
   session_->OnRstStream(QuicRstStreamFrame(kInvalidControlFrameId, stream->id(),
                                            QUIC_RST_ACKNOWLEDGEMENT, 0));
   // Check that a new one can be created.
   EXPECT_EQ(0u, QuicSessionPeer::GetNumOpenDynamicStreams(session_.get()));
   if (VersionHasIetfQuicFrames(GetParam().transport_version)) {
-    // In V99 the stream limit increases only if we get a MAX_STREAMS
+    // In IETF QUIC the stream limit increases only if we get a MAX_STREAMS
     // frame; pretend we got one.
 
     QuicMaxStreamsFrame frame(0, 2,
@@ -323,7 +330,7 @@ TEST_P(QuicSpdyClientSessionTest, MaxNumStreamsWithRst) {
     // Ensure that we have 2 total streams, 1 open and 1 closed.
     QuicStreamCount expected_stream_count = 2;
     EXPECT_EQ(expected_stream_count,
-              QuicSessionPeer::v99_bidirectional_stream_id_manager(&*session_)
+              QuicSessionPeer::ietf_bidirectional_stream_id_manager(&*session_)
                   ->outgoing_stream_count());
   }
 }
@@ -340,7 +347,7 @@ TEST_P(QuicSpdyClientSessionTest, ResetAndTrailers) {
   ASSERT_NE(nullptr, stream);
 
   if (VersionHasIetfQuicFrames(GetParam().transport_version)) {
-    // For v99, trying to open a stream and failing due to lack
+    // For IETF QUIC, trying to open a stream and failing due to lack
     // of stream ids will result in a STREAMS_BLOCKED. Make
     // sure we get one. Also clear out the frame because if it's
     // left sitting, the later SendRstStream will not actually
@@ -360,7 +367,7 @@ TEST_P(QuicSpdyClientSessionTest, ResetAndTrailers) {
       .Times(AtLeast(1))
       .WillRepeatedly(Invoke(&ClearControlFrame));
   EXPECT_CALL(*connection_, OnStreamReset(_, _)).Times(1);
-  session_->ResetStream(stream_id, QUIC_STREAM_PEER_GOING_AWAY, 0);
+  session_->ResetStream(stream_id, QUIC_STREAM_PEER_GOING_AWAY);
 
   // A new stream cannot be created as the reset stream still counts as an open
   // outgoing stream until closed by the server.
@@ -392,7 +399,7 @@ TEST_P(QuicSpdyClientSessionTest, ResetAndTrailers) {
     // Ensure that we have 2 open streams.
     QuicStreamCount expected_stream_count = 2;
     EXPECT_EQ(expected_stream_count,
-              QuicSessionPeer::v99_bidirectional_stream_id_manager(&*session_)
+              QuicSessionPeer::ietf_bidirectional_stream_id_manager(&*session_)
                   ->outgoing_stream_count());
   }
 }
@@ -412,7 +419,7 @@ TEST_P(QuicSpdyClientSessionTest, ReceivedMalformedTrailersAfterSendingRst) {
       .Times(AtLeast(1))
       .WillRepeatedly(Invoke(&ClearControlFrame));
   EXPECT_CALL(*connection_, OnStreamReset(_, _)).Times(1);
-  session_->ResetStream(stream_id, QUIC_STREAM_PEER_GOING_AWAY, 0);
+  session_->ResetStream(stream_id, QUIC_STREAM_PEER_GOING_AWAY);
 
   // The stream receives trailers with final byte offset, but the header value
   // is non-numeric and should be treated as malformed.
@@ -441,7 +448,7 @@ TEST_P(QuicSpdyClientSessionTest, OnStreamHeaderListWithStaticStream) {
         connection_->transport_version(), 3);
     char type[] = {0x00};
 
-    QuicStreamFrame data1(id, false, 0, quiche::QuicheStringPiece(type, 1));
+    QuicStreamFrame data1(id, false, 0, absl::string_view(type, 1));
     session_->OnStreamFrame(data1);
   } else {
     id = QuicUtils::GetHeadersStreamId(connection_->transport_version());
@@ -471,7 +478,7 @@ TEST_P(QuicSpdyClientSessionTest, OnPromiseHeaderListWithStaticStream) {
         connection_->transport_version(), 3);
     char type[] = {0x00};
 
-    QuicStreamFrame data1(id, false, 0, quiche::QuicheStringPiece(type, 1));
+    QuicStreamFrame data1(id, false, 0, absl::string_view(type, 1));
     session_->OnStreamFrame(data1);
   } else {
     id = QuicUtils::GetHeadersStreamId(connection_->transport_version());
@@ -669,11 +676,13 @@ TEST_P(QuicSpdyClientSessionTest, PushPromiseOutOfOrder) {
                                 QuicHeaderList());
   associated_stream_id_ +=
       QuicUtils::StreamIdDelta(connection_->transport_version());
-  EXPECT_CALL(*connection_,
-              CloseConnection(QUIC_INVALID_STREAM_ID,
-                              "Received push stream id lesser or equal to the"
-                              " last accepted before",
-                              _));
+  if (!VersionUsesHttp3(session_->transport_version())) {
+    EXPECT_CALL(*connection_,
+                CloseConnection(QUIC_INVALID_STREAM_ID,
+                                "Received push stream id lesser or equal to the"
+                                " last accepted before",
+                                _));
+  }
   session_->OnPromiseHeaderList(associated_stream_id_, promised_stream_id_, 0,
                                 QuicHeaderList());
 }
@@ -862,7 +871,7 @@ TEST_P(QuicSpdyClientSessionTest, ResetPromised) {
   EXPECT_CALL(*connection_, SendControlFrame(_));
   EXPECT_CALL(*connection_,
               OnStreamReset(promised_stream_id_, QUIC_STREAM_PEER_GOING_AWAY));
-  session_->ResetStream(promised_stream_id_, QUIC_STREAM_PEER_GOING_AWAY, 0);
+  session_->ResetStream(promised_stream_id_, QUIC_STREAM_PEER_GOING_AWAY);
   QuicClientPromisedInfo* promised =
       session_->GetPromisedById(promised_stream_id_);
   EXPECT_NE(promised, nullptr);
@@ -959,7 +968,7 @@ TEST_P(QuicSpdyClientSessionTest, OnSettingsFrame) {
   CompleteCryptoHandshake();
   SettingsFrame settings;
   settings.values[SETTINGS_QPACK_MAX_TABLE_CAPACITY] = 2;
-  settings.values[SETTINGS_MAX_HEADER_LIST_SIZE] = 5;
+  settings.values[SETTINGS_MAX_FIELD_SECTION_SIZE] = 5;
   settings.values[256] = 4;   // unknown setting
   char application_state[] = {// type (SETTINGS)
                               0x04,
@@ -969,7 +978,7 @@ TEST_P(QuicSpdyClientSessionTest, OnSettingsFrame) {
                               0x01,
                               // content
                               0x02,
-                              // identifier (SETTINGS_MAX_HEADER_LIST_SIZE)
+                              // identifier (SETTINGS_MAX_FIELD_SECTION_SIZE)
                               0x06,
                               // content
                               0x05,
@@ -1013,7 +1022,7 @@ TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {
   EXPECT_EQ(kInitialSessionFlowControlWindowForTest,
             session_->flow_controller()->send_window_offset());
   if (session_->version().UsesHttp3()) {
-    auto* id_manager = QuicSessionPeer::v99_streamid_manager(session_.get());
+    auto* id_manager = QuicSessionPeer::ietf_streamid_manager(session_.get());
     EXPECT_EQ(kDefaultMaxStreamsPerConnection,
               id_manager->max_outgoing_bidirectional_streams());
     EXPECT_EQ(
@@ -1022,7 +1031,7 @@ TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {
     auto* control_stream =
         QuicSpdySessionPeer::GetSendControlStream(session_.get());
     EXPECT_EQ(kInitialStreamFlowControlWindowForTest,
-              control_stream->flow_controller()->send_window_offset());
+              QuicStreamPeer::SendWindowOffset(control_stream));
     EXPECT_EQ(5u, session_->max_outbound_header_list_size());
   } else {
     auto* id_manager = QuicSessionPeer::GetStreamIdManager(session_.get());
@@ -1046,7 +1055,7 @@ TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {
   EXPECT_EQ(kInitialSessionFlowControlWindowForTest + 1,
             session_->flow_controller()->send_window_offset());
   if (session_->version().UsesHttp3()) {
-    auto* id_manager = QuicSessionPeer::v99_streamid_manager(session_.get());
+    auto* id_manager = QuicSessionPeer::ietf_streamid_manager(session_.get());
     auto* control_stream =
         QuicSpdySessionPeer::GetSendControlStream(session_.get());
     EXPECT_EQ(kDefaultMaxStreamsPerConnection + 1,
@@ -1055,7 +1064,7 @@ TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {
                   kHttp3StaticUnidirectionalStreamCount + 1,
               id_manager->max_outgoing_unidirectional_streams());
     EXPECT_EQ(kInitialStreamFlowControlWindowForTest + 1,
-              control_stream->flow_controller()->send_window_offset());
+              QuicStreamPeer::SendWindowOffset(control_stream));
   } else {
     auto* id_manager = QuicSessionPeer::GetStreamIdManager(session_.get());
     EXPECT_EQ(kDefaultMaxStreamsPerConnection + 1,
@@ -1068,7 +1077,7 @@ TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {
   if (session_->version().UsesHttp3()) {
     SettingsFrame settings;
     settings.values[SETTINGS_QPACK_MAX_TABLE_CAPACITY] = 2;
-    settings.values[SETTINGS_MAX_HEADER_LIST_SIZE] = 5;
+    settings.values[SETTINGS_MAX_FIELD_SECTION_SIZE] = 5;
     settings.values[256] = 4;  // unknown setting
     session_->OnSettingsFrame(settings);
   }
@@ -1076,8 +1085,6 @@ TEST_P(QuicSpdyClientSessionTest, IetfZeroRttSetup) {
 
 // Regression test for b/159168475
 TEST_P(QuicSpdyClientSessionTest, RetransmitDataOnZeroRttReject) {
-  SetQuicReloadableFlag(quic_do_not_retransmit_immediately_on_zero_rtt_reject,
-                        true);
   // This feature is TLS-only.
   if (session_->version().UsesQuicCrypto()) {
     return;
@@ -1198,11 +1205,15 @@ TEST_P(QuicSpdyClientSessionTest,
 
   if (session_->version().UsesHttp3()) {
     // Both control stream and the request stream will report errors.
-    EXPECT_CALL(*connection_,
-                CloseConnection(QUIC_ZERO_RTT_UNRETRANSMITTABLE, _, _))
-        .Times(2)
+    // Open question: should both streams be closed with the same error code?
+    EXPECT_CALL(*connection_, CloseConnection(_, _, _))
         .WillOnce(testing::Invoke(connection_,
                                   &MockQuicConnection::ReallyCloseConnection));
+    EXPECT_CALL(*connection_,
+                CloseConnection(QUIC_ZERO_RTT_UNRETRANSMITTABLE, _, _))
+        .WillOnce(testing::Invoke(connection_,
+                                  &MockQuicConnection::ReallyCloseConnection))
+        .RetiresOnSaturation();
   } else {
     EXPECT_CALL(*connection_,
                 CloseConnection(
@@ -1388,7 +1399,7 @@ TEST_P(QuicSpdyClientSessionTest, BadSettingsInZeroRttResumption) {
   // Let the session receive a different SETTINGS frame.
   SettingsFrame settings;
   settings.values[SETTINGS_QPACK_MAX_TABLE_CAPACITY] = 1;
-  settings.values[SETTINGS_MAX_HEADER_LIST_SIZE] = 5;
+  settings.values[SETTINGS_MAX_FIELD_SECTION_SIZE] = 5;
   settings.values[256] = 4;  // unknown setting
   session_->OnSettingsFrame(settings);
 }
@@ -1418,8 +1429,8 @@ TEST_P(QuicSpdyClientSessionTest, BadSettingsInZeroRttRejection) {
   // Let the session receive a different SETTINGS frame.
   SettingsFrame settings;
   settings.values[SETTINGS_QPACK_MAX_TABLE_CAPACITY] = 2;
-  // setting on SETTINGS_MAX_HEADER_LIST_SIZE is reduced.
-  settings.values[SETTINGS_MAX_HEADER_LIST_SIZE] = 4;
+  // setting on SETTINGS_MAX_FIELD_SECTION_SIZE is reduced.
+  settings.values[SETTINGS_MAX_FIELD_SECTION_SIZE] = 4;
   settings.values[256] = 4;  // unknown setting
   session_->OnSettingsFrame(settings);
 }
@@ -1443,8 +1454,8 @@ TEST_P(QuicSpdyClientSessionTest, ServerAcceptsZeroRttButOmitSetting) {
   // Let the session receive a different SETTINGS frame.
   SettingsFrame settings;
   settings.values[SETTINGS_QPACK_MAX_TABLE_CAPACITY] = 1;
-  // Intentionally omit SETTINGS_MAX_HEADER_LIST_SIZE which was previously sent
-  // with a non-zero value.
+  // Intentionally omit SETTINGS_MAX_FIELD_SECTION_SIZE which was previously
+  // sent with a non-zero value.
   settings.values[256] = 4;  // unknown setting
   session_->OnSettingsFrame(settings);
 }

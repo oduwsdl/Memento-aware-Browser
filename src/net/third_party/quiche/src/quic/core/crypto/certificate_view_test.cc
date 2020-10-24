@@ -7,6 +7,7 @@
 #include <memory>
 #include <sstream>
 
+#include "absl/strings/string_view.h"
 #include "third_party/boringssl/src/include/openssl/base.h"
 #include "third_party/boringssl/src/include/openssl/bytestring.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
@@ -15,7 +16,6 @@
 #include "net/third_party/quiche/src/quic/platform/api/quic_ip_address.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/test_tools/test_certificates.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_time_utils.h"
 
 namespace quic {
@@ -43,9 +43,9 @@ TEST(CertificateViewTest, Parse) {
   ASSERT_TRUE(view != nullptr);
 
   EXPECT_THAT(view->subject_alt_name_domains(),
-              ElementsAre(quiche::QuicheStringPiece("www.example.org"),
-                          quiche::QuicheStringPiece("mail.example.org"),
-                          quiche::QuicheStringPiece("mail.example.com")));
+              ElementsAre(absl::string_view("www.example.org"),
+                          absl::string_view("mail.example.org"),
+                          absl::string_view("mail.example.com")));
   EXPECT_THAT(view->subject_alt_name_ips(),
               ElementsAre(QuicIpAddress::Loopback4()));
   EXPECT_EQ(EVP_PKEY_id(view->public_key()), EVP_PKEY_RSA);
@@ -131,6 +131,14 @@ TEST(CertificateViewTest, PrivateKeyPem) {
   EXPECT_TRUE(legacy_key->MatchesPublicKey(*view));
 }
 
+TEST(CertificateViewTest, PrivateKeyEcdsaPem) {
+  std::stringstream pem_stream(kTestEcPrivateKeyLegacyPem);
+  std::unique_ptr<CertificatePrivateKey> key =
+      CertificatePrivateKey::LoadPemFromStream(&pem_stream);
+  ASSERT_TRUE(key != nullptr);
+  EXPECT_TRUE(key->ValidForSignatureAlgorithm(SSL_SIGN_ECDSA_SECP256R1_SHA256));
+}
+
 TEST(CertificateViewTest, DerTime) {
   EXPECT_THAT(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024Z"),
               Optional(QuicWallTime::FromUNIXSeconds(24)));
@@ -140,27 +148,27 @@ TEST(CertificateViewTest, DerTime) {
               Optional(QuicWallTime::FromUNIXSeconds(24)));
   EXPECT_TRUE(ParseDerTime(CBS_ASN1_UTCTIME, "200101000024Z").has_value());
 
-  EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, ""), QUICHE_NULLOPT);
+  EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, ""), absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024.001Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024Q"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024-0500"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "700101000024ZZ"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024.00Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024.Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "197O0101000024Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101000024.0O1Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "-9700101000024Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "1970-101000024Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
 
   EXPECT_TRUE(ParseDerTime(CBS_ASN1_UTCTIME, "490101000024Z").has_value());
   // This should parse as 1950, which predates UNIX epoch.
@@ -169,7 +177,7 @@ TEST(CertificateViewTest, DerTime) {
   EXPECT_THAT(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101230000Z"),
               Optional(QuicWallTime::FromUNIXSeconds(23 * 3600)));
   EXPECT_EQ(ParseDerTime(CBS_ASN1_GENERALIZEDTIME, "19700101240000Z"),
-            QUICHE_NULLOPT);
+            absl::nullopt);
 }
 
 }  // namespace

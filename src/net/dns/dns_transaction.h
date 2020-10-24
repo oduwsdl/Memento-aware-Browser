@@ -14,7 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "net/base/request_priority.h"
-#include "net/dns/dns_config.h"
+#include "net/dns/public/secure_dns_mode.h"
 #include "net/dns/record_rdata.h"
 #include "url/gurl.h"
 
@@ -103,14 +103,22 @@ class NET_EXPORT_PRIVATE DnsTransactionFactory {
   //
   // |secure| specifies whether DNS lookups should be performed using DNS-over-
   // HTTPS (DoH) or using plaintext DNS.
+  //
+  // When |fast_timeout| is true, the transaction will timeout quickly after
+  // making its DNS attempts, without necessarily waiting long enough to allow
+  // slower-than-average requests to complete. Intended as an optimization for
+  // cases where the caller has reasonable fallback options to the transaction
+  // and it would be beneficial to move on to those options sooner on signals
+  // that the transaction is potentially slow or problematic.
   virtual std::unique_ptr<DnsTransaction> CreateTransaction(
       const std::string& hostname,
       uint16_t qtype,
       CallbackType callback,
       const NetLogWithSource& net_log,
       bool secure,
-      DnsConfig::SecureDnsMode secure_dns_mode,
-      ResolveContext* resolve_context) WARN_UNUSED_RESULT = 0;
+      SecureDnsMode secure_dns_mode,
+      ResolveContext* resolve_context,
+      bool fast_timeout) WARN_UNUSED_RESULT = 0;
 
   // Creates a runner to run the DoH probe sequence for all configured DoH
   // resolvers.
@@ -122,7 +130,7 @@ class NET_EXPORT_PRIVATE DnsTransactionFactory {
   virtual void AddEDNSOption(const OptRecordRdata::Opt& opt) = 0;
 
   // Returns the default SecureDnsMode in the config.
-  virtual DnsConfig::SecureDnsMode GetSecureDnsModeForTest() = 0;
+  virtual SecureDnsMode GetSecureDnsModeForTest() = 0;
 
   // Creates a DnsTransactionFactory which creates DnsTransactionImpl using the
   // |session|.

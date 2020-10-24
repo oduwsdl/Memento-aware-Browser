@@ -31,7 +31,7 @@ class QUIC_EXPORT_PRIVATE QuicSendControlStream : public QuicStream {
   // Overriding QuicStream::OnStopSending() to make sure control stream is never
   // closed before connection.
   void OnStreamReset(const QuicRstStreamFrame& frame) override;
-  bool OnStopSending(uint16_t code) override;
+  bool OnStopSending(QuicRstStreamErrorCode code) override;
 
   // Send SETTINGS frame if it hasn't been sent yet. Settings frame must be the
   // first frame sent on this stream.
@@ -47,7 +47,7 @@ class QUIC_EXPORT_PRIVATE QuicSendControlStream : public QuicStream {
 
   // Send a GOAWAY frame on this stream, and a SETTINGS frame beforehand if one
   // has not been already sent.
-  void SendGoAway(QuicStreamId stream_id);
+  void SendGoAway(QuicStreamId id);
 
   // The send control stream is write unidirectional, so this method should
   // never be called.

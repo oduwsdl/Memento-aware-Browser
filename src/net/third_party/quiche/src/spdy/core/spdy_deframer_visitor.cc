@@ -11,8 +11,8 @@
 #include <limits>
 #include <memory>
 
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/http2/platform/api/http2_macros.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/spdy/core/hpack/hpack_constants.h"
 #include "net/third_party/quiche/src/spdy/core/mock_spdy_framer_visitor.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_frame_reader.h"
@@ -138,7 +138,7 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   // alphabetical order for ease of navigation, and are not in same order
   // as in SpdyFramerVisitorInterface.
   void OnAltSvc(SpdyStreamId stream_id,
-                quiche::QuicheStringPiece origin,
+                absl::string_view origin,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                     altsvc_vector) override;
   void OnContinuation(SpdyStreamId stream_id, bool end) override;
@@ -148,7 +148,8 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   void OnDataFrameHeader(SpdyStreamId stream_id,
                          size_t length,
                          bool fin) override;
-  void OnError(http2::Http2DecoderAdapter::SpdyFramerError error) override;
+  void OnError(http2::Http2DecoderAdapter::SpdyFramerError error,
+               std::string detailed_error) override;
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
                 SpdyErrorCode error_code) override;
   bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
@@ -184,8 +185,7 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   // Callbacks defined in SpdyHeadersHandlerInterface.
 
   void OnHeaderBlockStart() override;
-  void OnHeader(quiche::QuicheStringPiece key,
-                quiche::QuicheStringPiece value) override;
+  void OnHeader(absl::string_view key, absl::string_view value) override;
   void OnHeaderBlockEnd(size_t header_bytes_parsed,
                         size_t compressed_header_bytes_parsed) override;
 
@@ -410,7 +410,7 @@ bool SpdyTestDeframerImpl::AtFrameEnd() {
 
 void SpdyTestDeframerImpl::OnAltSvc(
     SpdyStreamId stream_id,
-    quiche::QuicheStringPiece origin,
+    absl::string_view origin,
     const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector) {
   SPDY_DVLOG(1) << "OnAltSvc stream_id: " << stream_id;
   CHECK_EQ(frame_type_, UNSET)
@@ -461,7 +461,8 @@ void SpdyTestDeframerImpl::OnDataFrameHeader(SpdyStreamId stream_id,
 
 // The SpdyFramer will not process any more data at this point.
 void SpdyTestDeframerImpl::OnError(
-    http2::Http2DecoderAdapter::SpdyFramerError error) {
+    http2::Http2DecoderAdapter::SpdyFramerError error,
+    std::string /*detailed_error*/) {
   SPDY_DVLOG(1) << "SpdyFramer detected an error in the stream: "
                 << http2::Http2DecoderAdapter::SpdyFramerErrorToString(error)
                 << "     frame_type_: " << Http2FrameTypeToString(frame_type_);
@@ -473,15 +474,15 @@ void SpdyTestDeframerImpl::OnError(
 // The frame may also contain data. After this OnGoAwayFrameData will be called
 // for any non-zero amount of data, and after that it will be called with len==0
 // to indicate the end of the GOAWAY frame.
-void SpdyTestDeframerImpl::OnGoAway(SpdyStreamId last_good_stream_id,
+void SpdyTestDeframerImpl::OnGoAway(SpdyStreamId last_accepted_stream_id,
                                     SpdyErrorCode error_code) {
-  SPDY_DVLOG(1) << "OnGoAway last_good_stream_id: " << last_good_stream_id
-                << "     error code: " << error_code;
+  SPDY_DVLOG(1) << "OnGoAway last_accepted_stream_id: "
+                << last_accepted_stream_id << "     error code: " << error_code;
   CHECK_EQ(frame_type_, UNSET)
       << "   frame_type_=" << Http2FrameTypeToString(frame_type_);
   frame_type_ = GOAWAY;
   goaway_ir_ =
-      std::make_unique<SpdyGoAwayIR>(last_good_stream_id, error_code, "");
+      std::make_unique<SpdyGoAwayIR>(last_accepted_stream_id, error_code, "");
   goaway_description_ = std::make_unique<std::string>();
 }
 
@@ -755,8 +756,8 @@ void SpdyTestDeframerImpl::OnHeaderBlockStart() {
   got_hpack_end_ = false;
 }
 
-void SpdyTestDeframerImpl::OnHeader(quiche::QuicheStringPiece key,
-                                    quiche::QuicheStringPiece value) {
+void SpdyTestDeframerImpl::OnHeader(absl::string_view key,
+                                    absl::string_view value) {
   CHECK(frame_type_ == HEADERS || frame_type_ == CONTINUATION ||
         frame_type_ == PUSH_PROMISE)
       << "   frame_type_=" << Http2FrameTypeToString(frame_type_);

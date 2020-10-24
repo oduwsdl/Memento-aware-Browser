@@ -6,8 +6,6 @@
 
 #include <vector>
 
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
 #include "build/build_config.h"
 
 namespace net {
@@ -15,6 +13,19 @@ namespace features {
 
 const base::Feature kAcceptLanguageHeader{"AcceptLanguageHeader",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kCapReferrerToOriginOnCrossOrigin{
+    "CapReferrerToOriginOnCrossOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDnsTransactionDynamicTimeouts{
+    "DnsTransactionDynamicTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<double> kDnsTransactionTimeoutMultiplier{
+    &kDnsTransactionDynamicTimeouts, "DnsTransactionTimeoutMultiplier", 7.5};
+
+const base::FeatureParam<base::TimeDelta> kDnsMinTransactionTimeout{
+    &kDnsTransactionDynamicTimeouts, "DnsMinTransactionTimeout",
+    base::TimeDelta::FromSeconds(12)};
 
 const base::Feature kDnsHttpssvc{"DnsHttpssvc",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
@@ -47,35 +58,9 @@ const base::Feature kAvoidH2Reprioritization{"AvoidH2Reprioritization",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace dns_httpssvc_experiment {
-namespace {
-bool ListContainsDomain(const std::string& domain_list,
-                        base::StringPiece domain) {
-  std::vector<base::StringPiece> parsed_list = base::SplitStringPiece(
-      domain_list, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  return std::find(parsed_list.begin(), parsed_list.end(), domain) !=
-         parsed_list.end();
-}
-}  // namespace
-
 base::TimeDelta GetExtraTimeAbsolute() {
   DCHECK(base::FeatureList::IsEnabled(features::kDnsHttpssvc));
   return base::TimeDelta::FromMilliseconds(kDnsHttpssvcExtraTimeMs.Get());
-}
-
-bool IsExperimentDomain(base::StringPiece domain) {
-  if (!base::FeatureList::IsEnabled(features::kDnsHttpssvc))
-    return false;
-  // TODO(dmcardle): Can we cache the results to avoid reparsing the
-  // comma-separated lists once per DnsTask?
-  return ListContainsDomain(kDnsHttpssvcExperimentDomains.Get(), domain);
-}
-
-bool IsControlDomain(base::StringPiece domain) {
-  if (!base::FeatureList::IsEnabled(features::kDnsHttpssvc))
-    return false;
-  if (kDnsHttpssvcControlDomainWildcard.Get())
-    return !IsExperimentDomain(domain);
-  return ListContainsDomain(kDnsHttpssvcControlDomains.Get(), domain);
 }
 }  // namespace dns_httpssvc_experiment
 
@@ -106,6 +91,28 @@ const base::Feature kPartitionSSLSessionsByNetworkIsolationKey{
 const base::Feature kPartitionExpectCTStateByNetworkIsolationKey{
     "PartitionExpectCTStateByNetworkIsolationKey",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPartitionNelAndReportingByNetworkIsolationKey{
+    "PartitionNelAndReportingByNetworkIsolationKey",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kExpectCTPruning{"ExpectCTPruning",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
+NET_EXPORT extern const base::FeatureParam<int>
+    kExpectCTPruneMax(&kExpectCTPruning, "ExpectCTPruneMax", 2000);
+NET_EXPORT extern const base::FeatureParam<int>
+    kExpectCTPruneMin(&kExpectCTPruning, "ExpectCTPruneMin", 1800);
+NET_EXPORT extern const base::FeatureParam<int> kExpectCTSafeFromPruneDays(
+    &kExpectCTPruning,
+    "ExpectCTSafeFromPruneDays",
+    40);
+NET_EXPORT extern const base::FeatureParam<int> kExpectCTMaxEntriesPerNik(
+    &kExpectCTPruning,
+    "ExpectCTMaxEntriesPerNik",
+    20);
+NET_EXPORT extern const base::FeatureParam<int>
+    kExpectCTPruneDelaySecs(&kExpectCTPruning, "ExpectCTPruneDelaySecs", 60);
 
 const base::Feature kTLS13KeyUpdate{"TLS13KeyUpdate",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -144,10 +151,6 @@ const base::FeatureParam<int>
         &kRecentCreationTimeGrantsLegacyCookieSemantics,
         "RecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds", 0};
 
-const base::Feature kBlockExternalRequestsFromNonSecureInitiators{
-    "BlockExternalRequestsFromNonSecureInitiators",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 const base::Feature kCertVerifierBuiltinFeature{
     "CertVerifierBuiltin", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -156,12 +159,11 @@ const base::Feature kCertVerifierBuiltinFeature{
 const base::Feature kAppendFrameOriginToNetworkIsolationKey{
     "AppendFrameOriginToNetworkIsolationKey", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kUseRegistrableDomainInNetworkIsolationKey{
-    "UseRegistrableDomainInNetworkIsolationKey",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kTurnOffStreamingMediaCachingOnBattery{
+    "TurnOffStreamingMediaCachingOnBattery", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kTurnOffStreamingMediaCaching{
-    "TurnOffStreamingMediaCaching", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kTurnOffStreamingMediaCachingAlways{
+    "TurnOffStreamingMediaCachingAlways", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLegacyTLSEnforced{"LegacyTLSEnforced",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -174,6 +176,38 @@ const base::Feature kTLSLegacyCryptoFallbackForMetrics{
 
 const base::Feature kUseLookalikesForNavigationSuggestions{
     "UseLookalikesForNavigationSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kReportPoorConnectivity{"ReportPoorConnectivity",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPreemptiveMobileNetworkActivation{
+    "PreemptiveMobileNetworkActivation", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kLimitOpenUDPSockets{"LimitOpenUDPSockets",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
+extern const base::FeatureParam<int> kLimitOpenUDPSocketsMax(
+    &kLimitOpenUDPSockets,
+    "LimitOpenUDPSocketsMax",
+    6000);
+
+const base::Feature kTimeoutTcpConnectAttempt{
+    "TimeoutTcpConnectAttempt", base::FEATURE_DISABLED_BY_DEFAULT};
+
+extern const base::FeatureParam<double> kTimeoutTcpConnectAttemptRTTMultiplier(
+    &kTimeoutTcpConnectAttempt,
+    "TimeoutTcpConnectAttemptRTTMultiplier",
+    5.0);
+
+extern const base::FeatureParam<base::TimeDelta> kTimeoutTcpConnectAttemptMin(
+    &kTimeoutTcpConnectAttempt,
+    "TimeoutTcpConnectAttemptMin",
+    base::TimeDelta::FromSeconds(8));
+
+extern const base::FeatureParam<base::TimeDelta> kTimeoutTcpConnectAttemptMax(
+    &kTimeoutTcpConnectAttempt,
+    "TimeoutTcpConnectAttemptMax",
+    base::TimeDelta::FromSeconds(30));
 
 }  // namespace features
 }  // namespace net

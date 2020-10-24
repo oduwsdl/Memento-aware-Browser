@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "third_party/boringssl/src/include/openssl/x509.h"
 #include "net/third_party/quiche/src/quic/core/crypto/proof_verifier.h"
 #include "net/third_party/quiche/src/quic/core/http/quic_spdy_client_stream.h"
@@ -27,7 +28,6 @@
 #include "net/third_party/quiche/src/quic/test_tools/quic_spdy_stream_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
 #include "net/third_party/quiche/src/quic/tools/quic_url.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 
 namespace quic {
@@ -49,7 +49,7 @@ class RecordingProofVerifier : public ProofVerifier {
       const uint16_t port,
       const std::string& server_config,
       QuicTransportVersion transport_version,
-      quiche::QuicheStringPiece chlo_hash,
+      absl::string_view chlo_hash,
       const std::vector<std::string>& certs,
       const std::string& cert_sct,
       const std::string& signature,
@@ -423,9 +423,7 @@ ssize_t QuicTestClient::SendRequestAndRstTogether(const std::string& uri) {
 
   QuicStreamId stream_id = GetNthClientInitiatedBidirectionalStreamId(
       session->transport_version(), 0);
-  QuicStream* stream = session->GetOrCreateStream(stream_id);
-  session->ResetStream(stream_id, QUIC_STREAM_CANCELLED,
-                       stream->stream_bytes_written());
+  session->ResetStream(stream_id, QUIC_STREAM_CANCELLED);
   return ret;
 }
 
@@ -440,7 +438,7 @@ void QuicTestClient::SendRequestsAndWaitForResponses(
 
 ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
     const spdy::SpdyHeaderBlock* headers,
-    quiche::QuicheStringPiece body,
+    absl::string_view body,
     bool fin,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   if (headers) {
@@ -484,18 +482,18 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
 }
 
 ssize_t QuicTestClient::SendMessage(const spdy::SpdyHeaderBlock& headers,
-                                    quiche::QuicheStringPiece body) {
+                                    absl::string_view body) {
   return SendMessage(headers, body, /*fin=*/true);
 }
 
 ssize_t QuicTestClient::SendMessage(const spdy::SpdyHeaderBlock& headers,
-                                    quiche::QuicheStringPiece body,
+                                    absl::string_view body,
                                     bool fin) {
   return SendMessage(headers, body, fin, /*flush=*/true);
 }
 
 ssize_t QuicTestClient::SendMessage(const spdy::SpdyHeaderBlock& headers,
-                                    quiche::QuicheStringPiece body,
+                                    absl::string_view body,
                                     bool fin,
                                     bool flush) {
   // Always force creation of a stream for SendMessage.
@@ -517,8 +515,7 @@ ssize_t QuicTestClient::SendData(
     const std::string& data,
     bool last_data,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
-  return GetOrCreateStreamAndSendRequest(nullptr,
-                                         quiche::QuicheStringPiece(data),
+  return GetOrCreateStreamAndSendRequest(nullptr, absl::string_view(data),
                                          last_data, std::move(ack_listener));
 }
 
@@ -607,10 +604,6 @@ QuicErrorCode QuicTestClient::connection_error() {
   return client()->connection_error();
 }
 
-MockableQuicClient* QuicTestClient::client() {
-  return client_.get();
-}
-
 const std::string& QuicTestClient::cert_common_name() const {
   return reinterpret_cast<RecordingProofVerifier*>(client_->proof_verifier())
       ->common_name();
@@ -638,7 +631,10 @@ bool QuicTestClient::connected() const {
 }
 
 void QuicTestClient::Connect() {
-  DCHECK(!connected());
+  if (connected()) {
+    QUIC_BUG << "Cannot connect already-connected client";
+    return;
+  }
   if (!connect_attempted_) {
     client_->Initialize();
   }
@@ -712,7 +708,7 @@ bool QuicTestClient::WaitUntil(int timeout_ms, std::function<bool()> trigger) {
   return true;
 }
 
-ssize_t QuicTestClient::Send(quiche::QuicheStringPiece data) {
+ssize_t QuicTestClient::Send(absl::string_view data) {
   return SendData(std::string(data), false);
 }
 
@@ -887,7 +883,7 @@ void QuicTestClient::WaitForWriteToFlush() {
 
 QuicTestClient::TestClientDataToResend::TestClientDataToResend(
     std::unique_ptr<spdy::SpdyHeaderBlock> headers,
-    quiche::QuicheStringPiece body,
+    absl::string_view body,
     bool fin,
     QuicTestClient* test_client,
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener)

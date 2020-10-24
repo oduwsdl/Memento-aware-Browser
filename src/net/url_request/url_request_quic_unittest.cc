@@ -236,10 +236,10 @@ class URLRequestQuicTest
 
     // Now set up index so that it pushes kitten and favicon.
     quic::QuicBackendResponse::ServerPushInfo push_info1(
-        quic::QuicUrl(UrlFromPath(kKittenPath)), spdy::SpdyHeaderBlock(),
+        quic::QuicUrl(UrlFromPath(kKittenPath)), spdy::Http2HeaderBlock(),
         spdy::kV3LowestPriority, kKittenBodyValue);
     quic::QuicBackendResponse::ServerPushInfo push_info2(
-        quic::QuicUrl(UrlFromPath(kFaviconPath)), spdy::SpdyHeaderBlock(),
+        quic::QuicUrl(UrlFromPath(kFaviconPath)), spdy::Http2HeaderBlock(),
         spdy::kV3LowestPriority, kFaviconBodyValue);
     memory_cache_backend_.AddSimpleResponseWithServerPushResources(
         kTestServerHost, kIndexPath, kIndexStatus, kIndexBodyValue,
@@ -341,20 +341,21 @@ class CheckLoadTimingDelegate : public TestDelegate {
 class WaitForCompletionNetworkDelegate : public net::TestNetworkDelegate {
  public:
   WaitForCompletionNetworkDelegate(
-      const base::Closure& all_requests_completed_callback,
+      base::OnceClosure all_requests_completed_callback,
       size_t num_expected_requests)
-      : all_requests_completed_callback_(all_requests_completed_callback),
+      : all_requests_completed_callback_(
+            std::move(all_requests_completed_callback)),
         num_expected_requests_(num_expected_requests) {}
 
   void OnCompleted(URLRequest* request, bool started, int net_error) override {
     net::TestNetworkDelegate::OnCompleted(request, started, net_error);
     num_expected_requests_--;
     if (num_expected_requests_ == 0)
-      all_requests_completed_callback_.Run();
+      std::move(all_requests_completed_callback_).Run();
   }
 
  private:
-  const base::Closure all_requests_completed_callback_;
+  base::OnceClosure all_requests_completed_callback_;
   size_t num_expected_requests_;
   DISALLOW_COPY_AND_ASSIGN(WaitForCompletionNetworkDelegate);
 };
@@ -469,9 +470,10 @@ TEST_P(URLRequestQuicTest, CancelPushIfCached_SomeCached) {
   EXPECT_TRUE(end_entry_2->HasParams());
   EXPECT_EQ(-400, GetNetErrorCodeFromParams(*end_entry_2));
 
-#if !defined(OS_FUCHSIA) && !defined(OS_IOS)
+#if !defined(OS_FUCHSIA) && !defined(OS_IOS) && !defined(OS_APPLE)
   // TODO(crbug.com/813631): Make this work on Fuchsia.
   // TODO(crbug.com/1032568): Make this work on iOS.
+  // TODO(crbug.com/1128459): Turn this on for ARM mac.
 
   // Wait until the server has processed all errors which is
   // happening asynchronously
@@ -578,7 +580,7 @@ TEST_P(URLRequestQuicTest, CancelPushIfCached_AllCached) {
   EXPECT_FALSE(end_entry_2->HasParams());
   EXPECT_FALSE(GetOptionalNetErrorCodeFromParams(*end_entry_2));
 
-#if !defined(OS_FUCHSIA) && !defined(OS_IOS) && !defined(OS_MACOSX)
+#if !defined(OS_FUCHSIA) && !defined(OS_APPLE)
   // TODO(crbug.com/813631): Make this work on Fuchsia.
   // TODO(crbug.com/1032568): Make this work on iOS.
   // TODO(crbug.com/1087378): Flaky on Mac.
@@ -705,14 +707,6 @@ TEST_P(URLRequestQuicTest, RequestHeadersCallback) {
 // Tests that if there's an Expect-CT failure at the QUIC layer, a report is
 // generated.
 TEST_P(URLRequestQuicTest, ExpectCT) {
-  // Expect-CT seems not to supported for quic::PROTOCOL_TLS1_3 handshakes.
-  // TODO(https://crbug.com/1090838): Remove this early exit once that is fixed.
-  if (GetParam().handshake_protocol == quic::PROTOCOL_TLS1_3) {
-    // Need this to avoid a DCHECK.
-    Init();
-    return;
-  }
-
   TransportSecurityState::SetRequireCTForTesting(true);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(

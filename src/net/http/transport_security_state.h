@@ -303,10 +303,10 @@ class NET_EXPORT TransportSecurityState {
     virtual void Send(const GURL& report_uri,
                       base::StringPiece content_type,
                       base::StringPiece report,
-                      const base::Callback<void()>& success_callback,
-                      const base::Callback<void(const GURL&,
-                                                int /* net_error */,
-                                                int /* http_response_code */)>&
+                      base::OnceCallback<void()> success_callback,
+                      base::OnceCallback<void(const GURL&,
+                                              int /* net_error */,
+                                              int /* http_response_code */)>
                           error_callback) = 0;
 
    protected:
@@ -459,13 +459,14 @@ class NET_EXPORT TransportSecurityState {
       const NetworkIsolationKey& network_isolation_key,
       const ExpectCTState& state);
 
-  // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given
-  // time.
+  // Deletes all dynamic data (e.g. HSTS or HPKP data) created between a time
+  // period  [|start_time|, |end_time|).
   //
   // If any entries are deleted, the new state will be persisted through
   // the Delegate (if any). Calls |callback| when data is persisted to disk.
-  void DeleteAllDynamicDataSince(const base::Time& time,
-                                 base::OnceClosure callback);
+  void DeleteAllDynamicDataBetween(base::Time start_time,
+                                   base::Time end_time,
+                                   base::OnceClosure callback);
 
   // Deletes any dynamic data stored for |host| (e.g. HSTS or HPKP data).
   // If |host| doesn't have an exact entry then no action is taken. Does
@@ -574,6 +575,9 @@ class NET_EXPORT TransportSecurityState {
   void EnableStaticPinsForTesting() { enable_static_pins_ = true; }
   bool has_dynamic_pkp_state() const { return !enabled_pkp_hosts_.empty(); }
 
+  // The number of cached ExpectCTState entries.
+  size_t num_expect_ct_entries() const;
+
  private:
   friend class TransportSecurityStateTest;
   friend class TransportSecurityStateStaticFuzzer;
@@ -667,6 +671,16 @@ class NET_EXPORT TransportSecurityState {
       const std::string& hashed_host,
       const NetworkIsolationKey& network_isolation_key);
 
+  // Checks if Expect-CT entries should be pruned, based on number of them and
+  // when entries were last pruned, and then performs pruning if necessary.
+  void MaybePruneExpectCTState();
+
+  // Sort ExpectCTState based on retention priority, with earlier entries to be
+  // removed first. Transient entries put in the front, then report-only
+  // entries, then entries are sorted by age, oldest first.
+  static bool ExpectCTPruningSorter(const ExpectCTStateMap::iterator& it1,
+                                    const ExpectCTStateMap::iterator& it2);
+
   // The sets of hosts that have enabled TransportSecurity. |domain| will always
   // be empty for a STSState, PKPState, or ExpectCTState in these maps; the
   // domain comes from the map keys instead. In addition, |upgrade_mode| in the
@@ -704,6 +718,9 @@ class NET_EXPORT TransportSecurityState {
   // on construction of the TransportSecurityStateObject to avoid repeatedly
   // querying the feature.
   bool key_expect_ct_by_nik_;
+
+  // The earliest possible time for the next pruning of Expect-CT state.
+  base::Time earliest_next_prune_expect_ct_time_;
 
   std::set<std::string> hsts_host_bypass_list_;
 

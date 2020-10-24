@@ -64,11 +64,6 @@ void WriteIpcMessageIdAsProtozero(uint32_t message_id,
     case ExtensionMsgStart:
       message_class = ChromeLegacyIpc::CLASS_EXTENSION;
       break;
-    case TextInputClientMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_TEXT_INPUT_CLIENT;
-      break;
-    case PrerenderMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_PRERENDER;
       break;
     case ChromotingMsgStart:
       message_class = ChromeLegacyIpc::CLASS_CHROMOTING;
@@ -82,20 +77,11 @@ void WriteIpcMessageIdAsProtozero(uint32_t message_id,
     case EncryptedMediaMsgStart:
       message_class = ChromeLegacyIpc::CLASS_ENCRYPTED_MEDIA;
       break;
-    case CastMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_CAST;
-      break;
     case GinJavaBridgeMsgStart:
       message_class = ChromeLegacyIpc::CLASS_GIN_JAVA_BRIDGE;
       break;
     case ChromeUtilityPrintingMsgStart:
       message_class = ChromeLegacyIpc::CLASS_CHROME_UTILITY_PRINTING;
-      break;
-    case OzoneGpuMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_OZONE_GPU;
-      break;
-    case WebTestMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_WEB_TEST;
       break;
     case ExtensionsGuestViewMsgStart:
       message_class = ChromeLegacyIpc::CLASS_EXTENSIONS_GUEST_VIEW;

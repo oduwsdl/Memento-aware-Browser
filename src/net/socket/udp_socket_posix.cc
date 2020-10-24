@@ -18,10 +18,10 @@
 #include "base/debug/alias.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/rand_util.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
@@ -51,12 +51,12 @@
 #include "base/strings/utf_string_conversions.h"
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 // This was needed to debug crbug.com/640281.
 // TODO(zhongyi): Remove once the bug is resolved.
 #include <dlfcn.h>
 #include <pthread.h>
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
 namespace net {
 
@@ -70,38 +70,7 @@ const int kActivityMonitorMinimumSamplesForThroughputEstimate = 2;
 const base::TimeDelta kActivityMonitorMsThreshold =
     base::TimeDelta::FromMilliseconds(100);
 
-#if defined(OS_MACOSX)
-// When enabling multicast using setsockopt(IP_MULTICAST_IF) MacOS
-// requires passing IPv4 address instead of interface index. This function
-// resolves IPv4 address by interface index. The |address| is returned in
-// network order.
-int GetIPv4AddressFromIndex(int socket, uint32_t index, uint32_t* address) {
-  if (!index) {
-    *address = htonl(INADDR_ANY);
-    return OK;
-  }
-
-  sockaddr_in* result = nullptr;
-
-  ifreq ifr;
-  ifr.ifr_addr.sa_family = AF_INET;
-  if (!if_indextoname(index, ifr.ifr_name))
-    return MapSystemError(errno);
-  int rv = ioctl(socket, SIOCGIFADDR, &ifr);
-  if (rv == -1)
-    return MapSystemError(errno);
-  result = reinterpret_cast<sockaddr_in*>(&ifr.ifr_addr);
-
-  if (!result)
-    return ERR_ADDRESS_INVALID;
-
-  *address = result->sin_addr.s_addr;
-  return OK;
-}
-
-#endif  // OS_MACOSX
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 
 // On OSX the file descriptor is guarded to detect the cause of
 // crbug.com/640281. guarded API is supported only on newer versions of OSX,
@@ -167,7 +136,7 @@ const unsigned int GUARD_DUP = 1u << 1;
 
 const guardid_t kSocketFdGuard = 0xD712BC0BC9A4EAD4;
 
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
 int GetSocketFDHash(int fd) {
   return fd ^ 1595649551;
@@ -215,14 +184,18 @@ int UDPSocketPosix::Open(AddressFamily address_family) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_EQ(socket_, kInvalidSocket);
 
+  auto owned_socket_count = TryAcquireGlobalUDPSocketCount();
+  if (owned_socket_count.empty())
+    return ERR_INSUFFICIENT_RESOURCES;
+
   addr_family_ = ConvertAddressFamily(address_family);
   socket_ = CreatePlatformSocket(addr_family_, SOCK_DGRAM, 0);
   if (socket_ == kInvalidSocket)
     return MapSystemError(errno);
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   PCHECK(change_fdguard_np(socket_, nullptr, 0, &kSocketFdGuard,
                            GUARD_CLOSE | GUARD_DUP, nullptr) == 0);
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
   socket_hash_ = GetSocketFDHash(socket_);
   if (!base::SetNonBlocking(socket_)) {
     const int err = MapSystemError(errno);
@@ -231,6 +204,8 @@ int UDPSocketPosix::Open(AddressFamily address_family) {
   }
   if (tag_ != SocketTag())
     tag_.Apply(socket_);
+
+  owned_socket_count_ = std::move(owned_socket_count);
   return OK;
 }
 
@@ -292,6 +267,8 @@ void UDPSocketPosix::ReceivedActivityMonitor::NetworkActivityMonitorIncrement(
 void UDPSocketPosix::Close() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
+  owned_socket_count_.Reset();
+
   if (socket_ == kInvalidSocket)
     return;
 
@@ -313,11 +290,11 @@ void UDPSocketPosix::Close() {
   // Verify that |socket_| hasn't been corrupted. Needed to debug
   // crbug.com/906005.
   CHECK_EQ(socket_hash_, GetSocketFDHash(socket_));
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   PCHECK(IGNORE_EINTR(guarded_close_np(socket_, &kSocketFdGuard)) == 0);
 #else
   PCHECK(IGNORE_EINTR(close(socket_)) == 0);
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
   socket_ = kInvalidSocket;
   addr_family_ = 0;
@@ -393,7 +370,7 @@ int UDPSocketPosix::RecvFrom(IOBuffer* buf,
   if (nread != ERR_IO_PENDING)
     return nread;
 
-  if (!base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+  if (!base::CurrentIOThread::Get()->WatchFileDescriptor(
           socket_, true, base::MessagePumpForIO::WATCH_READ,
           &read_socket_watcher_, &read_watcher_)) {
     PLOG(ERROR) << "WatchFileDescriptor failed on read";
@@ -438,7 +415,7 @@ int UDPSocketPosix::SendToOrWrite(IOBuffer* buf,
   if (result != ERR_IO_PENDING)
     return result;
 
-  if (!base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+  if (!base::CurrentIOThread::Get()->WatchFileDescriptor(
           socket_, true, base::MessagePumpForIO::WATCH_WRITE,
           &write_socket_watcher_, &write_watcher_)) {
     DVPLOG(1) << "WatchFileDescriptor failed on write";
@@ -645,13 +622,13 @@ int UDPSocketPosix::SetDoNotFragment() {
 }
 
 void UDPSocketPosix::SetMsgConfirm(bool confirm) {
-#if !defined(OS_MACOSX) && !defined(OS_IOS)
+#if !defined(OS_APPLE)
   if (confirm) {
     sendto_flags_ |= MSG_CONFIRM;
   } else {
     sendto_flags_ &= ~MSG_CONFIRM;
   }
-#endif  // !defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // !defined(OS_APPLE)
 }
 
 int UDPSocketPosix::AllowAddressReuse() {
@@ -666,7 +643,7 @@ int UDPSocketPosix::SetBroadcast(bool broadcast) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   int value = broadcast ? 1 : 0;
   int rv;
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // SO_REUSEPORT on OSX permits multiple processes to each receive
   // UDP multicast or broadcast datagrams destined for the bound
   // port.
@@ -676,7 +653,7 @@ int UDPSocketPosix::SetBroadcast(bool broadcast) {
   rv = setsockopt(socket_, SOL_SOCKET, SO_REUSEPORT, &value, sizeof(value));
   if (rv != 0)
     return MapSystemError(errno);
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
   rv = setsockopt(socket_, SOL_SOCKET, SO_BROADCAST, &value, sizeof(value));
 
   return rv == 0 ? OK : MapSystemError(errno);
@@ -936,17 +913,9 @@ int UDPSocketPosix::SetMulticastOptions() {
   if (multicast_interface_ != 0) {
     switch (addr_family_) {
       case AF_INET: {
-#if defined(OS_MACOSX)
-        ip_mreq mreq = {};
-        int error = GetIPv4AddressFromIndex(socket_, multicast_interface_,
-                                            &mreq.imr_interface.s_addr);
-        if (error != OK)
-          return error;
-#else   //  defined(OS_MACOSX)
         ip_mreqn mreq = {};
         mreq.imr_ifindex = multicast_interface_;
         mreq.imr_address.s_addr = htonl(INADDR_ANY);
-#endif  //  !defined(OS_MACOSX)
         int rv = setsockopt(socket_, IPPROTO_IP, IP_MULTICAST_IF,
                             reinterpret_cast<const char*>(&mreq), sizeof(mreq));
         if (rv)
@@ -981,7 +950,7 @@ int UDPSocketPosix::DoBind(const IPEndPoint& address) {
 #if defined(OS_CHROMEOS)
   if (last_error == EINVAL)
     return ERR_ADDRESS_IN_USE;
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   if (last_error == EADDRNOTAVAIL)
     return ERR_ADDRESS_IN_USE;
 #endif
@@ -1009,18 +978,9 @@ int UDPSocketPosix::JoinGroup(const IPAddress& group_address) const {
     case IPAddress::kIPv4AddressSize: {
       if (addr_family_ != AF_INET)
         return ERR_ADDRESS_INVALID;
-
-#if defined(OS_MACOSX)
-      ip_mreq mreq = {};
-      int error = GetIPv4AddressFromIndex(socket_, multicast_interface_,
-                                          &mreq.imr_interface.s_addr);
-      if (error != OK)
-        return error;
-#else
       ip_mreqn mreq = {};
       mreq.imr_ifindex = multicast_interface_;
       mreq.imr_address.s_addr = htonl(INADDR_ANY);
-#endif
       memcpy(&mreq.imr_multiaddr, group_address.bytes().data(),
              IPAddress::kIPv4AddressSize);
       int rv = setsockopt(socket_, IPPROTO_IP, IP_ADD_MEMBERSHIP,
@@ -1464,7 +1424,7 @@ void UDPSocketPosix::StopWatchingFileDescriptor() {
 }
 
 bool UDPSocketPosix::InternalWatchFileDescriptor() {
-  return base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
+  return base::CurrentIOThread::Get()->WatchFileDescriptor(
       socket_, true, base::MessagePumpForIO::WATCH_WRITE,
       &write_socket_watcher_, write_async_watcher_.get());
 }
@@ -1488,6 +1448,19 @@ int UDPSocketPosix::ResetWrittenBytes() {
   int bytes = written_bytes_;
   written_bytes_ = 0;
   return bytes;
+}
+
+int UDPSocketPosix::SetIOSNetworkServiceType(int ios_network_service_type) {
+  if (ios_network_service_type == 0) {
+    return OK;
+  }
+#if defined(OS_IOS)
+  if (setsockopt(socket_, SOL_SOCKET, SO_NET_SERVICE_TYPE,
+                 &ios_network_service_type, sizeof(ios_network_service_type))) {
+    return MapSystemError(errno);
+  }
+#endif  // defined(OS_IOS)
+  return OK;
 }
 
 }  // namespace net

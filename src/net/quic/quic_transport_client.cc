@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
+#include "base/strings/abseil_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_resolution_request.h"
@@ -39,7 +40,7 @@ std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
     return std::make_unique<ProofVerifierChromium>(
         context->cert_verifier(), context->ct_policy_enforcer(),
         context->transport_security_state(),
-        context->cert_transparency_verifier(),
+        context->cert_transparency_verifier(), context->sct_auditing_delegate(),
         HostsFromOrigins(
             context->quic_context()->params()->origins_to_force_quic_on),
         isolation_key);
@@ -274,8 +275,9 @@ void QuicTransportClient::CreateConnection() {
       quic::QuicUtils::CreateRandomConnectionId(
           quic_context_->random_generator());
   connection_ = std::make_unique<quic::QuicConnection>(
-      connection_id, ToQuicSocketAddress(server_address),
-      quic_context_->helper(), alarm_factory_.get(),
+      connection_id, quic::QuicSocketAddress(),
+      ToQuicSocketAddress(server_address), quic_context_->helper(),
+      alarm_factory_.get(),
       new QuicChromiumPacketWriter(socket_.get(), task_runner_),
       /* owns_writer */ true, quic::Perspective::IS_CLIENT,
       supported_versions_);
@@ -290,6 +292,10 @@ void QuicTransportClient::CreateConnection() {
       quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds),
       net_log_);
+
+  event_logger_ = std::make_unique<QuicEventLogger>(session_.get(), net_log_);
+  connection_->set_debug_visitor(event_logger_.get());
+  connection_->set_creator_debug_delegate(event_logger_.get());
 
   session_->Initialize();
   packet_reader_->StartReading();
@@ -376,9 +382,8 @@ void QuicTransportClient::OnIncomingUnidirectionalStreamAvailable() {
   visitor_->OnIncomingUnidirectionalStreamAvailable();
 }
 
-void QuicTransportClient::OnDatagramReceived(
-    quiche::QuicheStringPiece datagram) {
-  visitor_->OnDatagramReceived(datagram);
+void QuicTransportClient::OnDatagramReceived(absl::string_view datagram) {
+  visitor_->OnDatagramReceived(base::StringViewToStringPiece(datagram));
 }
 
 void QuicTransportClient::OnCanCreateNewOutgoingBidirectionalStream() {

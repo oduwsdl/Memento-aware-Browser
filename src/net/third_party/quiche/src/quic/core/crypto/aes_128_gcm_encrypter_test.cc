@@ -7,10 +7,10 @@
 #include <memory>
 #include <string>
 
+#include "absl/base/macros.h"
 #include "net/third_party/quiche/src/quic/core/quic_utils.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_arraysize.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 #include "net/third_party/quiche/src/common/test_tools/quiche_test_utils.h"
 
@@ -159,9 +159,9 @@ namespace test {
 // EncryptWithNonce wraps the |Encrypt| method of |encrypter| to allow passing
 // in an nonce and also to allocate the buffer needed for the ciphertext.
 QuicData* EncryptWithNonce(Aes128GcmEncrypter* encrypter,
-                           quiche::QuicheStringPiece nonce,
-                           quiche::QuicheStringPiece associated_data,
-                           quiche::QuicheStringPiece plaintext) {
+                           absl::string_view nonce,
+                           absl::string_view associated_data,
+                           absl::string_view plaintext) {
   size_t ciphertext_size = encrypter->GetCiphertextSize(plaintext.length());
   std::unique_ptr<char[]> ciphertext(new char[ciphertext_size]);
 
@@ -176,7 +176,7 @@ QuicData* EncryptWithNonce(Aes128GcmEncrypter* encrypter,
 class Aes128GcmEncrypterTest : public QuicTest {};
 
 TEST_F(Aes128GcmEncrypterTest, Encrypt) {
-  for (size_t i = 0; i < QUICHE_ARRAYSIZE(test_group_array); i++) {
+  for (size_t i = 0; i < ABSL_ARRAYSIZE(test_group_array); i++) {
     SCOPED_TRACE(i);
     const TestVector* test_vectors = test_group_array[i];
     const TestGroupInfo& test_info = test_group_info[i];
@@ -200,12 +200,12 @@ TEST_F(Aes128GcmEncrypterTest, Encrypt) {
 
       Aes128GcmEncrypter encrypter;
       ASSERT_TRUE(encrypter.SetKey(key));
-      std::unique_ptr<QuicData> encrypted(EncryptWithNonce(
-          &encrypter, iv,
-          // This deliberately tests that the encrypter can
-          // handle an AAD that is set to nullptr, as opposed
-          // to a zero-length, non-nullptr pointer.
-          aad.length() ? aad : quiche::QuicheStringPiece(), pt));
+      std::unique_ptr<QuicData> encrypted(
+          EncryptWithNonce(&encrypter, iv,
+                           // This deliberately tests that the encrypter can
+                           // handle an AAD that is set to nullptr, as opposed
+                           // to a zero-length, non-nullptr pointer.
+                           aad.length() ? aad : absl::string_view(), pt));
       ASSERT_TRUE(encrypted.get());
 
       ASSERT_EQ(ct.length() + tag.length(), encrypted->length());

@@ -46,7 +46,7 @@ class MockQuicSpdyClientSession : public QuicSpdyClientSession {
       delete;
   ~MockQuicSpdyClientSession() override = default;
 
-  MOCK_METHOD(void, CloseStream, (QuicStreamId stream_id), (override));
+  using QuicSession::ActivateStream;
 
  private:
   QuicCryptoClientConfig crypto_config_;
@@ -67,14 +67,18 @@ class QuicSpdyClientStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
                  &push_promise_index_),
         body_("hello world") {
     session_.Initialize();
+    connection_->AdvanceTime(QuicTime::Delta::FromSeconds(1));
 
     headers_[":status"] = "200";
     headers_["content-length"] = "11";
 
-    stream_ = std::make_unique<QuicSpdyClientStream>(
+    auto stream = std::make_unique<QuicSpdyClientStream>(
         GetNthClientInitiatedBidirectionalStreamId(
             connection_->transport_version(), 0),
         &session_, BIDIRECTIONAL);
+    stream_ = stream.get();
+    session_.ActivateStream(std::move(stream));
+
     stream_visitor_ = std::make_unique<StreamVisitor>();
     stream_->set_visitor(stream_visitor_.get());
   }
@@ -91,7 +95,7 @@ class QuicSpdyClientStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
   QuicClientPushPromiseIndex push_promise_index_;
 
   MockQuicSpdyClientSession session_;
-  std::unique_ptr<QuicSpdyClientStream> stream_;
+  QuicSpdyClientStream* stream_;
   std::unique_ptr<StreamVisitor> stream_visitor_;
   SpdyHeaderBlock headers_;
   std::string body_;

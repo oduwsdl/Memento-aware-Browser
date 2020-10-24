@@ -37,7 +37,7 @@ class QUIC_EXPORT_PRIVATE HandshakerDelegateInterface {
 
   // Called when both 1-RTT read and write keys are available. Only used in TLS
   // handshake.
-  virtual void OnOneRttKeysAvailable() = 0;
+  virtual void OnTlsHandshakeComplete() = 0;
 
   // Called to discard old decryption keys to stop processing packets of
   // encryption |level|.
@@ -58,7 +58,7 @@ class QUIC_EXPORT_PRIVATE HandshakerDelegateInterface {
 
   // Called when 0-RTT data is rejected by the server. This is only called in
   // TLS handshakes and only called on clients.
-  virtual void OnZeroRttRejected() = 0;
+  virtual void OnZeroRttRejected(int reason) = 0;
 
   // Fills in |params| with values from the delegate's QuicConfig.
   // Returns whether the operation succeeded.
@@ -71,6 +71,9 @@ class QUIC_EXPORT_PRIVATE HandshakerDelegateInterface {
       const TransportParameters& params,
       bool is_resumption,
       std::string* error_details) = 0;
+
+  // Called at the end of an handshake operation callback.
+  virtual void OnHandshakeCallbackDone() = 0;
 };
 
 }  // namespace quic

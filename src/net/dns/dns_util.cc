@@ -8,12 +8,14 @@
 #include <limits.h>
 
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "base/big_endian.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -160,22 +162,22 @@ bool IsValidHostLabelCharacter(char c, bool is_first_char) {
          (c >= '0' && c <= '9') || (!is_first_char && c == '-') || c == '_';
 }
 
-std::string DNSDomainToString(const base::StringPiece& domain) {
+base::Optional<std::string> DnsDomainToString(base::StringPiece domain) {
   std::string ret;
 
   for (unsigned i = 0; i < domain.size() && domain[i]; i += domain[i] + 1) {
 #if CHAR_MIN < 0
     if (domain[i] < 0)
-      return std::string();
+      return base::nullopt;
 #endif
     if (domain[i] > kMaxLabelLength)
-      return std::string();
+      return base::nullopt;
 
     if (i)
       ret += ".";
 
     if (static_cast<unsigned>(domain[i]) + i + 1 > domain.size())
-      return std::string();
+      return base::nullopt;
 
     ret.append(domain.data() + i + 1, domain[i]);
   }
@@ -291,6 +293,8 @@ uint16_t DnsQueryTypeToQtype(DnsQueryType dns_query_type) {
       return dns_protocol::kTypeSRV;
     case DnsQueryType::INTEGRITY:
       return dns_protocol::kExperimentalTypeIntegrity;
+    case DnsQueryType::HTTPS:
+      return dns_protocol::kTypeHttps;
   }
 }
 
@@ -365,14 +369,13 @@ std::string GetDohProviderIdForHistogramFromNameserver(
   return entries.empty() ? "Other" : entries[0]->provider;
 }
 
-std::string SecureDnsModeToString(
-    const DnsConfig::SecureDnsMode secure_dns_mode) {
+std::string SecureDnsModeToString(const SecureDnsMode secure_dns_mode) {
   switch (secure_dns_mode) {
-    case DnsConfig::SecureDnsMode::OFF:
+    case SecureDnsMode::kOff:
       return "Off";
-    case DnsConfig::SecureDnsMode::AUTOMATIC:
+    case SecureDnsMode::kAutomatic:
       return "Automatic";
-    case DnsConfig::SecureDnsMode::SECURE:
+    case SecureDnsMode::kSecure:
       return "Secure";
   }
 }

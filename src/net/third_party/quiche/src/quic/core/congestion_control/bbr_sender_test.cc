@@ -115,9 +115,6 @@ class BbrSenderTest : public QuicTest {
   }
 
   void SetUp() override {
-    SetQuicReloadableFlag(quic_fix_bbr_cwnd_in_bandwidth_resumption, true);
-    SetQuicReloadableFlag(quic_bbr_fix_pacing_rate, true);
-    SetQuicReloadableFlag(quic_bbr_donot_inject_bandwidth, true);
     if (GetQuicFlag(FLAGS_quic_bbr_test_regression_mode) == "regress") {
       SendAlgorithmTestResult expected;
       ASSERT_TRUE(LoadSendAlgorithmTestResult(&expected));
@@ -295,8 +292,6 @@ TEST_F(BbrSenderTest, SetInitialCongestionWindow) {
 
 // Test a simple long data transfer in the default setup.
 TEST_F(BbrSenderTest, SimpleTransfer) {
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
 
   // At startup make sure we are at the default.
@@ -344,8 +339,6 @@ TEST_F(BbrSenderTest, SimpleTransferSmallBuffer) {
 }
 
 TEST_F(BbrSenderTest, RemoveBytesLostInRecovery) {
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
 
   DriveOutOfStartup();
@@ -424,9 +417,6 @@ TEST_F(BbrSenderTest, SimpleTransferAckDecimation) {
       GetQuicFlag(FLAGS_quic_max_congestion_window), &random_,
       QuicConnectionPeer::GetStats(bbr_sender_.connection()));
   QuicConnectionPeer::SetSendAlgorithm(bbr_sender_.connection(), sender_);
-  // Enable Ack Decimation on the receiver.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(),
-                                 AckMode::ACK_DECIMATION);
   CreateDefaultSetup();
 
   // Transfer 12MB.
@@ -448,8 +438,6 @@ TEST_F(BbrSenderTest, SimpleTransferAckDecimation) {
 // Test a simple long data transfer with 2 rtts of aggregation.
 TEST_F(BbrSenderTest, SimpleTransfer2RTTAggregationBytes20RTTWindow) {
   SetConnectionOption(kBSAO);
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
   SetConnectionOption(kBBR4);
   // 2 RTTs of aggregation, with a max of 10kb.
@@ -474,8 +462,6 @@ TEST_F(BbrSenderTest, SimpleTransfer2RTTAggregationBytes20RTTWindow) {
 // Test a simple long data transfer with 2 rtts of aggregation.
 TEST_F(BbrSenderTest, SimpleTransfer2RTTAggregationBytes40RTTWindow) {
   SetConnectionOption(kBSAO);
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
   SetConnectionOption(kBBR5);
   // 2 RTTs of aggregation, with a max of 10kb.
@@ -593,8 +579,6 @@ TEST_F(BbrSenderTest, ApplicationLimitedBurstsWithoutPrior) {
 
 // Verify that the DRAIN phase works correctly.
 TEST_F(BbrSenderTest, Drain) {
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
   const QuicTime::Delta timeout = QuicTime::Delta::FromSeconds(10);
   // Get the queue at the bottleneck, which is the outgoing queue at the port to
@@ -617,17 +601,10 @@ TEST_F(BbrSenderTest, Drain) {
   EXPECT_APPROX_EQ(sender_->BandwidthEstimate() * (1 / 2.885f),
                    sender_->PacingRate(0), 0.01f);
 
-  if (!GetQuicReloadableFlag(quic_bbr_default_exit_startup_on_loss)) {
-    // BBR uses CWND gain of 2.88 during STARTUP, hence it will fill the buffer
-    // with approximately 1.88 BDPs.  Here, we use 1.5 to give some margin for
-    // error.
-    EXPECT_GE(queue->bytes_queued(), 1.5 * kTestBdp);
-  } else {
-    // BBR uses CWND gain of 2 during STARTUP, hence it will fill the buffer
-    // with approximately 1 BDP.  Here, we use 0.8 to give some margin for
-    // error.
-    EXPECT_GE(queue->bytes_queued(), 0.8 * kTestBdp);
-  }
+  // BBR uses CWND gain of 2 during STARTUP, hence it will fill the buffer
+  // with approximately 1 BDP.  Here, we use 0.8 to give some margin for
+  // error.
+  EXPECT_GE(queue->bytes_queued(), 0.8 * kTestBdp);
 
   // Observe increased RTT due to bufferbloat.
   const QuicTime::Delta queueing_delay =
@@ -664,9 +641,6 @@ TEST_F(BbrSenderTest, Drain) {
 // TODO(wub): Re-enable this test once default drain_gain changed to 0.75.
 // Verify that the DRAIN phase works correctly.
 TEST_F(BbrSenderTest, DISABLED_ShallowDrain) {
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
-
   CreateDefaultSetup();
   const QuicTime::Delta timeout = QuicTime::Delta::FromSeconds(10);
   // Get the queue at the bottleneck, which is the outgoing queue at the port to
@@ -755,8 +729,6 @@ TEST_F(BbrSenderTest, ProbeRtt) {
 // bandwidth will not exit high gain phase, and similarly ensure that the
 // connection will exit low gain early if the number of bytes in flight is low.
 TEST_F(BbrSenderTest, InFlightAwareGainCycling) {
-  // Disable Ack Decimation on the receiver, because it can increase srtt.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
   DriveOutOfStartup();
 
@@ -777,7 +749,7 @@ TEST_F(BbrSenderTest, InFlightAwareGainCycling) {
     EXPECT_EQ(BbrSender::PROBE_BW, sender_->ExportDebugState().mode);
     EXPECT_EQ(0, sender_->ExportDebugState().gain_cycle_index);
     EXPECT_APPROX_EQ(kTestLinkBandwidth,
-                     sender_->ExportDebugState().max_bandwidth, 0.01f);
+                     sender_->ExportDebugState().max_bandwidth, 0.02f);
   }
 
   // Now that in-flight is almost zero and the pacing gain is still above 1,
@@ -885,9 +857,6 @@ TEST_F(BbrSenderTest, SimpleTransfer2RTTStartup) {
 TEST_F(BbrSenderTest, SimpleTransferExitStartupOnLoss) {
   CreateDefaultSetup();
 
-  if (!GetQuicReloadableFlag(quic_bbr_default_exit_startup_on_loss)) {
-    SetConnectionOption(kLRTT);
-  }
   EXPECT_EQ(3u, sender_->num_startup_rtts());
 
   // Run until the full bandwidth is reached and check how many rounds it was.
@@ -915,9 +884,6 @@ TEST_F(BbrSenderTest, SimpleTransferExitStartupOnLoss) {
 TEST_F(BbrSenderTest, SimpleTransferExitStartupOnLossSmallBuffer) {
   CreateSmallBufferSetup();
 
-  if (!GetQuicReloadableFlag(quic_bbr_default_exit_startup_on_loss)) {
-    SetConnectionOption(kLRTT);
-  }
   EXPECT_EQ(3u, sender_->num_startup_rtts());
 
   // Run until the full bandwidth is reached and check how many rounds it was.
@@ -971,9 +937,6 @@ TEST_F(BbrSenderTest, DerivedPacingGainStartup) {
 TEST_F(BbrSenderTest, DerivedCWNDGainStartup) {
   CreateSmallBufferSetup();
 
-  if (!GetQuicReloadableFlag(quic_bbr_default_exit_startup_on_loss)) {
-    SetConnectionOption(kBBQ2);
-  }
   EXPECT_EQ(3u, sender_->num_startup_rtts());
   // Verify that Sender is in slow start.
   EXPECT_TRUE(sender_->InSlowStart());
@@ -1005,9 +968,6 @@ TEST_F(BbrSenderTest, DerivedCWNDGainStartup) {
 }
 
 TEST_F(BbrSenderTest, AckAggregationInStartup) {
-  // Disable Ack Decimation on the receiver to avoid loss and make results
-  // consistent.
-  QuicConnectionPeer::SetAckMode(receiver_.connection(), AckMode::TCP_ACKING);
   CreateDefaultSetup();
 
   SetConnectionOption(kBBQ3);
@@ -1066,15 +1026,11 @@ TEST_F(BbrSenderTest, ResumeConnectionState) {
   bbr_sender_.connection()->AdjustNetworkParameters(
       SendAlgorithmInterface::NetworkParams(kTestLinkBandwidth, kTestRtt,
                                             false));
-  if (!GetQuicReloadableFlag(quic_bbr_donot_inject_bandwidth)) {
-    EXPECT_EQ(kTestLinkBandwidth, sender_->ExportDebugState().max_bandwidth);
-    EXPECT_EQ(kTestLinkBandwidth, sender_->BandwidthEstimate());
-  }
   EXPECT_EQ(kTestLinkBandwidth * kTestRtt,
             sender_->ExportDebugState().congestion_window);
-  if (GetQuicReloadableFlag(quic_bbr_fix_pacing_rate)) {
-    EXPECT_EQ(kTestLinkBandwidth, sender_->PacingRate(/*bytes_in_flight=*/0));
-  }
+
+  EXPECT_EQ(kTestLinkBandwidth, sender_->PacingRate(/*bytes_in_flight=*/0));
+
   EXPECT_APPROX_EQ(kTestRtt, sender_->ExportDebugState().min_rtt, 0.01f);
 
   DriveOutOfStartup();
@@ -1150,25 +1106,13 @@ TEST_F(BbrSenderTest, RecalculatePacingRateOnCwndChange1RTT) {
   bbr_sender_.connection()->AdjustNetworkParameters(
       SendAlgorithmInterface::NetworkParams(kTestLinkBandwidth,
                                             QuicTime::Delta::Zero(), false));
-  if (!GetQuicReloadableFlag(quic_bbr_donot_inject_bandwidth)) {
-    EXPECT_EQ(kTestLinkBandwidth, sender_->ExportDebugState().max_bandwidth);
-    EXPECT_EQ(kTestLinkBandwidth, sender_->BandwidthEstimate());
-  }
   EXPECT_LT(previous_cwnd, sender_->ExportDebugState().congestion_window);
 
-  if (GetQuicReloadableFlag(quic_bbr_fix_pacing_rate)) {
-    // Verify pacing rate is re-calculated based on the new cwnd and min_rtt.
-    EXPECT_APPROX_EQ(QuicBandwidth::FromBytesAndTimeDelta(
-                         sender_->ExportDebugState().congestion_window,
-                         sender_->ExportDebugState().min_rtt),
-                     sender_->PacingRate(/*bytes_in_flight=*/0), 0.01f);
-  } else {
-    // Pacing rate is still based on initial cwnd.
-    EXPECT_APPROX_EQ(QuicBandwidth::FromBytesAndTimeDelta(
-                         kInitialCongestionWindowPackets * kDefaultTCPMSS,
-                         sender_->ExportDebugState().min_rtt),
-                     sender_->PacingRate(/*bytes_in_flight=*/0), 0.01f);
-  }
+  // Verify pacing rate is re-calculated based on the new cwnd and min_rtt.
+  EXPECT_APPROX_EQ(QuicBandwidth::FromBytesAndTimeDelta(
+                       sender_->ExportDebugState().congestion_window,
+                       sender_->ExportDebugState().min_rtt),
+                   sender_->PacingRate(/*bytes_in_flight=*/0), 0.01f);
 }
 
 TEST_F(BbrSenderTest, RecalculatePacingRateOnCwndChange0RTT) {
@@ -1180,34 +1124,20 @@ TEST_F(BbrSenderTest, RecalculatePacingRateOnCwndChange0RTT) {
   bbr_sender_.connection()->AdjustNetworkParameters(
       SendAlgorithmInterface::NetworkParams(kTestLinkBandwidth,
                                             QuicTime::Delta::Zero(), false));
-  if (!GetQuicReloadableFlag(quic_bbr_donot_inject_bandwidth)) {
-    EXPECT_EQ(kTestLinkBandwidth, sender_->ExportDebugState().max_bandwidth);
-    EXPECT_EQ(kTestLinkBandwidth, sender_->BandwidthEstimate());
-  }
   EXPECT_LT(kInitialCongestionWindowPackets * kDefaultTCPMSS,
             sender_->ExportDebugState().congestion_window);
   // No Rtt sample is available.
   EXPECT_TRUE(sender_->ExportDebugState().min_rtt.IsZero());
 
-  if (GetQuicReloadableFlag(quic_bbr_fix_pacing_rate)) {
-    // Verify pacing rate is re-calculated based on the new cwnd and initial
-    // RTT.
-    EXPECT_APPROX_EQ(QuicBandwidth::FromBytesAndTimeDelta(
-                         sender_->ExportDebugState().congestion_window,
-                         rtt_stats_->initial_rtt()),
-                     sender_->PacingRate(/*bytes_in_flight=*/0), 0.01f);
-  } else {
-    // Pacing rate is still based on initial cwnd.
-    EXPECT_APPROX_EQ(
-        2.885f * QuicBandwidth::FromBytesAndTimeDelta(
-                     kInitialCongestionWindowPackets * kDefaultTCPMSS,
-                     rtt_stats_->initial_rtt()),
-        sender_->PacingRate(/*bytes_in_flight=*/0), 0.01f);
-  }
+  // Verify pacing rate is re-calculated based on the new cwnd and initial
+  // RTT.
+  EXPECT_APPROX_EQ(QuicBandwidth::FromBytesAndTimeDelta(
+                       sender_->ExportDebugState().congestion_window,
+                       rtt_stats_->initial_rtt()),
+                   sender_->PacingRate(/*bytes_in_flight=*/0), 0.01f);
 }
 
 TEST_F(BbrSenderTest, MitigateCwndBootstrappingOvershoot) {
-  SetQuicReloadableFlag(quic_bbr_mitigate_overly_large_bandwidth_sample, true);
   CreateDefaultSetup();
   bbr_sender_.AddBytesToTransfer(1 * 1024 * 1024);
 
@@ -1257,6 +1187,28 @@ TEST_F(BbrSenderTest, 200InitialCongestionWindowWithNetworkParameterAdjusted) {
                                             QuicTime::Delta::Zero(), false));
   // Verify cwnd is capped at 200.
   EXPECT_EQ(200 * kDefaultTCPMSS,
+            sender_->ExportDebugState().congestion_window);
+  EXPECT_GT(1024 * kTestLinkBandwidth, sender_->PacingRate(0));
+}
+
+TEST_F(BbrSenderTest, 100InitialCongestionWindowFromNetworkParameter) {
+  CreateDefaultSetup();
+
+  bbr_sender_.AddBytesToTransfer(1 * 1024 * 1024);
+  // Wait until an ACK comes back.
+  const QuicTime::Delta timeout = QuicTime::Delta::FromSeconds(5);
+  bool simulator_result = simulator_.RunUntilOrTimeout(
+      [this]() { return !sender_->ExportDebugState().min_rtt.IsZero(); },
+      timeout);
+  ASSERT_TRUE(simulator_result);
+
+  // Bootstrap cwnd by a overly large bandwidth sample.
+  SendAlgorithmInterface::NetworkParams network_params(
+      1024 * kTestLinkBandwidth, QuicTime::Delta::Zero(), false);
+  network_params.max_initial_congestion_window = 100;
+  bbr_sender_.connection()->AdjustNetworkParameters(network_params);
+  // Verify cwnd is capped at 100.
+  EXPECT_EQ(100 * kDefaultTCPMSS,
             sender_->ExportDebugState().congestion_window);
   EXPECT_GT(1024 * kTestLinkBandwidth, sender_->PacingRate(0));
 }
@@ -1322,6 +1274,19 @@ TEST_F(BbrSenderTest, LossOnlyCongestionEvent) {
 
   // Bandwidth estimate should not change for the loss only event.
   EXPECT_EQ(prior_bandwidth_estimate, sender_->BandwidthEstimate());
+}
+
+TEST_F(BbrSenderTest, EnableOvershootingDetection) {
+  SetConnectionOption(kDTOS);
+  CreateSmallBufferSetup();
+  // Set a overly large initial cwnd.
+  sender_->SetInitialCongestionWindowInPackets(200);
+  const QuicConnectionStats& stats = bbr_sender_.connection()->GetStats();
+  EXPECT_FALSE(stats.overshooting_detected_with_network_parameters_adjusted);
+  DoSimpleTransfer(12 * 1024 * 1024, QuicTime::Delta::FromSeconds(30));
+
+  // Verify overshooting is detected.
+  EXPECT_TRUE(stats.overshooting_detected_with_network_parameters_adjusted);
 }
 
 }  // namespace test

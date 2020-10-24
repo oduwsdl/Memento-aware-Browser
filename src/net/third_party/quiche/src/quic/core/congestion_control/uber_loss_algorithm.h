@@ -5,10 +5,10 @@
 #ifndef QUICHE_QUIC_CORE_CONGESTION_CONTROL_UBER_LOSS_ALGORITHM_H_
 #define QUICHE_QUIC_CORE_CONGESTION_CONTROL_UBER_LOSS_ALGORITHM_H_
 
+#include "absl/types/optional.h"
 #include "net/third_party/quiche/src/quic/core/congestion_control/general_loss_algorithm.h"
 #include "net/third_party/quiche/src/quic/core/quic_types.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_optional.h"
 
 namespace quic {
 
@@ -20,8 +20,8 @@ class QuicSentPacketManagerPeer;
 
 struct QUIC_EXPORT_PRIVATE LossDetectionParameters {
   // See GeneralLossAlgorithm for the meaning of reordering_(shift|threshold).
-  quiche::QuicheOptional<int> reordering_shift;
-  quiche::QuicheOptional<QuicPacketCount> reordering_threshold;
+  absl::optional<int> reordering_shift;
+  absl::optional<QuicPacketCount> reordering_threshold;
 };
 
 class QUIC_EXPORT_PRIVATE LossDetectionTunerInterface {
@@ -75,6 +75,7 @@ class QUIC_EXPORT_PRIVATE UberLossAlgorithm : public LossDetectionInterface {
   void OnMinRttAvailable() override;
   void OnUserAgentIdKnown() override;
   void OnConnectionClosed() override;
+  void OnReorderingDetected() override;
 
   // Sets reordering_shift for all packet number spaces.
   void SetReorderingShift(int reordering_shift);
@@ -127,11 +128,11 @@ class QUIC_EXPORT_PRIVATE UberLossAlgorithm : public LossDetectionInterface {
   LossDetectionParameters tuned_parameters_;
   bool tuner_started_ = false;
   bool min_rtt_available_ = false;
-  // If flag is false, set |user_agent_known_| to true, so loss detection tuner
-  // will start once SetFromConfig is called and min rtt is available.
-  bool user_agent_known_ =
-      !GetQuicReloadableFlag(quic_save_user_agent_in_quic_session);
-  bool tuning_enabled_ = false;  // Whether tuning is enabled by config.
+  // Whether user agent is known to the session.
+  bool user_agent_known_ = false;
+  // Whether tuning is configured in QuicConfig.
+  bool tuning_configured_ = false;
+  bool reorder_happened_ = false;  // Whether any reordered packet is observed.
 };
 
 }  // namespace quic

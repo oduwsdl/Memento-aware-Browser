@@ -6,17 +6,17 @@
 
 #include <algorithm>
 
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/quic/core/qpack/qpack_instructions.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_logging.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_test_utils.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 
 using ::testing::_;
 using ::testing::Eq;
 using ::testing::Expectation;
-using ::testing::Invoke;
+using ::testing::InvokeWithoutArgs;
 using ::testing::Return;
 using ::testing::StrictMock;
 using ::testing::Values;
@@ -66,8 +66,9 @@ class MockDelegate : public QpackInstructionDecoder::Delegate {
               (const QpackInstruction*),
               (override));
   MOCK_METHOD(void,
-              OnError,
-              (quiche::QuicheStringPiece error_message),
+              OnInstructionDecodingError,
+              (QpackInstructionDecoder::ErrorCode error_code,
+               absl::string_view error_message),
               (override));
 };
 
@@ -82,11 +83,8 @@ class QpackInstructionDecoderTest : public QuicTestWithParam<FragmentMode> {
   void SetUp() override {
     // Destroy QpackInstructionDecoder on error to test that it does not crash.
     // See https://crbug.com/1025209.
-    ON_CALL(delegate_, OnError(_))
-        .WillByDefault(
-            Invoke([this](quiche::QuicheStringPiece /* error_message */) {
-              decoder_.reset();
-            }));
+    ON_CALL(delegate_, OnInstructionDecodingError(_, _))
+        .WillByDefault(InvokeWithoutArgs([this]() { decoder_.reset(); }));
   }
 
   // Decode one full instruction with fragment sizes dictated by
@@ -95,7 +93,7 @@ class QpackInstructionDecoderTest : public QuicTestWithParam<FragmentMode> {
   // verifies that AtInstructionBoundary() returns true before and after the
   // instruction, and returns false while decoding is in progress.
   // Assumes that delegate methods destroy |decoder_| if they return false.
-  void DecodeInstruction(quiche::QuicheStringPiece data) {
+  void DecodeInstruction(absl::string_view data) {
     EXPECT_TRUE(decoder_->AtInstructionBoundary());
 
     FragmentSizeGenerator fragment_size_generator =
@@ -167,34 +165,46 @@ TEST_P(QpackInstructionDecoderTest, NameAndValue) {
 }
 
 TEST_P(QpackInstructionDecoderTest, InvalidHuffmanEncoding) {
-  EXPECT_CALL(delegate_, OnError(Eq("Error in Huffman-encoded string.")));
+  EXPECT_CALL(delegate_,
+              OnInstructionDecodingError(
+                  QpackInstructionDecoder::ErrorCode::HUFFMAN_ENCODING_ERROR,
+                  Eq("Error in Huffman-encoded string.")));
   DecodeInstruction(quiche::QuicheTextUtils::HexDecode("c1ff"));
 }
 
 TEST_P(QpackInstructionDecoderTest, InvalidVarintEncoding) {
-  EXPECT_CALL(delegate_, OnError(Eq("Encoded integer too large.")));
+  EXPECT_CALL(delegate_,
+              OnInstructionDecodingError(
+                  QpackInstructionDecoder::ErrorCode::INTEGER_TOO_LARGE,
+                  Eq("Encoded integer too large.")));
   DecodeInstruction(
       quiche::QuicheTextUtils::HexDecode("ffffffffffffffffffffff"));
+}
+
+TEST_P(QpackInstructionDecoderTest, StringLiteralTooLong) {
+  EXPECT_CALL(delegate_,
+              OnInstructionDecodingError(
+                  QpackInstructionDecoder::ErrorCode::STRING_LITERAL_TOO_LONG,
+                  Eq("String literal too long.")));
+  DecodeInstruction(quiche::QuicheTextUtils::HexDecode("bfffff7f"));
 }
 
 TEST_P(QpackInstructionDecoderTest, DelegateSignalsError) {
   // First instruction is valid.
   Expectation first_call =
       EXPECT_CALL(delegate_, OnInstructionDecoded(TestInstruction1()))
-          .WillOnce(Invoke(
-              [this](const QpackInstruction * /* instruction */) -> bool {
-                EXPECT_EQ(1u, decoder_->varint());
-                return true;
-              }));
+          .WillOnce(InvokeWithoutArgs([this]() -> bool {
+            EXPECT_EQ(1u, decoder_->varint());
+            return true;
+          }));
 
   // Second instruction is invalid.  Decoding must halt.
   EXPECT_CALL(delegate_, OnInstructionDecoded(TestInstruction1()))
       .After(first_call)
-      .WillOnce(
-          Invoke([this](const QpackInstruction * /* instruction */) -> bool {
-            EXPECT_EQ(2u, decoder_->varint());
-            return false;
-          }));
+      .WillOnce(InvokeWithoutArgs([this]() -> bool {
+        EXPECT_EQ(2u, decoder_->varint());
+        return false;
+      }));
 
   EXPECT_FALSE(decoder_->Decode(
       quiche::QuicheTextUtils::HexDecode("01000200030004000500")));
@@ -204,12 +214,11 @@ TEST_P(QpackInstructionDecoderTest, DelegateSignalsError) {
 // Delegate::OnInstructionDecoded() call as long as it returns false.
 TEST_P(QpackInstructionDecoderTest, DelegateSignalsErrorAndDestroysDecoder) {
   EXPECT_CALL(delegate_, OnInstructionDecoded(TestInstruction1()))
-      .WillOnce(
-          Invoke([this](const QpackInstruction * /* instruction */) -> bool {
-            EXPECT_EQ(1u, decoder_->varint());
-            decoder_.reset();
-            return false;
-          }));
+      .WillOnce(InvokeWithoutArgs([this]() -> bool {
+        EXPECT_EQ(1u, decoder_->varint());
+        decoder_.reset();
+        return false;
+      }));
   DecodeInstruction(quiche::QuicheTextUtils::HexDecode("0100"));
 }
 

@@ -9,6 +9,8 @@
 #include <cstring>
 #include <string>
 
+#include "absl/base/macros.h"
+#include "absl/strings/string_view.h"
 #include "net/third_party/quiche/src/quic/core/quic_connection_id.h"
 #include "net/third_party/quiche/src/quic/core/quic_constants.h"
 #include "net/third_party/quiche/src/quic/core/quic_types.h"
@@ -19,9 +21,7 @@
 #include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_prefetch.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_uint128.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_arraysize.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_endian.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
+#include "net/third_party/quiche/src/common/quiche_endian.h"
 
 namespace quic {
 namespace {
@@ -36,8 +36,7 @@ namespace {
 #endif
 
 #ifdef QUIC_UTIL_HAS_UINT128
-QuicUint128 IncrementalHashFast(QuicUint128 uhash,
-                                quiche::QuicheStringPiece data) {
+QuicUint128 IncrementalHashFast(QuicUint128 uhash, absl::string_view data) {
   // This code ends up faster than the naive implementation for 2 reasons:
   // 1. QuicUint128 is sufficiently complicated that the compiler
   //    cannot transform the multiplication by kPrime into a shift-multiply-add;
@@ -60,8 +59,7 @@ QuicUint128 IncrementalHashFast(QuicUint128 uhash,
 
 #ifndef QUIC_UTIL_HAS_UINT128
 // Slow implementation of IncrementalHash. In practice, only used by Chromium.
-QuicUint128 IncrementalHashSlow(QuicUint128 hash,
-                                quiche::QuicheStringPiece data) {
+QuicUint128 IncrementalHashSlow(QuicUint128 hash, absl::string_view data) {
   // kPrime = 309485009821345068724781371
   static const QuicUint128 kPrime = MakeQuicUint128(16777216, 315);
   const uint8_t* octets = reinterpret_cast<const uint8_t*>(data.data());
@@ -73,7 +71,7 @@ QuicUint128 IncrementalHashSlow(QuicUint128 hash,
 }
 #endif
 
-QuicUint128 IncrementalHash(QuicUint128 hash, quiche::QuicheStringPiece data) {
+QuicUint128 IncrementalHash(QuicUint128 hash, absl::string_view data) {
 #ifdef QUIC_UTIL_HAS_UINT128
   return IncrementalHashFast(hash, data);
 #else
@@ -84,7 +82,7 @@ QuicUint128 IncrementalHash(QuicUint128 hash, quiche::QuicheStringPiece data) {
 }  // namespace
 
 // static
-uint64_t QuicUtils::FNV1a_64_Hash(quiche::QuicheStringPiece data) {
+uint64_t QuicUtils::FNV1a_64_Hash(absl::string_view data) {
   static const uint64_t kOffset = UINT64_C(14695981039346656037);
   static const uint64_t kPrime = UINT64_C(1099511628211);
 
@@ -101,21 +99,20 @@ uint64_t QuicUtils::FNV1a_64_Hash(quiche::QuicheStringPiece data) {
 }
 
 // static
-QuicUint128 QuicUtils::FNV1a_128_Hash(quiche::QuicheStringPiece data) {
-  return FNV1a_128_Hash_Three(data, quiche::QuicheStringPiece(),
-                              quiche::QuicheStringPiece());
+QuicUint128 QuicUtils::FNV1a_128_Hash(absl::string_view data) {
+  return FNV1a_128_Hash_Three(data, absl::string_view(), absl::string_view());
 }
 
 // static
-QuicUint128 QuicUtils::FNV1a_128_Hash_Two(quiche::QuicheStringPiece data1,
-                                          quiche::QuicheStringPiece data2) {
-  return FNV1a_128_Hash_Three(data1, data2, quiche::QuicheStringPiece());
+QuicUint128 QuicUtils::FNV1a_128_Hash_Two(absl::string_view data1,
+                                          absl::string_view data2) {
+  return FNV1a_128_Hash_Three(data1, data2, absl::string_view());
 }
 
 // static
-QuicUint128 QuicUtils::FNV1a_128_Hash_Three(quiche::QuicheStringPiece data1,
-                                            quiche::QuicheStringPiece data2,
-                                            quiche::QuicheStringPiece data3) {
+QuicUint128 QuicUtils::FNV1a_128_Hash_Three(absl::string_view data1,
+                                            absl::string_view data2,
+                                            absl::string_view data3) {
   // The two constants are defined as part of the hash algorithm.
   // see http://www.isthe.com/chongo/tech/comp/fnv/
   // kOffset = 144066263297769815596495629667062367629
@@ -173,6 +170,7 @@ const char* QuicUtils::SentPacketStateToString(SentPacketState state) {
     RETURN_STRING_LITERAL(RTO_RETRANSMITTED);
     RETURN_STRING_LITERAL(PTO_RETRANSMITTED);
     RETURN_STRING_LITERAL(PROBE_RETRANSMITTED);
+    RETURN_STRING_LITERAL(NOT_CONTRIBUTING_RTT)
   }
   return "INVALID_SENT_PACKET_STATE";
 }
@@ -286,7 +284,7 @@ void QuicUtils::CopyToBuffer(const struct iovec* iov,
 }
 
 // static
-struct iovec QuicUtils::MakeIovec(quiche::QuicheStringPiece data) {
+struct iovec QuicUtils::MakeIovec(absl::string_view data) {
   struct iovec iov = {const_cast<char*>(data.data()),
                       static_cast<size_t>(data.size())};
   return iov;
@@ -304,6 +302,9 @@ bool QuicUtils::IsRetransmittableFrame(QuicFrameType type) {
     case PADDING_FRAME:
     case STOP_WAITING_FRAME:
     case MTU_DISCOVERY_FRAME:
+    case PATH_CHALLENGE_FRAME:
+    case PATH_RESPONSE_FRAME:
+    case NEW_CONNECTION_ID_FRAME:
       return false;
     default:
       return true;
@@ -430,8 +431,7 @@ bool QuicUtils::IsOutgoingStreamId(ParsedQuicVersion version,
 // static
 bool QuicUtils::IsBidirectionalStreamId(QuicStreamId id,
                                         ParsedQuicVersion version) {
-  DCHECK(!GetQuicReloadableFlag(quic_fix_gquic_stream_type) ||
-         version.HasIetfQuicFrames());
+  DCHECK(version.HasIetfQuicFrames());
   return id % 4 < 2;
 }
 
@@ -440,8 +440,7 @@ StreamType QuicUtils::GetStreamType(QuicStreamId id,
                                     Perspective perspective,
                                     bool peer_initiated,
                                     ParsedQuicVersion version) {
-  DCHECK(!GetQuicReloadableFlag(quic_fix_gquic_stream_type) ||
-         version.HasIetfQuicFrames());
+  DCHECK(version.HasIetfQuicFrames());
   if (IsBidirectionalStreamId(id, version)) {
     return BIDIRECTIONAL;
   }
@@ -509,7 +508,7 @@ QuicConnectionId QuicUtils::CreateReplacementConnectionId(
     return EmptyQuicConnectionId();
   }
   const uint64_t connection_id_hash64 = FNV1a_64_Hash(
-      quiche::QuicheStringPiece(connection_id.data(), connection_id.length()));
+      absl::string_view(connection_id.data(), connection_id.length()));
   if (expected_connection_id_length <= sizeof(uint64_t)) {
     return QuicConnectionId(
         reinterpret_cast<const char*>(&connection_id_hash64),
@@ -517,7 +516,7 @@ QuicConnectionId QuicUtils::CreateReplacementConnectionId(
   }
   char new_connection_id_data[255] = {};
   const QuicUint128 connection_id_hash128 = FNV1a_128_Hash(
-      quiche::QuicheStringPiece(connection_id.data(), connection_id.length()));
+      absl::string_view(connection_id.data(), connection_id.length()));
   static_assert(sizeof(connection_id_hash64) + sizeof(connection_id_hash128) <=
                     sizeof(new_connection_id_data),
                 "bad size");
@@ -564,7 +563,7 @@ QuicConnectionId QuicUtils::CreateZeroConnectionId(
   if (!VersionAllowsVariableLengthConnectionIds(version)) {
     char connection_id_bytes[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     return QuicConnectionId(static_cast<char*>(connection_id_bytes),
-                            QUICHE_ARRAYSIZE(connection_id_bytes));
+                            ABSL_ARRAYSIZE(connection_id_bytes));
   }
   return EmptyQuicConnectionId();
 }
@@ -613,7 +612,7 @@ bool QuicUtils::IsConnectionIdValidForVersion(
 QuicUint128 QuicUtils::GenerateStatelessResetToken(
     QuicConnectionId connection_id) {
   return FNV1a_128_Hash(
-      quiche::QuicheStringPiece(connection_id.data(), connection_id.length()));
+      absl::string_view(connection_id.data(), connection_id.length()));
 }
 
 // static
@@ -652,6 +651,19 @@ EncryptionLevel QuicUtils::GetEncryptionLevel(
     default:
       DCHECK(false);
       return NUM_ENCRYPTION_LEVELS;
+  }
+}
+
+// static
+bool QuicUtils::IsProbingFrame(QuicFrameType type) {
+  switch (type) {
+    case PATH_CHALLENGE_FRAME:
+    case PATH_RESPONSE_FRAME:
+    case NEW_CONNECTION_ID_FRAME:
+    case PADDING_FRAME:
+      return true;
+    default:
+      return false;
   }
 }
 

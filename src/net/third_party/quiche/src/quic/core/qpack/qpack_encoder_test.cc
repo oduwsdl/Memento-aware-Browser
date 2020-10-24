@@ -7,13 +7,14 @@
 #include <limits>
 #include <string>
 
+#include "absl/strings/string_view.h"
+#include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_encoder_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_encoder_test_utils.h"
 #include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_header_table_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_test_utils.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_str_cat.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_text_utils.h"
 
 using ::testing::_;
@@ -141,7 +142,11 @@ TEST_F(QpackEncoderTest, StaticTable) {
 
 TEST_F(QpackEncoderTest, DecoderStreamError) {
   EXPECT_CALL(decoder_stream_error_delegate_,
-              OnDecoderStreamError(Eq("Encoded integer too large.")));
+              OnDecoderStreamError(
+                  GetQuicReloadableFlag(quic_granular_qpack_error_codes)
+                      ? QUIC_QPACK_DECODER_STREAM_INTEGER_TOO_LARGE
+                      : QUIC_QPACK_DECODER_STREAM_ERROR,
+                  Eq("Encoded integer too large.")));
 
   QpackEncoder encoder(&decoder_stream_error_delegate_);
   encoder.set_qpack_stream_sender_delegate(&encoder_stream_sender_delegate_);
@@ -151,7 +156,7 @@ TEST_F(QpackEncoderTest, DecoderStreamError) {
 
 TEST_F(QpackEncoderTest, SplitAlongNullCharacter) {
   spdy::SpdyHeaderBlock header_list;
-  header_list["foo"] = quiche::QuicheStringPiece("bar\0bar\0baz", 11);
+  header_list["foo"] = absl::string_view("bar\0bar\0baz", 11);
   std::string output = Encode(header_list);
 
   EXPECT_EQ(quiche::QuicheTextUtils::HexDecode("0000"            // prefix
@@ -165,7 +170,11 @@ TEST_F(QpackEncoderTest, SplitAlongNullCharacter) {
 TEST_F(QpackEncoderTest, ZeroInsertCountIncrement) {
   // Encoder receives insert count increment with forbidden value 0.
   EXPECT_CALL(decoder_stream_error_delegate_,
-              OnDecoderStreamError(Eq("Invalid increment value 0.")));
+              OnDecoderStreamError(
+                  GetQuicReloadableFlag(quic_granular_qpack_error_codes)
+                      ? QUIC_QPACK_DECODER_STREAM_INVALID_ZERO_INCREMENT
+                      : QUIC_QPACK_DECODER_STREAM_ERROR,
+                  Eq("Invalid increment value 0.")));
   encoder_.OnInsertCountIncrement(0);
 }
 
@@ -173,10 +182,13 @@ TEST_F(QpackEncoderTest, TooLargeInsertCountIncrement) {
   // Encoder receives insert count increment with value that increases Known
   // Received Count to a value (one) which is larger than the number of dynamic
   // table insertions sent (zero).
-  EXPECT_CALL(
-      decoder_stream_error_delegate_,
-      OnDecoderStreamError(Eq("Increment value 1 raises known received count "
-                              "to 1 exceeding inserted entry count 0")));
+  EXPECT_CALL(decoder_stream_error_delegate_,
+              OnDecoderStreamError(
+                  GetQuicReloadableFlag(quic_granular_qpack_error_codes)
+                      ? QUIC_QPACK_DECODER_STREAM_IMPOSSIBLE_INSERT_COUNT
+                      : QUIC_QPACK_DECODER_STREAM_ERROR,
+                  Eq("Increment value 1 raises known received count "
+                     "to 1 exceeding inserted entry count 0")));
   encoder_.OnInsertCountIncrement(1);
 }
 
@@ -197,6 +209,9 @@ TEST_F(QpackEncoderTest, InsertCountIncrementOverflow) {
   // received count.  This must result in an error instead of a crash.
   EXPECT_CALL(decoder_stream_error_delegate_,
               OnDecoderStreamError(
+                  GetQuicReloadableFlag(quic_granular_qpack_error_codes)
+                      ? QUIC_QPACK_DECODER_STREAM_INCREMENT_OVERFLOW
+                      : QUIC_QPACK_DECODER_STREAM_ERROR,
                   Eq("Insert Count Increment instruction causes overflow.")));
   encoder_.OnInsertCountIncrement(std::numeric_limits<uint64_t>::max());
 }
@@ -204,10 +219,13 @@ TEST_F(QpackEncoderTest, InsertCountIncrementOverflow) {
 TEST_F(QpackEncoderTest, InvalidHeaderAcknowledgement) {
   // Encoder receives header acknowledgement for a stream on which no header
   // block with dynamic table entries was ever sent.
-  EXPECT_CALL(
-      decoder_stream_error_delegate_,
-      OnDecoderStreamError(Eq("Header Acknowledgement received for stream 0 "
-                              "with no outstanding header blocks.")));
+  EXPECT_CALL(decoder_stream_error_delegate_,
+              OnDecoderStreamError(
+                  GetQuicReloadableFlag(quic_granular_qpack_error_codes)
+                      ? QUIC_QPACK_DECODER_STREAM_INCORRECT_ACKNOWLEDGEMENT
+                      : QUIC_QPACK_DECODER_STREAM_ERROR,
+                  Eq("Header Acknowledgement received for stream 0 "
+                     "with no outstanding header blocks.")));
   encoder_.OnHeaderAcknowledgement(/* stream_id = */ 0);
 }
 

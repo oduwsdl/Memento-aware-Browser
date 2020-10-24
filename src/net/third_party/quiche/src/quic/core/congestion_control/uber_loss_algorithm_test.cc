@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "absl/types/optional.h"
 #include "net/third_party/quiche/src/quic/core/congestion_control/rtt_stats.h"
 #include "net/third_party/quiche/src/quic/core/crypto/crypto_protocol.h"
 #include "net/third_party/quiche/src/quic/core/quic_types.h"
@@ -14,7 +15,6 @@
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/test_tools/mock_clock.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_unacked_packet_map_peer.h"
-#include "net/third_party/quiche/src/common/platform/api/quiche_optional.h"
 
 namespace quic {
 namespace test {
@@ -53,7 +53,7 @@ class UberLossAlgorithmTest : public QuicTest {
     packet.encryption_level = encryption_level;
     packet.retransmittable_frames.push_back(QuicFrame(frame));
     unacked_packets_->AddSentPacket(&packet, NOT_RETRANSMISSION, clock_.Now(),
-                                    true);
+                                    true, true);
   }
 
   void AckPackets(const std::vector<uint64_t>& packets_acked) {
@@ -69,14 +69,14 @@ class UberLossAlgorithmTest : public QuicTest {
                     const AckedPacketVector& packets_acked,
                     const std::vector<uint64_t>& losses_expected) {
     return VerifyLosses(largest_newly_acked, packets_acked, losses_expected,
-                        quiche::QuicheOptional<QuicPacketCount>());
+                        absl::nullopt);
   }
 
-  void VerifyLosses(uint64_t largest_newly_acked,
-                    const AckedPacketVector& packets_acked,
-                    const std::vector<uint64_t>& losses_expected,
-                    quiche::QuicheOptional<QuicPacketCount>
-                        max_sequence_reordering_expected) {
+  void VerifyLosses(
+      uint64_t largest_newly_acked,
+      const AckedPacketVector& packets_acked,
+      const std::vector<uint64_t>& losses_expected,
+      absl::optional<QuicPacketCount> max_sequence_reordering_expected) {
     LostPacketVector lost_packets;
     LossDetectionInterface::DetectionStats stats = loss_algorithm_.DetectLosses(
         *unacked_packets_, clock_.Now(), rtt_stats_,
@@ -262,8 +262,12 @@ TEST_F(UberLossAlgorithmTest, LossDetectionTuning_SetFromConfigFirst) {
   EXPECT_EQ(old_reordering_threshold,
             loss_algorithm_.GetPacketReorderingThreshold());
 
-  // Tuning should start when MinRtt becomes available.
+  // MinRtt available. Tuner should not start yet because no reordering yet.
   loss_algorithm_.OnMinRttAvailable();
+  EXPECT_FALSE(test_tuner->start_called());
+
+  // Reordering happened. Tuner should start now.
+  loss_algorithm_.OnReorderingDetected();
   EXPECT_TRUE(test_tuner->start_called());
   EXPECT_NE(old_reordering_shift, loss_algorithm_.GetPacketReorderingShift());
   EXPECT_NE(old_reordering_threshold,
@@ -293,6 +297,10 @@ TEST_F(UberLossAlgorithmTest, LossDetectionTuning_OnMinRttAvailableFirst) {
   EXPECT_EQ(old_reordering_shift, loss_algorithm_.GetPacketReorderingShift());
   EXPECT_EQ(old_reordering_threshold,
             loss_algorithm_.GetPacketReorderingThreshold());
+
+  // Pretend a reodering has happened.
+  loss_algorithm_.OnReorderingDetected();
+  EXPECT_FALSE(test_tuner->start_called());
 
   QuicConfig config;
   QuicTagVector connection_options;
@@ -335,6 +343,10 @@ TEST_F(UberLossAlgorithmTest, LossDetectionTuning_StartFailed) {
   EXPECT_EQ(old_reordering_shift, loss_algorithm_.GetPacketReorderingShift());
   EXPECT_EQ(old_reordering_threshold,
             loss_algorithm_.GetPacketReorderingThreshold());
+
+  // Pretend a reodering has happened.
+  loss_algorithm_.OnReorderingDetected();
+  EXPECT_FALSE(test_tuner->start_called());
 
   // Parameters should not change since test_tuner->Start() returns false.
   loss_algorithm_.OnMinRttAvailable();
