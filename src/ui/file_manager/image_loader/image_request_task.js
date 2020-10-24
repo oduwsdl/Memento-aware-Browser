@@ -8,12 +8,11 @@
  *
  * @param {string} id Request ID.
  * @param {ImageCache} cache Cache object.
- * @param {!PiexLoader} piexLoader Piex loader for RAW file.
  * @param {!LoadImageRequest} request Request message as a hash array.
  * @param {function(!LoadImageResponse)} callback Response handler.
  * @constructor
  */
-function ImageRequestTask(id, cache, piexLoader, request, callback) {
+function ImageRequestTask(id, cache, request, callback) {
   /**
    * Global ID (concatenated client ID and client request ID).
    * @type {string}
@@ -26,12 +25,6 @@ function ImageRequestTask(id, cache, piexLoader, request, callback) {
    * @private
    */
   this.cache_ = cache;
-
-  /**
-   * @type {!PiexLoader}
-   * @private
-   */
-  this.piexLoader_ = piexLoader;
 
   /**
    * @type {!LoadImageRequest}
@@ -60,8 +53,8 @@ function ImageRequestTask(id, cache, piexLoader, request, callback) {
   this.contentType_ = null;
 
   /**
-   * IFD data of the fetched image. Only RAW images provide non-null ifd
-   * data at this time; images on Drive might provide ifd in future.
+   * IFD data of the fetched image. Only RAW images provide a non-null
+   * ifd at this time. Drive images might provide an ifd in future.
    * @type {?string}
    * @private
    */
@@ -122,6 +115,33 @@ ImageRequestTask.VIDEO_THUMBNAIL_POSITION = 3;  // [sec]
 ImageRequestTask.MAX_MILLISECONDS_TO_LOAD_VIDEO = 3000;
 
 /**
+ * The default size (width and height) of a square thumbnail. The value is set
+ * to match the behavior of drivefs thumbnail generation.
+ * See chromeos/components/drivefs/mojom/drivefs.mojom
+ * @const
+ * @type {number}
+ */
+ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE = 360;
+
+/**
+ * The default width of a non-square thumbnail. The value is set to match the
+ * behavior of drivefs thumbnail generation.
+ * See chromeos/components/drivefs/mojom/drivefs.mojom
+ * @const
+ * @type {number}
+ */
+ImageRequestTask.DEFAULT_THUMBNAIL_WIDTH = 500;
+
+/**
+ * The default height of a non-square thumbnail. The value is set to match the
+ * behavior of drivefs thumbnail generation.
+ * See chromeos/components/drivefs/mojom/drivefs.mojom
+ * @const
+ * @type {number}
+ */
+ImageRequestTask.DEFAULT_THUMBNAIL_HEIGHT = 500;
+
+/**
  * A map which is used to estimate content type from extension.
  * @enum {string}
  */
@@ -132,6 +152,16 @@ ImageRequestTask.ExtensionContentTypeMap = {
   bmp: 'image/bmp',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg'
+};
+
+/**
+ * Extracts MIME type of a data URL.
+ * @param {string|undefined} dataUrl Data URL.
+ * @return {?string} MIME type string, or null if the URL is invalid.
+ */
+ImageRequestTask.getDataUrlMimeType = function(dataUrl) {
+  const dataUrlMatches = (dataUrl || '').match(/^data:([^,;]*)[,;]/);
+  return dataUrlMatches ? dataUrlMatches[1] : null;
 };
 
 /**
@@ -191,7 +221,7 @@ ImageRequestTask.prototype.downloadAndProcess = function(callback) {
   }
 
   this.downloadCallback_ = callback;
-  this.downloadOriginal_(
+  this.downloadThumbnail_(
       this.onImageLoad_.bind(this), this.onImageError_.bind(this));
 };
 
@@ -256,13 +286,33 @@ ImageRequestTask.prototype.saveToCache_ = function(width, height, data) {
 };
 
 /**
- * Downloads an image directly or for remote resources using the XmlHttpRequest.
+ * Gets the target image size for external thumbnails, where supported.
+   The defaults replicate drivefs thumbnailer behavior.
+ * @return {{width: !number, height: !number}}
+ */
+ImageRequestTask.prototype.targetThumbnailSize_ = function() {
+  const crop = !!this.request_.crop;
+  const defaultWidth = crop ? ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE :
+                              ImageRequestTask.DEFAULT_THUMBNAIL_WIDTH;
+  const defaultHeight = crop ? ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE :
+                               ImageRequestTask.DEFAULT_THUMBNAIL_HEIGHT;
+  return {
+    width: this.request_.width || defaultWidth,
+    height: this.request_.height || defaultHeight,
+  };
+};
+
+/**
+ * Loads |this.image_| with the |this.request_.url| source or the thumbnail
+ * image of the source.
  *
  * @param {function()} onSuccess Success callback.
  * @param {function()} onFailure Failure callback.
  * @private
  */
-ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
+ImageRequestTask.prototype.downloadThumbnail_ = function(onSuccess, onFailure) {
+  // Load methods below set |this.image_.src|. Call revokeObjectURL(src) to
+  // release resources if the image src was created with createObjectURL().
   this.image_.onload = function() {
     URL.revokeObjectURL(this.image_.src);
     onSuccess();
@@ -272,57 +322,90 @@ ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
     onFailure();
   }.bind(this);
 
-  // Download data urls directly since they are not supported by XmlHttpRequest.
-  const dataUrlMatches = this.request_.url.match(/^data:([^,;]*)[,;]/);
-  if (dataUrlMatches) {
+  // Load dataURL sources directly.
+  const dataUrlMimeType =
+      ImageRequestTask.getDataUrlMimeType(this.request_.url);
+  if (dataUrlMimeType) {
     this.image_.src = this.request_.url;
-    this.contentType_ = dataUrlMatches[1];
+    this.contentType_ = dataUrlMimeType;
     return;
   }
+
+  const resolveLocalFileSystemUrl = (url, onResolveSuccess) => {
+    window.webkitResolveLocalFileSystemURL(url, onResolveSuccess, error => {
+      console.error(error);
+      onFailure();
+    });
+  };
+
+  const onExternalThumbnail = (dataUrl) => {
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError.message);
+      onFailure();
+    } else if (dataUrl) {
+      this.image_.src = dataUrl;
+      this.contentType_ = ImageRequestTask.getDataUrlMimeType(dataUrl);
+    } else {
+      onFailure();
+    }
+  };
+
+  // Load Drive source thumbnail.
   const drivefsUrlMatches = this.request_.url.match(/^drivefs:(.*)/);
   if (drivefsUrlMatches) {
-    window.webkitResolveLocalFileSystemURL(
-        drivefsUrlMatches[1],
-        entry => {
-          chrome.fileManagerPrivate.getThumbnail(
-              /** @type {FileEntry} */ (entry), !!this.request_.crop,
-              thumbnail => {
-                if (!thumbnail) {
-                  onFailure();
-                  return;
-                }
-                this.image_.src = thumbnail;
-                this.contentType_ = 'image/png';
-              });
-        },
-        error => {
-          onFailure();
-        });
+    const url = drivefsUrlMatches[1];
+    const cropToSquare = !!this.request_.crop;
+    resolveLocalFileSystemUrl(
+        url,
+        entry => chrome.fileManagerPrivate.getDriveThumbnail(
+            entry, cropToSquare, onExternalThumbnail));
+    return;
+  }
+
+  // Load PDF source thumbnail.
+  if (this.request_.url.endsWith('.pdf')) {
+    const {width, height} = this.targetThumbnailSize_();
+    resolveLocalFileSystemUrl(
+        this.request_.url,
+        entry => chrome.fileManagerPrivate.getPdfThumbnail(
+            entry, width, height, onExternalThumbnail));
+    return;
+  }
+
+  // Load DocumentsProvider thumbnail, if supported.
+  const isDocumentsProviderRequest = !!this.request_.url.match(RegExp(
+      'filesystem:chrome-extension://[a-z]+/external/arc-documents-provider/.*'));
+  if (isDocumentsProviderRequest) {
+    const {width, height} = this.targetThumbnailSize_();
+    resolveLocalFileSystemUrl(this.request_.url, entry => {
+      chrome.fileManagerPrivate.getArcDocumentsProviderThumbnail(
+          entry, width, height, onExternalThumbnail);
+    });
     return;
   }
 
   const fileType = FileType.getTypeForName(this.request_.url);
 
-  // Load RAW images by using Piex loader instead of XHR.
+  // Load RAW image source thumbnail.
   if (fileType.type === 'raw') {
-    this.piexLoader_.load(this.request_.url)
+    PiexLoader.load(this.request_.url, chrome.runtime.reload)
         .then(
             function(data) {
-              this.request_.orientation = data.orientation;
-              this.request_.colorSpace = data.colorSpace;
+              this.request_.orientation =
+                  ImageOrientation.fromExifOrientation(data.orientation);
               this.ifd_ = data.ifd;
               this.contentType_ = data.mimeType;
               const blob = new Blob([data.thumbnail], {type: data.mimeType});
               this.image_.src = URL.createObjectURL(blob);
             }.bind(this),
             function() {
-              // The error has already been logged in PiexLoader.
+              // PiexLoader calls console.error on errors.
               onFailure();
             });
     return;
   }
 
-  // Load video thumbnails by using video tag instead of XHR.
+  // Load video source thumbnail.
   if (fileType.type === 'video') {
     this.createVideoThumbnailUrl_(this.request_.url)
         .then(function(url) {
@@ -335,16 +418,11 @@ ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
     return;
   }
 
-  // Fetch the image via XHR and parse it.
-  const parseImage = function(contentType, blob) {
-    if (contentType) {
-      this.contentType_ = contentType;
-    }
-    this.image_.src = URL.createObjectURL(blob);
-  }.bind(this);
-
-  // Request raw data via XHR.
-  this.load(this.request_.url, parseImage, onFailure);
+  // Load the source directly.
+  this.load(this.request_.url, (contentType, blob) => {
+    this.image_.src = blob ? URL.createObjectURL(blob) : '!';
+    this.contentType_ = contentType || null;
+  }, onFailure);
 };
 
 /**
@@ -536,24 +614,23 @@ ImageRequestTask.prototype.sendImageData_ = function(width, height, data) {
 };
 
 /**
- * Handler, when contents are loaded into the image element. Performs resizing
- * and finalizes the request process.
+ * Handler, when contents are loaded into the image element. Performs image
+ * processing operations if needed, and finalizes the request process.
  * @private
  */
 ImageRequestTask.prototype.onImageLoad_ = function() {
   // Perform processing if the url is not a data url, or if there are some
   // operations requested.
+  let imageChanged = false;
   if (!(this.request_.url.match(/^data/) ||
         this.request_.url.match(/^drivefs:/)) ||
       ImageLoaderUtil.shouldProcess(
           this.image_.width, this.image_.height, this.request_)) {
     ImageLoaderUtil.resizeAndCrop(this.image_, this.canvas_, this.request_);
-    ImageLoaderUtil.convertColorSpace(
-        this.canvas_, this.request_.colorSpace || ColorSpace.SRGB);
-    this.sendImage_(true);  // Image changed.
-  } else {
-    this.sendImage_(false);  // Image not changed.
+    imageChanged = true;  // The image is now on the <canvas>.
   }
+
+  this.sendImage_(imageChanged);
   this.cleanup_();
   this.downloadCallback_();
 };

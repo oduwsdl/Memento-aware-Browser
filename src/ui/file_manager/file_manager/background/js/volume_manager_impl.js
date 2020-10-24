@@ -38,7 +38,8 @@ class VolumeManagerImpl extends cr.EventTarget {
     this.driveConnectionState_ = {
       type: chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE,
       reason: chrome.fileManagerPrivate.DriveOfflineReason.NO_SERVICE,
-      hasCellularNetworkAccess: false
+      hasCellularNetworkAccess: false,
+      canPinHostedFiles: false,
     };
 
     chrome.fileManagerPrivate.onDriveConnectionStatusChanged.addListener(
@@ -193,6 +194,12 @@ class VolumeManagerImpl extends cr.EventTarget {
               return;
             }
 
+            case VolumeManagerCommon.VolumeError.NEED_PASSWORD: {
+              console.warn(`'Cannot mount ${sourcePath}': ${status}`);
+              this.finishRequest_(requestKey, status);
+              return;
+            }
+
             default:
               console.error(`Cannot mount '${sourcePath}': ${status}`);
               this.finishRequest_(requestKey, status);
@@ -249,9 +256,9 @@ class VolumeManagerImpl extends cr.EventTarget {
   }
 
   /** @override */
-  async mountArchive(fileUrl) {
+  async mountArchive(fileUrl, password) {
     const path = await new Promise(resolve => {
-      chrome.fileManagerPrivate.addMount(fileUrl, resolve);
+      chrome.fileManagerPrivate.addMount(fileUrl, password, resolve);
     });
     console.debug(`Mounting '${path}'`);
     const key = this.makeRequestKey_('mount', path);

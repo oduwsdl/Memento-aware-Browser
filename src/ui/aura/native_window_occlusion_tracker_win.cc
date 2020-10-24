@@ -4,6 +4,8 @@
 
 #include "ui/aura/native_window_occlusion_tracker_win.h"
 
+#include <dwmapi.h>
+#include <powersetting.h>
 #include <memory>
 
 #include "base/bind.h"
@@ -18,8 +20,6 @@
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/windows_version.h"
 #include "ui/aura/window_tree_host.h"
-
-#include "dwmapi.h"
 
 namespace aura {
 
@@ -121,7 +121,8 @@ NativeWindowOcclusionTrackerWin::NativeWindowOcclusionTrackerWin()
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       session_change_observer_(
           base::BindRepeating(&NativeWindowOcclusionTrackerWin::OnSessionChange,
-                              base::Unretained(this))) {
+                              base::Unretained(this))),
+      power_setting_change_listener_(this) {
   WindowOcclusionCalculator::CreateInstance(
       update_occlusion_task_runner_, base::SequencedTaskRunnerHandle::Get(),
       base::BindRepeating(
@@ -235,17 +236,18 @@ void NativeWindowOcclusionTrackerWin::UpdateOcclusionState(
       continue;
     // Check Window::IsVisible here, on the UI thread, because it can't be
     // checked on the occlusion calculation thread. Do this first before
-    // checking screen_locked_ so that hidden windows remain hidden.
+    // checking screen_locked_ or display_on_ so that hidden windows remain
+    // hidden.
     if (!it->second->IsVisible()) {
       it->second->GetHost()->SetNativeWindowOcclusionState(
           Window::OcclusionState::HIDDEN);
       continue;
     }
-    // If the screen is locked, ignore occlusion state results and
+    // If the screen is locked or off, ignore occlusion state results and
     // mark the window as occluded.
     it->second->GetHost()->SetNativeWindowOcclusionState(
-        screen_locked_ ? Window::OcclusionState::OCCLUDED
-                       : root_window_pair.second);
+        screen_locked_ || !display_on_ ? Window::OcclusionState::OCCLUDED
+                                       : root_window_pair.second);
     num_visible_root_windows_++;
   }
 }
@@ -261,14 +263,29 @@ void NativeWindowOcclusionTrackerWin::OnSessionChange(
     screen_locked_ = false;
   } else if (status_code == WTS_SESSION_LOCK && is_current_session) {
     screen_locked_ = true;
-    // Set all visible root windows as occluded. If not visible,
-    // set them as hidden.
-    for (const auto& root_window_hwnd_pair : hwnd_root_window_map_) {
-      root_window_hwnd_pair.second->GetHost()->SetNativeWindowOcclusionState(
-          IsIconic(root_window_hwnd_pair.first)
-              ? Window::OcclusionState::HIDDEN
-              : Window::OcclusionState::OCCLUDED);
-    }
+    MarkNonIconicWindowsOccluded();
+  }
+}
+
+void NativeWindowOcclusionTrackerWin::OnDisplayStateChanged(bool display_on) {
+  if (display_on == display_on_)
+    return;
+
+  display_on_ = display_on;
+  // Display changing to on will cause a foreground window change,
+  // which will trigger an occlusion calculation on its own.
+  if (!display_on_)
+    MarkNonIconicWindowsOccluded();
+}
+
+void NativeWindowOcclusionTrackerWin::MarkNonIconicWindowsOccluded() {
+  // Set all visible root windows as occluded. If not visible,
+  // set them as hidden.
+  for (const auto& root_window_hwnd_pair : hwnd_root_window_map_) {
+    root_window_hwnd_pair.second->GetHost()->SetNativeWindowOcclusionState(
+        IsIconic(root_window_hwnd_pair.first)
+            ? Window::OcclusionState::HIDDEN
+            : Window::OcclusionState::OCCLUDED);
   }
 }
 
@@ -520,6 +537,10 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
   // maximize and native window restore events.
   RegisterGlobalEventHook(EVENT_OBJECT_STATECHANGE, EVENT_OBJECT_STATECHANGE);
 
+  // Cloaking and uncloaking of windows should trigger an occlusion calculation.
+  // In particular, switching virtual desktops seems to generate these events.
+  RegisterGlobalEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED);
+
   // Determine which subset of processes to set EVENT_OBJECT_LOCATIONCHANGE on
   // because otherwise event throughput is very high, as it generates events
   // for location changes of all objects, including the mouse moving on top of a
@@ -669,18 +690,18 @@ bool NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
         HWND hwnd,
         gfx::Rect* window_rect) {
   return IsWindowVisibleAndFullyOpaque(hwnd, window_rect) &&
-         (IsWindowOnCurrentVirtualDesktop(hwnd) != false);
+         (IsWindowOnCurrentVirtualDesktop(hwnd) == true);
 }
 
 base::Optional<bool> NativeWindowOcclusionTrackerWin::
     WindowOcclusionCalculator::IsWindowOnCurrentVirtualDesktop(HWND hwnd) {
-  if (virtual_desktop_manager_) {
-    BOOL on_current_desktop;
+  if (!virtual_desktop_manager_)
+    return true;
 
-    if (SUCCEEDED(virtual_desktop_manager_->IsWindowOnCurrentVirtualDesktop(
-            hwnd, &on_current_desktop))) {
-      return on_current_desktop;
-    }
+  BOOL on_current_desktop;
+  if (SUCCEEDED(virtual_desktop_manager_->IsWindowOnCurrentVirtualDesktop(
+          hwnd, &on_current_desktop))) {
+    return on_current_desktop;
   }
   return base::nullopt;
 }

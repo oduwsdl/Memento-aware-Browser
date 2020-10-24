@@ -117,9 +117,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // This enum is reporting in metrics. Do not reorder; add additional values at
   // the end.
   //
-  // This represents the OS-level high contrast theme. kNone if high contrast is
-  // not enabled.
-  enum class HighContrastColorScheme {
+  // This represents the OS-level high contrast theme. kNone unless the default
+  // system color scheme is kPlatformHighContrast.
+  enum class PlatformHighContrastColorScheme {
     kNone = 0,
     kDark = 1,
     kLight = 2,
@@ -249,7 +249,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     ScrollbarOverlayColorTheme scrollbar_theme;
   };
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   enum ScrollbarOrientation {
     // Vertical scrollbar on the right side of content.
     kVerticalOnRight,
@@ -310,7 +310,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     MenuBackgroundExtraParams menu_background;
     ProgressBarExtraParams progress_bar;
     ScrollbarArrowExtraParams scrollbar_arrow;
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     ScrollbarExtraParams scrollbar_extra;
 #endif
     ScrollbarTrackExtraParams scrollbar_track;
@@ -420,9 +420,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // system accessibility settings and the system theme.
   virtual bool UsesHighContrastColors() const;
 
-  // Returns the HighContrastColorScheme used by the OS. Returns kNone if high
-  // contrast is not enabled.
-  HighContrastColorScheme GetHighContrastColorScheme() const;
+  // Returns the PlatformHighContrastColorScheme used by the OS. Returns a value
+  // other than kNone only if the default system color scheme is
+  // kPlatformHighContrast.
+  PlatformHighContrastColorScheme GetPlatformHighContrastColorScheme() const;
 
   // Returns true when the NativeTheme uses a light-on-dark color scheme. If
   // you're considering using this function to choose between two hard-coded
@@ -469,6 +470,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // On certain platforms, currently only Mac, there is a unique visual for
   // pressed states.
   virtual SkColor GetSystemButtonPressedColor(SkColor base_color) const;
+
+  // Assign the focus-ring-appropriate alpha value to the provided base_color.
+  virtual SkColor FocusRingColorForBaseColor(SkColor base_color) const;
 
  protected:
   explicit NativeTheme(bool should_only_use_dark_colors);

@@ -5,6 +5,7 @@
 #include "ui/base/clipboard/clipboard_format_type.h"
 
 #include <shlobj.h>
+#include <urlmon.h>
 
 #include "base/containers/flat_map.h"
 #include "base/memory/ptr_util.h"
@@ -134,14 +135,14 @@ std::string ClipboardFormatType::GetName() const {
     return std::string();
   }
 
-  return base::UTF16ToUTF8(base::string16(name_buffer->data(), name_size));
+  return base::WideToUTF8(std::wstring(name_buffer->data(), name_size));
 }
 
 bool ClipboardFormatType::operator<(const ClipboardFormatType& other) const {
   return data_.cfFormat < other.data_.cfFormat;
 }
 
-bool ClipboardFormatType::Equals(const ClipboardFormatType& other) const {
+bool ClipboardFormatType::operator==(const ClipboardFormatType& other) const {
   return data_.cfFormat == other.data_.cfFormat;
 }
 
@@ -156,7 +157,7 @@ ClipboardFormatType ClipboardFormatType::GetType(
     return ClipboardFormatType(it->second);
 
   return ClipboardFormatType(
-      ::RegisterClipboardFormat(base::ASCIIToUTF16(format_string).c_str()));
+      ::RegisterClipboardFormat(base::ASCIIToWide(format_string).c_str()));
 }
 
 // The following formats can be referenced by ClipboardUtilWin::GetPlainText.
@@ -173,22 +174,8 @@ const ClipboardFormatType& ClipboardFormatType::GetUrlType() {
 }
 
 // static
-const ClipboardFormatType& ClipboardFormatType::GetMozUrlType() {
-  static base::NoDestructor<ClipboardFormatType> format(
-      ::RegisterClipboardFormat(L"text/x-moz-url"));
-  return *format;
-}
-
-// static
 const ClipboardFormatType& ClipboardFormatType::GetPlainTextType() {
   static base::NoDestructor<ClipboardFormatType> format(CF_UNICODETEXT);
-  return *format;
-}
-
-// static
-const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
-  static base::NoDestructor<ClipboardFormatType> format(
-      ::RegisterClipboardFormat(CFSTR_FILENAMEW));
   return *format;
 }
 
@@ -198,6 +185,13 @@ const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
 const ClipboardFormatType& ClipboardFormatType::GetHtmlType() {
   static base::NoDestructor<ClipboardFormatType> format(
       ::RegisterClipboardFormat(L"HTML Format"));
+  return *format;
+}
+
+// static
+const ClipboardFormatType& ClipboardFormatType::GetSvgType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(CFSTR_MIME_SVG_XML));
   return *format;
 }
 
@@ -269,7 +263,7 @@ const ClipboardFormatType& ClipboardFormatType::GetFileDescriptorType() {
 
 // static
 const ClipboardFormatType& ClipboardFormatType::GetFileContentZeroType() {
-  // Note this uses a storage media type of TYMED_HGLOBAL, which is not commonly
+  // This uses a storage media type of TYMED_HGLOBAL, which is not commonly
   // used with CFSTR_FILECONTENTS (but used in Chromium--see
   // OSExchangeDataProviderWin::SetFileContents). Use GetFileContentAtIndexType
   // if TYMED_ISTREAM and TYMED_ISTORAGE are needed.
@@ -304,9 +298,23 @@ const ClipboardFormatType& ClipboardFormatType::GetFileContentAtIndexType(
 }
 
 // static
+const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(CFSTR_FILENAMEW));
+  return *format;
+}
+
+// static
 const ClipboardFormatType& ClipboardFormatType::GetIDListType() {
   static base::NoDestructor<ClipboardFormatType> format(
       ::RegisterClipboardFormat(CFSTR_SHELLIDLIST));
+  return *format;
+}
+
+// static
+const ClipboardFormatType& ClipboardFormatType::GetMozUrlType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(L"text/x-moz-url"));
   return *format;
 }
 

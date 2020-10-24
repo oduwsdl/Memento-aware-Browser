@@ -29,7 +29,7 @@ ClipboardFormatType& ClipboardFormatType::operator=(
   return *this;
 }
 
-bool ClipboardFormatType::Equals(const ClipboardFormatType& other) const {
+bool ClipboardFormatType::operator==(const ClipboardFormatType& other) const {
   return [data_ isEqualToString:other.data_];
 }
 
@@ -76,14 +76,13 @@ const ClipboardFormatType& ClipboardFormatType::GetPlainTextType() {
 }
 
 // static
-const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
-  static base::NoDestructor<ClipboardFormatType> type(NSFilenamesPboardType);
+const ClipboardFormatType& ClipboardFormatType::GetHtmlType() {
+  static base::NoDestructor<ClipboardFormatType> type(NSHTMLPboardType);
   return *type;
 }
 
-// static
-const ClipboardFormatType& ClipboardFormatType::GetHtmlType() {
-  static base::NoDestructor<ClipboardFormatType> type(NSHTMLPboardType);
+const ClipboardFormatType& ClipboardFormatType::GetSvgType() {
+  static base::NoDestructor<ClipboardFormatType> type(kImageSvg);
   return *type;
 }
 

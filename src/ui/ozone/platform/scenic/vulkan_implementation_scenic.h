@@ -58,7 +58,10 @@ class VulkanImplementationScenic : public gpu::VulkanImplementation {
       gfx::SysmemBufferCollectionId id,
       zx::channel token,
       gfx::BufferFormat format,
-      gfx::BufferUsage usage) override;
+      gfx::BufferUsage usage,
+      gfx::Size size,
+      size_t min_buffer_count,
+      bool register_with_image_pipe) override;
 
  private:
   ScenicSurfaceFactory* const scenic_surface_factory_;

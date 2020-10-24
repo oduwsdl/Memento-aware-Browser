@@ -138,6 +138,7 @@ fuchsia::sysmem::AllocatorHandle ConnectSysmemAllocator() {
 
 ScenicSurfaceFactory::ScenicSurfaceFactory()
     : egl_implementation_(std::make_unique<GLOzoneEGLScenic>(this)),
+      sysmem_buffer_manager_(this),
       weak_ptr_factory_(this) {}
 
 ScenicSurfaceFactory::~ScenicSurfaceFactory() {
@@ -207,8 +208,7 @@ ScenicSurfaceFactory::CreatePlatformWindowSurface(
 }
 
 std::unique_ptr<SurfaceOzoneCanvas> ScenicSurfaceFactory::CreateCanvasForWidget(
-    gfx::AcceleratedWidget widget,
-    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+    gfx::AcceleratedWidget widget) {
   ScenicSurface* surface = GetSurface(widget);
   return std::make_unique<ScenicWindowCanvas>(surface);
 }

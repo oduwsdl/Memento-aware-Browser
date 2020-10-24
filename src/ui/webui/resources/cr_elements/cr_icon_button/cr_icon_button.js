@@ -69,6 +69,17 @@ Polymer({
       reflectToAttribute: true,
     },
 
+    noRippleOnFocus: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private */
+    multipleIcons_: {
+      type: Boolean,
+      reflectToAttribute: true,
+    },
+
     /** @private */
     rippleShowing_: {
       type: Boolean,
@@ -87,7 +98,7 @@ Polymer({
     blur: 'onBlur_',
     click: 'onClick_',
     down: 'showRipple_',
-    focus: 'showRipple_',
+    focus: 'onFocus_',
     keydown: 'onKeyDown_',
     keyup: 'onKeyUp_',
     pointerdown: 'ensureRipple',
@@ -150,9 +161,19 @@ Polymer({
   },
 
   /** @private */
+  onFocus_() {
+    if (!this.noRippleOnFocus) {
+      this.showRipple_();
+    }
+  },
+
+  /** @private */
   onBlur_() {
     this.spaceKeyDown_ = false;
-    this.hideRipple_();
+
+    if (!this.noRippleOnFocus) {
+      this.hideRipple_();
+    }
   },
 
   /**
@@ -172,6 +193,7 @@ Polymer({
       return;
     }
     const icons = (this.ironIcon || '').split(',');
+    this.multipleIcons_ = icons.length > 1;
     icons.forEach(icon => {
       const ironIcon = document.createElement('iron-icon');
       ironIcon.icon = icon;

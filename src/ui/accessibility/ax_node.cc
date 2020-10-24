@@ -8,9 +8,12 @@
 #include <utility>
 
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_language_detection.h"
 #include "ui/accessibility/ax_role_properties.h"
@@ -356,6 +359,12 @@ AXNode* AXNode::GetNextSibling() const {
 }
 
 bool AXNode::IsText() const {
+  // In Legacy Layout, a list marker has no children and is thus represented on
+  // all platforms as a leaf node that exposes the marker itself, i.e., it forms
+  // part of the AX tree's text representation. In contrast, in Layout NG, a
+  // list marker has a static text child.
+  if (data().role == ax::mojom::Role::kListMarker)
+    return !children().size();
   return ui::IsText(data().role);
 }
 
@@ -477,12 +486,36 @@ void AXNode::ClearLanguageInfo() {
   language_info_.reset();
 }
 
+std::string AXNode::GetHypertext() const {
+  if (IsLeaf())
+    return GetInnerText();
+
+  // Construct the hypertext for this node, which contains the concatenation of
+  // the inner text of this node's textual children, and an embedded object
+  // character for all the other children.
+  const std::string embedded_character_str("\xEF\xBF\xBC");
+  std::string hypertext;
+  for (auto it = UnignoredChildrenBegin(); it != UnignoredChildrenEnd(); ++it) {
+    // Similar to Firefox, we don't expose text nodes in IAccessible2 and ATK
+    // hypertext with the embedded object character. We copy all of their text
+    // instead.
+    if (it->IsText()) {
+      hypertext += it->GetInnerText();
+    } else {
+      hypertext += embedded_character_str;
+    }
+  }
+  return hypertext;
+}
+
 std::string AXNode::GetInnerText() const {
   // If a text field has no descendants, then we compute its inner text from its
   // value or its placeholder. Otherwise we prefer to look at its descendant
   // text nodes because Blink doesn't always add all trailing white space to the
   // value attribute.
-  if (data().IsTextField() && children().empty()) {
+  const bool is_plain_text_field_without_descendants =
+      (data().IsTextField() && !GetUnignoredChildCount());
+  if (is_plain_text_field_without_descendants) {
     std::string value =
         data().GetStringAttribute(ax::mojom::StringAttribute::kValue);
     // If the value is empty, then there might be some placeholder text in the
@@ -493,9 +526,12 @@ std::string AXNode::GetInnerText() const {
   }
 
   // Ordinarily, plain text fields are leaves. We need to exclude them from the
-  // set of leaf nodes when they expose any descendants if we want to compute
-  // their inner text from their descendant text nodes.
-  if (IsLeaf() && !(data().IsTextField() && !children().empty())) {
+  // set of leaf nodes when they expose any descendants. This is because we want
+  // to compute their inner text from their descendant text nodes as we don't
+  // always trust the "value" attribute provided by Blink.
+  const bool is_plain_text_field_with_descendants =
+      (data().IsTextField() && GetUnignoredChildCount());
+  if (IsLeaf() && !is_plain_text_field_with_descendants) {
     switch (data().GetNameFrom()) {
       case ax::mojom::NameFrom::kNone:
       case ax::mojom::NameFrom::kUninitialized:
@@ -549,6 +585,18 @@ std::string AXNode::GetLanguage() const {
   }
 
   return std::string();
+}
+
+std::string AXNode::GetValueForControl() const {
+  if (data().IsTextField())
+    return GetValueForTextField();
+  if (data().IsRangeValueSupported())
+    return GetTextForRangeValue();
+  if (data().role == ax::mojom::Role::kColorWell)
+    return GetValueForColorWell();
+  if (!IsControl(data().role))
+    return std::string();
+  return data().GetStringAttribute(ax::mojom::StringAttribute::kValue);
 }
 
 std::ostream& operator<<(std::ostream& stream, const AXNode& node) {
@@ -730,7 +778,7 @@ std::vector<AXNode::AXID> AXNode::GetTableRowNodeIds() const {
   return row_node_ids;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 
 //
 // Table column-like nodes. These nodes are only present on macOS.
@@ -757,7 +805,7 @@ base::Optional<int> AXNode::GetTableColColIndex() const {
   return index;
 }
 
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 //
 // Table cell-like nodes.
@@ -1083,6 +1131,44 @@ AXNode* AXNode::ComputeFirstUnignoredChildRecursive() const {
   return nullptr;
 }
 
+std::string AXNode::GetTextForRangeValue() const {
+  DCHECK(data().IsRangeValueSupported());
+  std::string range_value =
+      data().GetStringAttribute(ax::mojom::StringAttribute::kValue);
+  float numeric_value;
+  if (range_value.empty() &&
+      data().GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange,
+                               &numeric_value)) {
+    range_value = base::NumberToString(numeric_value);
+  }
+  return range_value;
+}
+
+std::string AXNode::GetValueForColorWell() const {
+  DCHECK_EQ(data().role, ax::mojom::Role::kColorWell);
+  // static cast because SkColor is a 4-byte unsigned int
+  unsigned int color = static_cast<unsigned int>(
+      data().GetIntAttribute(ax::mojom::IntAttribute::kColorValue));
+
+  unsigned int red = SkColorGetR(color);
+  unsigned int green = SkColorGetG(color);
+  unsigned int blue = SkColorGetB(color);
+  return base::StringPrintf("%d%% red %d%% green %d%% blue", red * 100 / 255,
+                            green * 100 / 255, blue * 100 / 255);
+}
+
+std::string AXNode::GetValueForTextField() const {
+  DCHECK(data().IsTextField());
+  std::string value =
+      data().GetStringAttribute(ax::mojom::StringAttribute::kValue);
+  // Some screen readers like Jaws and VoiceOver require a value to be set in
+  // text fields with rich content, even though the same information is
+  // available on the children.
+  if (value.empty() && data().IsRichTextField())
+    return GetInnerText();
+  return value;
+}
+
 bool AXNode::IsIgnored() const {
   return data().IsIgnored();
 }
@@ -1098,11 +1184,8 @@ bool AXNode::IsChildOfLeaf() const {
 }
 
 bool AXNode::IsLeaf() const {
-  return !GetUnignoredChildCount() || IsLeafIncludingIgnored();
-}
-
-bool AXNode::IsLeafIncludingIgnored() const {
-  if (children().empty())
+  // A node is also a leaf if all of it's descendants are ignored.
+  if (children().empty() || !GetUnignoredChildCount())
     return true;
 
 #if defined(OS_WIN)
@@ -1215,16 +1298,18 @@ bool AXNode::IsEmbeddedGroup() const {
 }
 
 AXNode* AXNode::GetTextFieldAncestor() const {
-  AXNode* parent = GetUnignoredParent();
-
-  while (parent && parent->data().HasState(ax::mojom::State::kEditable)) {
-    if (parent->data().IsPlainTextField() || parent->data().IsRichTextField())
-      return parent;
-
-    parent = parent->GetUnignoredParent();
+  for (AXNode* ancestor = const_cast<AXNode*>(this);
+       ancestor && ancestor->data().HasState(ax::mojom::State::kEditable);
+       ancestor = ancestor->GetUnignoredParent()) {
+    if (ancestor->data().IsTextField())
+      return ancestor;
   }
-
   return nullptr;
+}
+
+bool AXNode::IsDescendantOfPlainTextField() const {
+  AXNode* textfield_node = GetTextFieldAncestor();
+  return textfield_node && textfield_node->data().IsPlainTextField();
 }
 
 }  // namespace ui

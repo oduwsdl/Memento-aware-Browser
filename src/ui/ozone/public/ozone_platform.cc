@@ -13,12 +13,12 @@
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/ozone/platform_object.h"
 #include "ui/ozone/platform_selection.h"
+#include "ui/ozone/public/platform_menu_utils.h"
 #include "ui/ozone/public/platform_screen.h"
 
 namespace ui {
 
 namespace {
-
 OzonePlatform* g_instance = nullptr;
 
 void EnsureInstance() {
@@ -36,6 +36,9 @@ void EnsureInstance() {
 }
 
 }  // namespace
+
+OzonePlatform::PlatformProperties::PlatformProperties() = default;
+OzonePlatform::PlatformProperties::~PlatformProperties() = default;
 
 OzonePlatform::OzonePlatform() {
   DCHECK(!g_instance) << "There should only be a single OzonePlatform.";
@@ -93,6 +96,10 @@ PlatformClipboard* OzonePlatform::GetPlatformClipboard() {
 }
 
 PlatformGLEGLUtility* OzonePlatform::GetPlatformGLEGLUtility() {
+  return nullptr;
+}
+
+PlatformMenuUtils* OzonePlatform::GetPlatformMenuUtils() {
   return nullptr;
 }
 

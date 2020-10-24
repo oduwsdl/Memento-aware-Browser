@@ -14,13 +14,13 @@ COMPONENT_EXPORT(EVENTS_OZONE)
 extern const base::Feature kEnableHeuristicPalmDetectionFilter;
 
 COMPONENT_EXPORT(EVENTS_OZONE)
-extern const base::Feature kEnableHighResolutionMouseScrolling;
-
-COMPONENT_EXPORT(EVENTS_OZONE)
 extern const base::Feature kEnableNeuralPalmDetectionFilter;
 
 COMPONENT_EXPORT(EVENTS_OZONE)
 extern const base::Feature kEnableNeuralStylusReportFilter;
+
+COMPONENT_EXPORT(EVENTS_OZONE)
+extern const base::Feature kEnableOrdinalMotion;
 
 COMPONENT_EXPORT(EVENTS_OZONE)
 extern const base::Feature kEnablePalmOnMaxTouchMajor;

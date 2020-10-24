@@ -41,6 +41,8 @@ testcase.sharePathWithCrostini = async () => {
       '[command="#share-with-linux"]:not([hidden]):not([disabled])';
   const menuNoShareWithLinux = '#file-context-menu:not([hidden]) ' +
       '[command="#share-with-linux"][hidden][disabled="disabled"]';
+  const shareMessageShown = '#files-message:not([hidden])';
+  const shareMessageHidden = '#files-message[hidden]';
 
   const appId =
       await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.photos], []);
@@ -70,6 +72,11 @@ testcase.sharePathWithCrostini = async () => {
   await remoteCall.callRemoteTestUtil(
       'fakeMouseRightClick', appId, ['#file-list [file-name="photos"']);
   await remoteCall.waitForElement(appId, menuNoShareWithLinux);
+
+  // Click 'photos' to go in photos directory, ensure share message is shown.
+  await remoteCall.waitForElement(appId, shareMessageHidden);
+  remoteCall.callRemoteTestUtil('fakeMouseDoubleClick', appId, [photos]);
+  await remoteCall.waitForElement(appId, shareMessageShown);
 };
 
 testcase.pluginVmDirectoryNotSharedErrorDialog = async () => {
@@ -86,7 +93,7 @@ testcase.pluginVmDirectoryNotSharedErrorDialog = async () => {
         },
         {
           taskId: 'plugin-vm-app-id|pluginvm|open-with',
-          title: 'Plugin VM App',
+          title: 'App (Windows)',
           verb: 'open_with',
         }
       ]]));
@@ -101,18 +108,18 @@ testcase.pluginVmDirectoryNotSharedErrorDialog = async () => {
       appId, 'cr-menu-item[command="#open-with"]:not([hidden])');
 
   // Wait for app picker.
-  await remoteCall.waitForElement(appId, '#default-tasks-list:not([hidden])');
+  await remoteCall.waitForElement(appId, '#tasks-menu:not([hidden])');
 
   // Ensure app picker shows Plugin VM option.
   const appOptions = await remoteCall.callRemoteTestUtil(
-      'queryAllElements', appId, ['#default-tasks-list [tabindex]']);
+      'queryAllElements', appId, ['#tasks-menu [tabindex]']);
   chrome.test.assertEq(
-      1, appOptions.filter(el => el.text == 'Open with Plugin VM App').length);
+      1, appOptions.filter(el => el.text == 'Open with App (Windows)').length);
 
   // Click on the Plugin VM app, and wait for error dialog.
   await remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [
-    `#default-tasks-list [tabindex]:nth-of-type(${
-        appOptions.map(el => el.text).indexOf('Open with Plugin VM App') + 1})`
+    `#tasks-menu [tabindex]:nth-of-type(${
+        appOptions.map(el => el.text).indexOf('Open with App (Windows)') + 1})`
   ]);
   await remoteCall.waitUntilTaskExecutes(
       appId, 'plugin-vm-app-id|pluginvm|open-with',
@@ -128,11 +135,10 @@ testcase.pluginVmDirectoryNotSharedErrorDialog = async () => {
       'queryAllElements', appId,
       ['.cr-dialog-frame:not(#default-task-dialog) .cr-dialog-text']);
 
+  chrome.test.assertEq([''], dialogTitles.map(el => el.text));
   chrome.test.assertEq(
-      ['Unable to open with Plugin VM'], dialogTitles.map(el => el.text));
-  chrome.test.assertEq(
-      ['To open files with Plugin VM App (Plugin VM), ' +
-       'first move them to the Plugin VM folder.'],
+      ['To open files with App (Windows), ' +
+       'first move them to the Windows files folder.'],
       dialogTexts.map(el => el.text));
 
   // TODO(crbug.com/1049453): Test file is moved. This can only be tested when
@@ -153,7 +159,7 @@ testcase.pluginVmFileOnExternalDriveErrorDialog = async () => {
         },
         {
           taskId: 'plugin-vm-app-id|pluginvm|open-with',
-          title: 'Plugin VM App',
+          title: 'App (Windows)',
           verb: 'open_with',
         }
       ]]));
@@ -168,18 +174,18 @@ testcase.pluginVmFileOnExternalDriveErrorDialog = async () => {
       appId, 'cr-menu-item[command="#open-with"]:not([hidden])');
 
   // Wait for app picker.
-  await remoteCall.waitForElement(appId, '#default-tasks-list:not([hidden])');
+  await remoteCall.waitForElement(appId, '#tasks-menu:not([hidden])');
 
   // Ensure app picker shows Plugin VM option.
   const appOptions = await remoteCall.callRemoteTestUtil(
-      'queryAllElements', appId, ['#default-tasks-list [tabindex]']);
+      'queryAllElements', appId, ['#tasks-menu [tabindex]']);
   chrome.test.assertEq(
-      1, appOptions.filter(el => el.text == 'Open with Plugin VM App').length);
+      1, appOptions.filter(el => el.text == 'Open with App (Windows)').length);
 
   // Click on the Plugin VM app, and wait for error dialog.
   await remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [
-    `#default-tasks-list [tabindex]:nth-of-type(${
-        appOptions.map(el => el.text).indexOf('Open with Plugin VM App') + 1})`
+    `#tasks-menu [tabindex]:nth-of-type(${
+        appOptions.map(el => el.text).indexOf('Open with App (Windows)') + 1})`
   ]);
   await remoteCall.waitUntilTaskExecutes(
       appId, 'plugin-vm-app-id|pluginvm|open-with',
@@ -195,11 +201,10 @@ testcase.pluginVmFileOnExternalDriveErrorDialog = async () => {
       'queryAllElements', appId,
       ['.cr-dialog-frame:not(#default-task-dialog) .cr-dialog-text']);
 
+  chrome.test.assertEq([''], dialogTitles.map(el => el.text));
   chrome.test.assertEq(
-      ['Unable to open with Plugin VM'], dialogTitles.map(el => el.text));
-  chrome.test.assertEq(
-      ['To open files with Plugin VM App (Plugin VM), ' +
-       'first copy them to the Plugin VM folder.'],
+      ['To open files with App (Windows), ' +
+       'first copy them to the Windows files folder.'],
       dialogTexts.map(el => el.text));
 
   // TODO(crbug.com/1049453): Test file is moved. This can only be tested when

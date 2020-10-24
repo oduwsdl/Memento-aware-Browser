@@ -19,6 +19,14 @@ bool MenuModel::IsVisibleAt(int index) const {
   return true;
 }
 
+bool MenuModel::IsAlertedAt(int index) const {
+  return false;
+}
+
+bool MenuModel::IsNewFeatureAt(int index) const {
+  return false;
+}
+
 // static
 bool MenuModel::GetModelAndIndexForCommandId(int command_id,
                                              MenuModel** model,

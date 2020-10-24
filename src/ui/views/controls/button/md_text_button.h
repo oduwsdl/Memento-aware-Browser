@@ -19,11 +19,12 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
  public:
   METADATA_HEADER(MdTextButton);
 
-  static std::unique_ptr<MdTextButton> Create(
-      ButtonListener* listener,
-      const base::string16& text,
-      int button_context = style::CONTEXT_BUTTON_MD);
-
+  explicit MdTextButton(PressedCallback callback = PressedCallback(),
+                        const base::string16& text = base::string16(),
+                        int button_context = style::CONTEXT_BUTTON_MD);
+  explicit MdTextButton(ButtonListener* listener,
+                        const base::string16& text = base::string16(),
+                        int button_context = style::CONTEXT_BUTTON_MD);
   ~MdTextButton() override;
 
   // See |is_prominent_|.
@@ -40,7 +41,8 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   float GetCornerRadius() const;
 
   // See |custom_padding_|.
-  void SetCustomPadding(const gfx::Insets& padding);
+  void SetCustomPadding(const base::Optional<gfx::Insets>& padding);
+  base::Optional<gfx::Insets> GetCustomPadding() const;
 
   // LabelButton:
   void OnThemeChanged() override;
@@ -57,12 +59,13 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   void OnFocus() override;
   void OnBlur() override;
 
-  MdTextButton(ButtonListener* listener, int button_context);
-
  private:
   void UpdatePadding();
-  void UpdateColors();
   gfx::Insets CalculateDefaultPadding() const;
+
+  void UpdateTextColor();
+  void UpdateBackgroundColor() override;
+  void UpdateColors();
 
   // True if this button uses prominent styling (blue fill, etc.).
   bool is_prominent_ = false;
@@ -77,6 +80,13 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
 
   DISALLOW_COPY_AND_ASSIGN(MdTextButton);
 };
+
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, MdTextButton, LabelButton)
+VIEW_BUILDER_PROPERTY(bool, Prominent)
+VIEW_BUILDER_PROPERTY(base::Optional<SkColor>, BgColorOverride)
+VIEW_BUILDER_PROPERTY(float, CornerRadius)
+VIEW_BUILDER_PROPERTY(base::Optional<gfx::Insets>, CustomPadding)
+END_VIEW_BUILDER(VIEWS_EXPORT, MdTextButton)
 
 }  // namespace views
 

@@ -1159,6 +1159,10 @@ static void GL_BINDING_CALL Mock_glGetTexLevelParameterfv(GLenum target,
                                                           GLint level,
                                                           GLenum pname,
                                                           GLfloat* params);
+static void GL_BINDING_CALL Mock_glGetTexLevelParameterfvANGLE(GLenum target,
+                                                               GLint level,
+                                                               GLenum pname,
+                                                               GLfloat* params);
 static void GL_BINDING_CALL
 Mock_glGetTexLevelParameterfvRobustANGLE(GLenum target,
                                          GLint level,
@@ -1170,6 +1174,10 @@ static void GL_BINDING_CALL Mock_glGetTexLevelParameteriv(GLenum target,
                                                           GLint level,
                                                           GLenum pname,
                                                           GLint* params);
+static void GL_BINDING_CALL Mock_glGetTexLevelParameterivANGLE(GLenum target,
+                                                               GLint level,
+                                                               GLenum pname,
+                                                               GLint* params);
 static void GL_BINDING_CALL
 Mock_glGetTexLevelParameterivRobustANGLE(GLenum target,
                                          GLint level,
@@ -1461,6 +1469,9 @@ static void GL_BINDING_CALL Mock_glObjectPtrLabel(void* ptr,
 static void GL_BINDING_CALL Mock_glObjectPtrLabelKHR(void* ptr,
                                                      GLsizei length,
                                                      const char* label);
+static void GL_BINDING_CALL Mock_glPatchParameteri(GLenum pname, GLint value);
+static void GL_BINDING_CALL Mock_glPatchParameteriOES(GLenum pname,
+                                                      GLint value);
 static void GL_BINDING_CALL Mock_glPathCommandsCHROMIUM(GLuint path,
                                                         GLsizei numCommands,
                                                         const GLubyte* commands,
@@ -2085,6 +2096,16 @@ static void GL_BINDING_CALL Mock_glTexStorageMem2DEXT(GLenum target,
                                                       GLsizei height,
                                                       GLuint memory,
                                                       GLuint64 offset);
+static void GL_BINDING_CALL
+Mock_glTexStorageMemFlags2DANGLE(GLenum target,
+                                 GLsizei levels,
+                                 GLenum internalFormat,
+                                 GLsizei width,
+                                 GLsizei height,
+                                 GLuint memory,
+                                 GLuint64 offset,
+                                 GLbitfield createFlags,
+                                 GLbitfield usageFlags);
 static void GL_BINDING_CALL Mock_glTexSubImage2D(GLenum target,
                                                  GLint level,
                                                  GLint xoffset,

@@ -44,58 +44,14 @@ class AXPlatformNodeTextProviderTest : public AXPlatformNodeWinTest {
   }
   const AXNodePosition::AXPositionInstance& GetStart(
       const AXPlatformNodeTextRangeProviderWin* text_range) {
-    return text_range->start_;
+    return text_range->start();
   }
   const AXNodePosition::AXPositionInstance& GetEnd(
       const AXPlatformNodeTextRangeProviderWin* text_range) {
-    return text_range->end_;
+    return text_range->end();
   }
 };
 
-class MockIRawElementProviderSimple
-    : public CComObjectRootEx<CComMultiThreadModel>,
-      public IRawElementProviderSimple {
- public:
-  BEGIN_COM_MAP(MockIRawElementProviderSimple)
-  COM_INTERFACE_ENTRY(IRawElementProviderSimple)
-  END_COM_MAP()
-
-  MockIRawElementProviderSimple() {}
-  ~MockIRawElementProviderSimple() {}
-
-  static HRESULT CreateMockIRawElementProviderSimple(
-      IRawElementProviderSimple** provider) {
-    CComObject<MockIRawElementProviderSimple>* raw_element_provider = nullptr;
-    HRESULT hr = CComObject<MockIRawElementProviderSimple>::CreateInstance(
-        &raw_element_provider);
-    if (SUCCEEDED(hr)) {
-      *provider = raw_element_provider;
-    }
-
-    return hr;
-  }
-
-  //
-  // IRawElementProviderSimple methods.
-  //
-  IFACEMETHODIMP GetPatternProvider(PATTERNID pattern_id,
-                                    IUnknown** result) override {
-    return E_NOTIMPL;
-  }
-
-  IFACEMETHODIMP GetPropertyValue(PROPERTYID property_id,
-                                  VARIANT* result) override {
-    return E_NOTIMPL;
-  }
-
-  IFACEMETHODIMP
-  get_ProviderOptions(enum ProviderOptions* ret) override { return E_NOTIMPL; }
-
-  IFACEMETHODIMP
-  get_HostRawElementProvider(IRawElementProviderSimple** provider) override {
-    return E_NOTIMPL;
-  }
-};
 
 TEST_F(AXPlatformNodeTextProviderTest, ITextProviderRangeFromChild) {
   ui::AXNodeData text_data;
@@ -583,15 +539,29 @@ TEST_F(AXPlatformNodeTextProviderTest, ITextProviderGetSelection) {
   selections.Reset();
   text_range_provider.Reset();
 
-  // Verify that we don't fill the SAFEARRAY when there is no selection and the
-  // node is not editable.
+  // Verify SAFEARRAY value for degenerate selection.
   selected_tree_data.sel_focus_object_id = 2;
   selected_tree_data.sel_anchor_object_id = 2;
   selected_tree_data.sel_anchor_offset = 1;
   selected_tree_data.sel_focus_offset = 1;
 
   root_text_provider->GetSelection(selections.Receive());
-  ASSERT_EQ(nullptr, selections.Get());
+  ASSERT_NE(nullptr, selections.Get());
+
+  EXPECT_HRESULT_SUCCEEDED(SafeArrayGetUBound(selections.Get(), 1, &ubound));
+  EXPECT_EQ(0, ubound);
+  EXPECT_HRESULT_SUCCEEDED(SafeArrayGetLBound(selections.Get(), 1, &lbound));
+  EXPECT_EQ(0, lbound);
+
+  EXPECT_HRESULT_SUCCEEDED(SafeArrayGetElement(
+      selections.Get(), &index, static_cast<void**>(&text_range_provider)));
+
+  EXPECT_HRESULT_SUCCEEDED(
+      text_range_provider->GetText(-1, text_content.Receive()));
+  EXPECT_EQ(0, wcscmp(text_content.Get(), L""));
+  text_content.Reset();
+  selections.Reset();
+  text_range_provider.Reset();
 
   // Now delete the tree (which will delete the associated elements) and verify
   // that UIA_E_ELEMENTNOTAVAILABLE is returned when calling GetSelection on

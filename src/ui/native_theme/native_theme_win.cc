@@ -11,6 +11,7 @@
 #include <vssym32.h>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/notreached.h"
@@ -611,6 +612,7 @@ base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
     case kColorId_TableBackgroundAlternate:
     case kColorId_TooltipBackground:
     case kColorId_ProminentButtonDisabledColor:
+    case kColorId_NotificationDefaultBackground:
       return system_colors_[SystemThemeColor::kWindow];
 
     // Window Text
@@ -623,6 +625,7 @@ base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
     case kColorId_TableHeaderText:
     case kColorId_TableGroupingIndicatorColor:
     case kColorId_TableHeaderSeparator:
+    case kColorId_TooltipIcon:
     case kColorId_TooltipText:
     case kColorId_ThrobberSpinningColor:
     case kColorId_ThrobberLightColor:
@@ -678,6 +681,7 @@ base::Optional<SkColor> NativeThemeWin::GetPlatformHighContrastColor(
     case kColorId_FocusedMenuItemBackgroundColor:
     case kColorId_LabelTextSelectionBackgroundFocused:
     case kColorId_TextfieldSelectionBackgroundFocused:
+    case kColorId_TooltipIconHovered:
     case kColorId_TreeSelectionBackgroundFocused:
     case kColorId_TreeSelectionBackgroundUnfocused:
     case kColorId_TableSelectionBackgroundFocused:

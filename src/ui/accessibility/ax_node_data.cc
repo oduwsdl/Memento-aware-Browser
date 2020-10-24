@@ -153,6 +153,7 @@ bool IsNodeIdIntAttribute(ax::mojom::IntAttribute attr) {
     case ax::mojom::IntAttribute::kCheckedState:
     case ax::mojom::IntAttribute::kRestriction:
     case ax::mojom::IntAttribute::kListStyle:
+    case ax::mojom::IntAttribute::kTextAlign:
     case ax::mojom::IntAttribute::kTextDirection:
     case ax::mojom::IntAttribute::kTextPosition:
     case ax::mojom::IntAttribute::kTextStyle:
@@ -754,12 +755,16 @@ ax::mojom::CheckedState AXNodeData::GetCheckedState() const {
 }
 
 void AXNodeData::SetCheckedState(ax::mojom::CheckedState checked_state) {
-  if (HasIntAttribute(ax::mojom::IntAttribute::kCheckedState))
+  if (HasCheckedState())
     RemoveIntAttribute(ax::mojom::IntAttribute::kCheckedState);
   if (checked_state != ax::mojom::CheckedState::kNone) {
     AddIntAttribute(ax::mojom::IntAttribute::kCheckedState,
                     static_cast<int32_t>(checked_state));
   }
+}
+
+bool AXNodeData::HasCheckedState() const {
+  return HasIntAttribute(ax::mojom::IntAttribute::kCheckedState);
 }
 
 ax::mojom::DefaultActionVerb AXNodeData::GetDefaultActionVerb() const {
@@ -891,15 +896,27 @@ void AXNodeData::SetListStyle(ax::mojom::ListStyle list_style) {
   }
 }
 
-ax::mojom::TextDirection AXNodeData::GetTextDirection() const {
-  return static_cast<ax::mojom::TextDirection>(
+ax::mojom::TextAlign AXNodeData::GetTextAlign() const {
+  return static_cast<ax::mojom::TextAlign>(
+      GetIntAttribute(ax::mojom::IntAttribute::kTextAlign));
+}
+
+void AXNodeData::SetTextAlign(ax::mojom::TextAlign text_align) {
+  if (HasIntAttribute(ax::mojom::IntAttribute::kTextAlign))
+    RemoveIntAttribute(ax::mojom::IntAttribute::kTextAlign);
+  AddIntAttribute(ax::mojom::IntAttribute::kTextAlign,
+                  static_cast<int32_t>(text_align));
+}
+
+ax::mojom::WritingDirection AXNodeData::GetTextDirection() const {
+  return static_cast<ax::mojom::WritingDirection>(
       GetIntAttribute(ax::mojom::IntAttribute::kTextDirection));
 }
 
-void AXNodeData::SetTextDirection(ax::mojom::TextDirection text_direction) {
+void AXNodeData::SetTextDirection(ax::mojom::WritingDirection text_direction) {
   if (HasIntAttribute(ax::mojom::IntAttribute::kTextDirection))
     RemoveIntAttribute(ax::mojom::IntAttribute::kTextDirection);
-  if (text_direction != ax::mojom::TextDirection::kNone) {
+  if (text_direction != ax::mojom::WritingDirection::kNone) {
     AddIntAttribute(ax::mojom::IntAttribute::kTextDirection,
                     static_cast<int32_t>(text_direction));
   }
@@ -931,13 +948,23 @@ bool AXNodeData::IsClickable() const {
   return ui::IsClickable(role);
 }
 
+bool AXNodeData::IsSelectable() const {
+  // It's selectable if it has the attribute, whether it's true or false.
+  return HasBoolAttribute(ax::mojom::BoolAttribute::kSelected) &&
+         GetRestriction() != ax::mojom::Restriction::kDisabled;
+}
+
 bool AXNodeData::IsIgnored() const {
   return HasState(ax::mojom::State::kIgnored) ||
          role == ax::mojom::Role::kIgnored;
 }
 
+bool AXNodeData::IsInvisible() const {
+  return HasState(ax::mojom::State::kInvisible);
+}
+
 bool AXNodeData::IsInvisibleOrIgnored() const {
-  return IsIgnored() || HasState(ax::mojom::State::kInvisible);
+  return IsIgnored() || IsInvisible();
 }
 
 bool AXNodeData::IsInvocable() const {
@@ -1235,18 +1262,24 @@ std::string AXNodeData::ToString() const {
             break;
         }
         break;
+      case ax::mojom::IntAttribute::kTextAlign:
+        result += " text_align=";
+        result += ui::ToString(
+            static_cast<ax::mojom::TextAlign>(int_attribute.second));
+        break;
       case ax::mojom::IntAttribute::kTextDirection:
-        switch (static_cast<ax::mojom::TextDirection>(int_attribute.second)) {
-          case ax::mojom::TextDirection::kLtr:
+        switch (
+            static_cast<ax::mojom::WritingDirection>(int_attribute.second)) {
+          case ax::mojom::WritingDirection::kLtr:
             result += " text_direction=ltr";
             break;
-          case ax::mojom::TextDirection::kRtl:
+          case ax::mojom::WritingDirection::kRtl:
             result += " text_direction=rtl";
             break;
-          case ax::mojom::TextDirection::kTtb:
+          case ax::mojom::WritingDirection::kTtb:
             result += " text_direction=ttb";
             break;
-          case ax::mojom::TextDirection::kBtt:
+          case ax::mojom::WritingDirection::kBtt:
             result += " text_direction=btt";
             break;
           default:
@@ -1403,6 +1436,9 @@ std::string AXNodeData::ToString() const {
       case ax::mojom::StringAttribute::kAriaInvalidValue:
         result += " aria_invalid_value=" + value;
         break;
+      case ax::mojom::StringAttribute::kCheckedStateDescription:
+        result += " checked_state_description=" + value;
+        break;
       case ax::mojom::StringAttribute::kAutoComplete:
         result += " autocomplete=" + value;
         break;
@@ -1504,6 +1540,9 @@ std::string AXNodeData::ToString() const {
       case ax::mojom::FloatAttribute::kFontWeight:
         result += " font_weight=" + value;
         break;
+      case ax::mojom::FloatAttribute::kTextIndent:
+        result += " text_indent=" + value;
+        break;
       case ax::mojom::FloatAttribute::kNone:
         break;
     }
@@ -1545,6 +1584,9 @@ std::string AXNodeData::ToString() const {
         break;
       case ax::mojom::BoolAttribute::kClipsChildren:
         result += " clips_children=" + value;
+        break;
+      case ax::mojom::BoolAttribute::kNotUserSelectableStyle:
+        result += " not_user_selectable=" + value;
         break;
       case ax::mojom::BoolAttribute::kSelected:
         result += " selected=" + value;

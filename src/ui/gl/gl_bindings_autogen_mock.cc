@@ -10,6 +10,7 @@
 
 #include <string.h>
 
+#include "base/notreached.h"
 #include "ui/gl/gl_mock.h"
 
 namespace {
@@ -2704,6 +2705,15 @@ MockGLInterface::Mock_glGetTexLevelParameterfv(GLenum target,
 }
 
 void GL_BINDING_CALL
+MockGLInterface::Mock_glGetTexLevelParameterfvANGLE(GLenum target,
+                                                    GLint level,
+                                                    GLenum pname,
+                                                    GLfloat* params) {
+  MakeGlMockFunctionUnique("glGetTexLevelParameterfvANGLE");
+  interface_->GetTexLevelParameterfv(target, level, pname, params);
+}
+
+void GL_BINDING_CALL
 MockGLInterface::Mock_glGetTexLevelParameterfvRobustANGLE(GLenum target,
                                                           GLint level,
                                                           GLenum pname,
@@ -2721,6 +2731,15 @@ MockGLInterface::Mock_glGetTexLevelParameteriv(GLenum target,
                                                GLenum pname,
                                                GLint* params) {
   MakeGlMockFunctionUnique("glGetTexLevelParameteriv");
+  interface_->GetTexLevelParameteriv(target, level, pname, params);
+}
+
+void GL_BINDING_CALL
+MockGLInterface::Mock_glGetTexLevelParameterivANGLE(GLenum target,
+                                                    GLint level,
+                                                    GLenum pname,
+                                                    GLint* params) {
+  MakeGlMockFunctionUnique("glGetTexLevelParameterivANGLE");
   interface_->GetTexLevelParameteriv(target, level, pname, params);
 }
 
@@ -3451,6 +3470,18 @@ MockGLInterface::Mock_glObjectPtrLabelKHR(void* ptr,
                                           const char* label) {
   MakeGlMockFunctionUnique("glObjectPtrLabelKHR");
   interface_->ObjectPtrLabel(ptr, length, label);
+}
+
+void GL_BINDING_CALL MockGLInterface::Mock_glPatchParameteri(GLenum pname,
+                                                             GLint value) {
+  MakeGlMockFunctionUnique("glPatchParameteri");
+  interface_->PatchParameteri(pname, value);
+}
+
+void GL_BINDING_CALL MockGLInterface::Mock_glPatchParameteriOES(GLenum pname,
+                                                                GLint value) {
+  MakeGlMockFunctionUnique("glPatchParameteriOES");
+  interface_->PatchParameteri(pname, value);
 }
 
 void GL_BINDING_CALL
@@ -4737,6 +4768,22 @@ MockGLInterface::Mock_glTexStorageMem2DEXT(GLenum target,
   MakeGlMockFunctionUnique("glTexStorageMem2DEXT");
   interface_->TexStorageMem2DEXT(target, levels, internalFormat, width, height,
                                  memory, offset);
+}
+
+void GL_BINDING_CALL
+MockGLInterface::Mock_glTexStorageMemFlags2DANGLE(GLenum target,
+                                                  GLsizei levels,
+                                                  GLenum internalFormat,
+                                                  GLsizei width,
+                                                  GLsizei height,
+                                                  GLuint memory,
+                                                  GLuint64 offset,
+                                                  GLbitfield createFlags,
+                                                  GLbitfield usageFlags) {
+  MakeGlMockFunctionUnique("glTexStorageMemFlags2DANGLE");
+  interface_->TexStorageMemFlags2DANGLE(target, levels, internalFormat, width,
+                                        height, memory, offset, createFlags,
+                                        usageFlags);
 }
 
 void GL_BINDING_CALL MockGLInterface::Mock_glTexSubImage2D(GLenum target,
@@ -6103,12 +6150,18 @@ MockGLInterface::GetGLProcAddress(const char* name) {
   if (strcmp(name, "glGetTexLevelParameterfv") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glGetTexLevelParameterfv);
+  if (strcmp(name, "glGetTexLevelParameterfvANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glGetTexLevelParameterfvANGLE);
   if (strcmp(name, "glGetTexLevelParameterfvRobustANGLE") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glGetTexLevelParameterfvRobustANGLE);
   if (strcmp(name, "glGetTexLevelParameteriv") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glGetTexLevelParameteriv);
+  if (strcmp(name, "glGetTexLevelParameterivANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glGetTexLevelParameterivANGLE);
   if (strcmp(name, "glGetTexLevelParameterivRobustANGLE") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glGetTexLevelParameterivRobustANGLE);
@@ -6333,6 +6386,10 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glObjectPtrLabel);
   if (strcmp(name, "glObjectPtrLabelKHR") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glObjectPtrLabelKHR);
+  if (strcmp(name, "glPatchParameteri") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(Mock_glPatchParameteri);
+  if (strcmp(name, "glPatchParameteriOES") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(Mock_glPatchParameteriOES);
   if (strcmp(name, "glPathCommandsCHROMIUM") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glPathCommandsCHROMIUM);
   if (strcmp(name, "glPathCommandsNV") == 0)
@@ -6664,6 +6721,9 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glTexStorage3D);
   if (strcmp(name, "glTexStorageMem2DEXT") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glTexStorageMem2DEXT);
+  if (strcmp(name, "glTexStorageMemFlags2DANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glTexStorageMemFlags2DANGLE);
   if (strcmp(name, "glTexSubImage2D") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glTexSubImage2D);
   if (strcmp(name, "glTexSubImage2DRobustANGLE") == 0)

@@ -4,8 +4,7 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
-#include <wayland-client.h>
-
+#include <algorithm>
 #include <memory>
 
 #include "base/bind.h"
@@ -15,34 +14,54 @@
 #include "ui/events/ozone/events_ozone.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_cursor_position.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_pointer.h"
+#include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
+#include "ui/ozone/public/mojom/wayland/wayland_overlay_config.mojom.h"
+
+namespace {
+
+bool OverlayStackOrderCompare(
+    const ui::ozone::mojom::WaylandOverlayConfigPtr& i,
+    const ui::ozone::mojom::WaylandOverlayConfigPtr& j) {
+  return i->z_order < j->z_order;
+}
+
+}  // namespace
 
 namespace ui {
 
 WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
                              WaylandConnection* connection)
-    : delegate_(delegate), connection_(connection) {}
+    : delegate_(delegate),
+      connection_(connection),
+      wayland_overlay_delegation_enabled_(IsWaylandOverlayDelegationEnabled()),
+      accelerated_widget_(
+          connection->wayland_window_manager()->AllocateAcceleratedWidget()) {}
 
 WaylandWindow::~WaylandWindow() {
+  shutting_down_ = true;
+
   PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
-  if (surface_)
+
+  if (wayland_overlay_delegation_enabled_) {
+    connection_->wayland_window_manager()->RemoveSubsurface(
+        GetWidget(), primary_subsurface_.get());
+  }
+  for (const auto& widget_subsurface : wayland_subsurfaces()) {
+    connection_->wayland_window_manager()->RemoveSubsurface(
+        GetWidget(), widget_subsurface.get());
+  }
+  if (root_surface_)
     connection_->wayland_window_manager()->RemoveWindow(GetWidget());
 
   if (parent_window_)
     parent_window_->set_child_window(nullptr);
-}
-
-// static
-WaylandWindow* WaylandWindow::FromSurface(wl_surface* surface) {
-  if (!surface)
-    return nullptr;
-  return static_cast<WaylandWindow*>(
-      wl_proxy_get_user_data(reinterpret_cast<wl_proxy*>(surface)));
 }
 
 void WaylandWindow::OnWindowLostCapture() {
@@ -61,7 +80,7 @@ void WaylandWindow::UpdateBufferScale(bool update_bounds) {
 
   int32_t new_scale = 0;
   if (parent_window_) {
-    new_scale = parent_window_->buffer_scale_;
+    new_scale = parent_window_->buffer_scale();
     ui_scale_ = parent_window_->ui_scale_;
   } else {
     const auto display = (widget == gfx::kNullAcceleratedWidget)
@@ -76,14 +95,17 @@ void WaylandWindow::UpdateBufferScale(bool update_bounds) {
     else
       ui_scale_ = display.device_scale_factor();
   }
-  SetBufferScale(new_scale, update_bounds);
+  // At this point, buffer_scale() still returns the old scale.
+  if (update_bounds)
+    SetBoundsDip(gfx::ScaleToRoundedRect(bounds_px_, 1.0 / buffer_scale()));
+
+  root_surface_->SetBufferScale(new_scale, update_bounds);
 }
 
 gfx::AcceleratedWidget WaylandWindow::GetWidget() const {
-  if (!surface_)
-    return gfx::kNullAcceleratedWidget;
-  return surface_.id();
+  return accelerated_widget_;
 }
+
 void WaylandWindow::SetPointerFocus(bool focus) {
   has_pointer_focus_ = focus;
 
@@ -118,10 +140,7 @@ void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
     return;
   bounds_px_ = bounds_px;
 
-  // Opaque region is based on the size of the window. Thus, update the region
-  // on each update.
-  MaybeUpdateOpaqueRegion();
-
+  root_surface_->SetOpaqueRegion(bounds_px);
   delegate_->OnBoundsChanged(bounds_px_);
 }
 
@@ -163,7 +182,7 @@ void WaylandWindow::Restore() {}
 
 PlatformWindowState WaylandWindow::GetPlatformWindowState() const {
   // Remove normal state for all the other types of windows as it's only the
-  // WaylandSurface that supports state changes.
+  // WaylandToplevelWindow that supports state changes.
   return PlatformWindowState::kNormal;
 }
 
@@ -240,6 +259,8 @@ bool WaylandWindow::CanDispatchEvent(const PlatformEvent& event) {
     return has_keyboard_focus_;
   if (event->IsTouchEvent())
     return has_touch_focus_;
+  if (event->IsScrollEvent())
+    return has_pointer_focus_;
   return false;
 }
 
@@ -254,7 +275,7 @@ uint32_t WaylandWindow::DispatchEvent(const PlatformEvent& native_event) {
     // Wayland sends locations in DIP so they need to be translated to
     // physical pixels.
     event->AsLocatedEvent()->set_location_f(gfx::ScalePoint(
-        event->AsLocatedEvent()->location_f(), buffer_scale_, buffer_scale_));
+        event->AsLocatedEvent()->location_f(), buffer_scale(), buffer_scale()));
 
     // We must reroute the events to the event grabber iff these windows belong
     // to the same root parent window. For example, there are 2 top level
@@ -314,30 +335,36 @@ void WaylandWindow::OnDragLeave() {}
 void WaylandWindow::OnDragSessionClose(uint32_t dnd_action) {}
 
 void WaylandWindow::SetBoundsDip(const gfx::Rect& bounds_dip) {
-  SetBounds(gfx::ScaleToRoundedRect(bounds_dip, buffer_scale_));
+  SetBounds(gfx::ScaleToRoundedRect(bounds_dip, buffer_scale()));
 }
 
 bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
-  // Properties contain DIP bounds but the buffer scale is initially 1 so it's
-  // OK to assign.  The bounds will be recalculated when the buffer scale
-  // changes.
-  DCHECK_EQ(buffer_scale_, 1);
-  bounds_px_ = properties.bounds;
-  opacity_ = properties.opacity;
-  type_ = properties.type;
-
-  surface_.reset(wl_compositor_create_surface(connection_->compositor()));
-  if (!surface_) {
+  root_surface_ = std::make_unique<WaylandSurface>(connection_, this);
+  if (!root_surface_->Initialize()) {
     LOG(ERROR) << "Failed to create wl_surface";
     return false;
   }
-  wl_surface_set_user_data(surface_.get(), this);
-  AddSurfaceListener();
+
+  // Properties contain DIP bounds but the buffer scale is initially 1 so it's
+  // OK to assign.  The bounds will be recalculated when the buffer scale
+  // changes.
+  bounds_px_ = properties.bounds;
+  opacity_ = properties.opacity;
+  type_ = properties.type;
 
   connection_->wayland_window_manager()->AddWindow(GetWidget(), this);
 
   if (!OnInitialize(std::move(properties)))
     return false;
+
+  if (wayland_overlay_delegation_enabled_) {
+    primary_subsurface_ =
+        std::make_unique<WaylandSubsurface>(connection_, this);
+    if (!primary_subsurface_->surface())
+      return false;
+    connection_->wayland_window_manager()->AddSubsurface(
+        GetWidget(), primary_subsurface_.get());
+  }
 
   connection_->ScheduleFlush();
 
@@ -346,59 +373,13 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   // Will do nothing for menus because they have got their scale above.
   UpdateBufferScale(false);
+  root_surface_->SetOpaqueRegion(bounds_px_);
 
-  MaybeUpdateOpaqueRegion();
   return true;
-}
-
-void WaylandWindow::SetBufferScale(int32_t new_scale, bool update_bounds) {
-  DCHECK_GT(new_scale, 0);
-
-  if (new_scale == buffer_scale_)
-    return;
-
-  auto old_scale = buffer_scale_;
-  buffer_scale_ = new_scale;
-  if (update_bounds)
-    SetBoundsDip(gfx::ScaleToRoundedRect(bounds_px_, 1.0 / old_scale));
-
-  DCHECK(surface());
-  wl_surface_set_buffer_scale(surface(), buffer_scale_);
-  connection_->ScheduleFlush();
-}
-
-WaylandWindow* WaylandWindow::GetParentWindow(
-    gfx::AcceleratedWidget parent_widget) {
-  auto* parent_window =
-      connection_->wayland_window_manager()->GetWindow(parent_widget);
-
-  // If propagated parent has already had a child, it means that |this| is a
-  // submenu of a 3-dot menu. In aura, the parent of a 3-dot menu and its
-  // submenu is the main native widget, which is the main window. In contrast,
-  // Wayland requires a menu window to be a parent of a submenu window. Thus,
-  // check if the suggested parent has a child. If yes, take its child as a
-  // parent of |this|.
-  // Another case is a notifcation window or a drop down window, which do not
-  // have a parent in aura. In this case, take the current focused window as a
-  // parent.
-
-  if (!parent_window)
-    parent_window =
-        connection_->wayland_window_manager()->GetCurrentFocusedWindow();
-
-  return parent_window ? parent_window->GetTopMostChildWindow() : nullptr;
 }
 
 WaylandWindow* WaylandWindow::GetRootParentWindow() {
   return parent_window_ ? parent_window_->GetRootParentWindow() : this;
-}
-
-void WaylandWindow::AddSurfaceListener() {
-  static struct wl_surface_listener surface_listener = {
-      &WaylandWindow::Enter,
-      &WaylandWindow::Leave,
-  };
-  wl_surface_add_listener(surface_.get(), &surface_listener, this);
 }
 
 void WaylandWindow::AddEnteredOutputId(struct wl_output* output) {
@@ -477,20 +458,13 @@ WaylandWindow* WaylandWindow::GetTopMostChildWindow() {
   return child_window_ ? child_window_->GetTopMostChildWindow() : this;
 }
 
-void WaylandWindow::MaybeUpdateOpaqueRegion() {
-  if (!IsOpaqueWindow())
-    return;
-
-  wl::Object<wl_region> region(
-      wl_compositor_create_region(connection_->compositor()));
-  wl_region_add(region.get(), 0, 0, bounds_px_.width(), bounds_px_.height());
-  wl_surface_set_opaque_region(surface(), region.get());
-
-  connection_->ScheduleFlush();
-}
-
 bool WaylandWindow::IsOpaqueWindow() const {
   return opacity_ == ui::PlatformWindowOpacity::kOpaqueWindow;
+}
+
+bool WaylandWindow::IsActive() const {
+  // Please read the comment where the IsActive method is declared.
+  return false;
 }
 
 uint32_t WaylandWindow::DispatchEventToDelegate(
@@ -505,26 +479,173 @@ uint32_t WaylandWindow::DispatchEventToDelegate(
   return handled ? POST_DISPATCH_STOP_PROPAGATION : POST_DISPATCH_NONE;
 }
 
-// static
-void WaylandWindow::Enter(void* data,
-                          struct wl_surface* wl_surface,
-                          struct wl_output* output) {
-  auto* window = static_cast<WaylandWindow*>(data);
-  if (window) {
-    DCHECK(window->surface_.get() == wl_surface);
-    window->AddEnteredOutputId(output);
-  }
+std::unique_ptr<WaylandSurface> WaylandWindow::TakeWaylandSurface() {
+  DCHECK(shutting_down_);
+  DCHECK(root_surface_);
+  root_surface_->UnsetRootWindow();
+  return std::move(root_surface_);
 }
 
-// static
-void WaylandWindow::Leave(void* data,
-                          struct wl_surface* wl_surface,
-                          struct wl_output* output) {
-  auto* window = static_cast<WaylandWindow*>(data);
-  if (window) {
-    DCHECK(window->surface_.get() == wl_surface);
-    window->RemoveEnteredOutputId(output);
+bool WaylandWindow::RequestSubsurface() {
+  auto subsurface = std::make_unique<WaylandSubsurface>(connection_, this);
+  if (!subsurface->surface())
+    return false;
+  connection_->wayland_window_manager()->AddSubsurface(GetWidget(),
+                                                       subsurface.get());
+  subsurface_stack_above_.push_back(subsurface.get());
+  auto result = wayland_subsurfaces_.emplace(std::move(subsurface));
+  DCHECK(result.second);
+  return true;
+}
+
+bool WaylandWindow::ArrangeSubsurfaceStack(size_t above, size_t below) {
+  while (wayland_subsurfaces_.size() < above + below) {
+    if (!RequestSubsurface())
+      return false;
   }
+
+  DCHECK(subsurface_stack_below_.size() + subsurface_stack_above_.size() >=
+         above + below);
+
+  if (subsurface_stack_above_.size() < above) {
+    auto splice_start = subsurface_stack_below_.begin();
+    for (size_t i = 0; i < below; ++i)
+      ++splice_start;
+    subsurface_stack_above_.splice(subsurface_stack_above_.end(),
+                                   subsurface_stack_below_, splice_start,
+                                   subsurface_stack_below_.end());
+
+  } else if (subsurface_stack_below_.size() < below) {
+    auto splice_start = subsurface_stack_above_.end();
+    for (size_t i = 0; i < below - subsurface_stack_below_.size(); ++i)
+      --splice_start;
+    subsurface_stack_below_.splice(subsurface_stack_below_.end(),
+                                   subsurface_stack_above_, splice_start,
+                                   subsurface_stack_above_.end());
+  }
+
+  DCHECK(subsurface_stack_below_.size() >= below);
+  DCHECK(subsurface_stack_above_.size() >= above);
+  return true;
+}
+
+bool WaylandWindow::CommitOverlays(
+    std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr>& overlays) {
+  // |overlays| is sorted from bottom to top.
+  std::sort(overlays.begin(), overlays.end(), OverlayStackOrderCompare);
+
+  // Find the location where z_oder becomes non-negative.
+  ozone::mojom::WaylandOverlayConfigPtr value =
+      ozone::mojom::WaylandOverlayConfig::New();
+  auto split = std::lower_bound(overlays.begin(), overlays.end(), value,
+                                OverlayStackOrderCompare);
+  CHECK(split == overlays.end() || (*split)->z_order >= 0);
+  size_t num_primary_planes =
+      (split != overlays.end() && (*split)->z_order == 0) ? 1 : 0;
+
+  size_t above = (overlays.end() - split) - num_primary_planes;
+  size_t below = split - overlays.begin();
+
+  if (overlays.front()->z_order == INT32_MIN)
+    --below;
+
+  // Re-arrange the list of subsurfaces to fit the |overlays|. Request extra
+  // subsurfaces if needed.
+  if (!ArrangeSubsurfaceStack(above, below))
+    return false;
+
+  {
+    // Iterate through |subsurface_stack_below_|, setup subsurfaces and place
+    // them in corresponding order. Commit wl_buffers once a subsurface is
+    // configured.
+    auto overlay_iter = split - 1;
+    for (auto iter = subsurface_stack_below_.begin();
+         iter != subsurface_stack_below_.end(); ++iter, --overlay_iter) {
+      if (overlays.front()->z_order == INT32_MIN
+              ? overlay_iter >= ++overlays.begin()
+              : overlay_iter >= overlays.begin()) {
+        WaylandSurface* reference_above = nullptr;
+        if (overlay_iter == split - 1) {
+          // It's possible that |overlays| does not contain primary plane, we
+          // still want to place relative to the surface with z_order=0.
+          reference_above = primary_subsurface_->wayland_surface();
+        } else {
+          reference_above = (*std::next(iter))->wayland_surface();
+        }
+        (*iter)->ConfigureAndShowSurface(
+            (*overlay_iter)->transform, (*overlay_iter)->crop_rect,
+            (*overlay_iter)->bounds_rect, (*overlay_iter)->enable_blend,
+            nullptr, reference_above);
+        connection_->buffer_manager_host()->CommitBufferInternal(
+            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id, gfx::Rect(),
+            /*wait_for_frame_callback=*/false);
+      } else {
+        // If there're more subsurfaces requested that we don't need at the
+        // moment, hide them.
+        (*iter)->Hide();
+      }
+    }
+
+    // Iterate through |subsurface_stack_above_|, setup subsurfaces and place
+    // them in corresponding order. Commit wl_buffers once a subsurface is
+    // configured.
+    overlay_iter = split + num_primary_planes;
+    for (auto iter = subsurface_stack_above_.begin();
+         iter != subsurface_stack_above_.end(); ++iter, ++overlay_iter) {
+      if (overlay_iter < overlays.end()) {
+        WaylandSurface* reference_below = nullptr;
+        if (overlay_iter == split + num_primary_planes) {
+          // It's possible that |overlays| does not contain primary plane, we
+          // still want to place relative to the surface with z_order=0.
+          reference_below = primary_subsurface_->wayland_surface();
+        } else {
+          reference_below = (*std::prev(iter))->wayland_surface();
+        }
+        (*iter)->ConfigureAndShowSurface(
+            (*overlay_iter)->transform, (*overlay_iter)->crop_rect,
+            (*overlay_iter)->bounds_rect, (*overlay_iter)->enable_blend,
+            reference_below, nullptr);
+        connection_->buffer_manager_host()->CommitBufferInternal(
+            (*iter)->wayland_surface(), (*overlay_iter)->buffer_id, gfx::Rect(),
+            /*wait_for_frame_callback=*/false);
+      } else {
+        // If there're more subsurfaces requested that we don't need at the
+        // moment, hide them.
+        (*iter)->Hide();
+      }
+    }
+  }
+
+  if (!wayland_overlay_delegation_enabled_) {
+    connection_->buffer_manager_host()->CommitBufferInternal(
+        root_surface(), (*split)->buffer_id, (*split)->damage_region,
+        /*wait_for_frame_callback=*/true);
+    return true;
+  }
+
+  if (num_primary_planes) {
+    primary_subsurface_->ConfigureAndShowSurface(
+        (*split)->transform, (*split)->crop_rect, (*split)->bounds_rect,
+        (*split)->enable_blend, nullptr, nullptr);
+    connection_->buffer_manager_host()->CommitBufferInternal(
+        primary_subsurface_->wayland_surface(), (*split)->buffer_id,
+        (*split)->damage_region, /*wait_for_frame_callback=*/false);
+  }
+
+  root_surface_->SetViewportDestination(bounds_px_.size());
+  if (overlays.front()->z_order == INT32_MIN) {
+    connection_->buffer_manager_host()->CommitBufferInternal(
+        root_surface(), overlays.front()->buffer_id,
+        /*damage_region=*/gfx::Rect(0, 0, 1, 1),
+        /*wait_for_frame_callback=*/true);
+  } else {
+    // Subsurfaces are set to sync, above surface configs will only take effect
+    // when root_surface is committed.
+    connection_->buffer_manager_host()->CommitWithoutBufferInternal(
+        root_surface(), /*wait_for_frame_callback=*/true);
+  }
+
+  return true;
 }
 
 }  // namespace ui

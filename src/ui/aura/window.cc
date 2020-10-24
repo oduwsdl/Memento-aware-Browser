@@ -626,7 +626,7 @@ Window* Window::GetEventHandlerForPoint(const gfx::Point& local_point) {
 
     // The client may not allow events to be processed by certain subtrees.
     client::EventClient* client = client::GetEventClient(GetRootWindow());
-    if (client && !client->CanProcessEventsWithinSubtree(child))
+    if (client && !client->GetCanProcessEventsWithinSubtree(child))
       continue;
 
     if (delegate_ && !delegate_->ShouldDescendIntoChildForEventHandling(
@@ -693,7 +693,7 @@ bool Window::CanFocus() const {
   // The client may forbid certain windows from receiving focus at a given point
   // in time.
   client::EventClient* client = client::GetEventClient(GetRootWindow());
-  if (client && !client->CanProcessEventsWithinSubtree(this))
+  if (client && !client->GetCanProcessEventsWithinSubtree(this))
     return false;
 
   return parent_->CanFocus();
@@ -759,10 +759,8 @@ void Window::OnDeviceScaleFactorChanged(float old_device_scale_factor,
       IsEmbeddingExternalContent()) {
     last_device_scale_factor_ = new_device_scale_factor;
     parent_local_surface_id_allocator_->GenerateId();
-    if (frame_sink_) {
-      frame_sink_->SetLocalSurfaceId(
-          GetCurrentLocalSurfaceIdAllocation().local_surface_id());
-    }
+    if (frame_sink_)
+      frame_sink_->SetLocalSurfaceId(GetCurrentLocalSurfaceId());
   }
 
   ScopedCursorHider hider(this);
@@ -900,16 +898,17 @@ void Window::SetVisible(bool visible) {
 
 void Window::SetOcclusionInfo(OcclusionState occlusion_state,
                               const SkRegion& occluded_region) {
-  if (occlusion_state != occlusion_state_ ||
-      occluded_region_ != occluded_region) {
-    occlusion_state_ = occlusion_state;
-    occluded_region_ = occluded_region;
-    if (delegate_)
-      delegate_->OnWindowOcclusionChanged(occlusion_state, occluded_region);
-
-    for (WindowObserver& observer : observers_)
-      observer.OnWindowOcclusionChanged(this);
+  if (occlusion_state == occlusion_state_ &&
+      occluded_region_in_root_ == occluded_region) {
+    return;
   }
+  occlusion_state_ = occlusion_state;
+  occluded_region_in_root_ = occluded_region;
+  if (delegate_)
+    delegate_->OnWindowOcclusionChanged(occlusion_state);
+
+  for (WindowObserver& observer : observers_)
+    observer.OnWindowOcclusionChanged(this);
 }
 
 void Window::SchedulePaint() {
@@ -1184,7 +1183,7 @@ std::unique_ptr<cc::LayerTreeFrameSink> Window::CreateLayerTreeFrameSink() {
           &params);
   frame_sink_ = frame_sink->GetWeakPtr();
   AllocateLocalSurfaceId();
-  DCHECK(GetLocalSurfaceIdAllocation().local_surface_id().is_valid());
+  DCHECK(GetLocalSurfaceId().is_valid());
 #if DCHECK_IS_ON()
   created_layer_tree_frame_sink_ = true;
 #endif
@@ -1192,8 +1191,7 @@ std::unique_ptr<cc::LayerTreeFrameSink> Window::CreateLayerTreeFrameSink() {
 }
 
 viz::SurfaceId Window::GetSurfaceId() {
-  return viz::SurfaceId(GetFrameSinkId(),
-                        GetLocalSurfaceIdAllocation().local_surface_id());
+  return viz::SurfaceId(GetFrameSinkId(), GetLocalSurfaceId());
 }
 
 void Window::AllocateLocalSurfaceId() {
@@ -1211,10 +1209,10 @@ viz::ScopedSurfaceIdAllocator Window::GetSurfaceIdAllocator(
                                        std::move(allocation_task));
 }
 
-const viz::LocalSurfaceIdAllocation& Window::GetLocalSurfaceIdAllocation() {
+const viz::LocalSurfaceId& Window::GetLocalSurfaceId() {
   if (!parent_local_surface_id_allocator_)
     AllocateLocalSurfaceId();
-  return GetCurrentLocalSurfaceIdAllocation();
+  return GetCurrentLocalSurfaceId();
 }
 
 void Window::InvalidateLocalSurfaceId() {
@@ -1224,11 +1222,11 @@ void Window::InvalidateLocalSurfaceId() {
 }
 
 void Window::UpdateLocalSurfaceIdFromEmbeddedClient(
-    const base::Optional<viz::LocalSurfaceIdAllocation>&
-        embedded_client_local_surface_id_allocation) {
-  if (embedded_client_local_surface_id_allocation) {
+    const base::Optional<viz::LocalSurfaceId>&
+        embedded_client_local_surface_id) {
+  if (embedded_client_local_surface_id) {
     parent_local_surface_id_allocator_->UpdateFromChild(
-        *embedded_client_local_surface_id_allocation);
+        *embedded_client_local_surface_id);
     UpdateLocalSurfaceId();
   } else {
     AllocateLocalSurfaceId();
@@ -1311,8 +1309,7 @@ void Window::OnLayerBoundsChanged(const gfx::Rect& old_bounds,
       IsEmbeddingExternalContent()) {
     parent_local_surface_id_allocator_->GenerateId();
     if (frame_sink_) {
-      frame_sink_->SetLocalSurfaceId(
-          GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+      frame_sink_->SetLocalSurfaceId(GetCurrentLocalSurfaceId());
     }
   }
 
@@ -1361,7 +1358,7 @@ bool Window::CanAcceptEvent(const ui::Event& event) {
   // The client may forbid certain windows from receiving events at a given
   // point in time.
   client::EventClient* client = client::GetEventClient(GetRootWindow());
-  if (client && !client->CanProcessEventsWithinSubtree(this))
+  if (client && !client->GetCanProcessEventsWithinSubtree(this))
     return false;
 
   // We need to make sure that a touch cancel event and any gesture events it
@@ -1499,15 +1496,12 @@ void Window::UnregisterFrameSinkId() {
 void Window::UpdateLocalSurfaceId() {
   last_device_scale_factor_ = ui::GetScaleFactorForNativeView(this);
   if (frame_sink_) {
-    frame_sink_->SetLocalSurfaceId(
-        GetCurrentLocalSurfaceIdAllocation().local_surface_id());
+    frame_sink_->SetLocalSurfaceId(GetCurrentLocalSurfaceId());
   }
 }
 
-const viz::LocalSurfaceIdAllocation&
-Window::GetCurrentLocalSurfaceIdAllocation() const {
-  return parent_local_surface_id_allocator_
-      ->GetCurrentLocalSurfaceIdAllocation();
+const viz::LocalSurfaceId& Window::GetCurrentLocalSurfaceId() const {
+  return parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
 }
 
 bool Window::IsEmbeddingExternalContent() const {

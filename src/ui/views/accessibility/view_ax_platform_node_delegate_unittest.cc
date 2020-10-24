@@ -40,6 +40,28 @@ class TestButton : public Button {
   ~TestButton() override = default;
 };
 
+class TestAXEventObserver : public AXEventObserver {
+ public:
+  explicit TestAXEventObserver(AXAuraObjCache* cache) : cache_(cache) {
+    AXEventManager::Get()->AddObserver(this);
+  }
+  TestAXEventObserver(const TestAXEventObserver&) = delete;
+  TestAXEventObserver& operator=(const TestAXEventObserver&) = delete;
+  ~TestAXEventObserver() override {
+    AXEventManager::Get()->RemoveObserver(this);
+  }
+
+  // AXEventObserver:
+  void OnViewEvent(View* view, ax::mojom::Event event_type) override {
+    std::vector<AXAuraObjWrapper*> out_children;
+    AXAuraObjWrapper* ax_obj = cache_->GetOrCreate(view->GetWidget());
+    ax_obj->GetChildren(&out_children);
+  }
+
+ private:
+  AXAuraObjCache* cache_;
+};
+
 }  // namespace
 
 class ViewAXPlatformNodeDelegateTest : public ViewsTestBase {
@@ -412,33 +434,11 @@ class DerivedTestView : public View {
   void OnBlur() override { SetVisible(false); }
 };
 
-class TestAXEventObserver : public AXEventObserver {
- public:
-  explicit TestAXEventObserver(AXAuraObjCache* cache) : cache_(cache) {
-    AXEventManager::Get()->AddObserver(this);
-  }
-  TestAXEventObserver(const TestAXEventObserver&) = delete;
-  TestAXEventObserver& operator=(const TestAXEventObserver&) = delete;
-  ~TestAXEventObserver() override {
-    AXEventManager::Get()->RemoveObserver(this);
-  }
-
-  // AXEventObserver:
-  void OnViewEvent(View* view, ax::mojom::Event event_type) override {
-    std::vector<AXAuraObjWrapper*> out_children;
-    AXAuraObjWrapper* ax_obj = cache_->GetOrCreate(view->GetWidget());
-    ax_obj->GetChildren(&out_children);
-  }
-
- private:
-  AXAuraObjCache* cache_;
-};
-
-using ViewAccessibilityTest = ViewsTestBase;
+using AXViewTest = ViewsTestBase;
 
 // Check if the destruction of the widget ends successfully if |view|'s
 // visibility changed during destruction.
-TEST_F(ViewAccessibilityTest, LayoutCalledInvalidateRootView) {
+TEST_F(AXViewTest, LayoutCalledInvalidateRootView) {
   // TODO(jamescook): Construct a real AutomationManagerAura rather than using
   // this observer to simulate it.
   AXAuraObjCache cache;

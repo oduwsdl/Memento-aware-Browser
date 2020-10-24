@@ -41,6 +41,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/tree/tree_view_controller.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/vector_icons.h"
 
@@ -84,7 +85,7 @@ TreeView::TreeView()
       drawing_provider_(std::make_unique<TreeViewDrawingProvider>()) {
   // Always focusable, even on Mac (consistent with NSOutlineView).
   SetFocusBehavior(FocusBehavior::ALWAYS);
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   constexpr bool kUseMdIcons = true;
 #else
   constexpr bool kUseMdIcons = false;
@@ -890,7 +891,7 @@ std::unique_ptr<AXVirtualView> TreeView::CreateAndSetAccessibilityView(
   ui::AXNodeData& node_data = ax_view->GetCustomData();
   node_data.role = ax::mojom::Role::kTreeItem;
   if (base::i18n::IsRTL())
-    node_data.SetTextDirection(ax::mojom::TextDirection::kRtl);
+    node_data.SetTextDirection(ax::mojom::WritingDirection::kRtl);
 
   base::RepeatingCallback<void(ui::AXNodeData*)> selected_callback =
       base::BindRepeating(&TreeView::PopulateAccessibilityData,
@@ -1453,8 +1454,7 @@ int TreeView::InternalNode::GetMaxWidth(TreeView* tree, int indent, int depth) {
   return max_width;
 }
 
-BEGIN_METADATA(TreeView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(TreeView, View)
+END_METADATA
 
 }  // namespace views

@@ -203,6 +203,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // Sets/gets the clip rect for the layer. |clip_rect| is in layer space and
   // relative to |this| layer. Prefer SetMasksToBounds() to set the clip to the
   // bounds of |this| layer. This clips the subtree rooted at |this| layer.
+  gfx::Rect GetTargetClipRect() const;
   void SetClipRect(const gfx::Rect& clip_rect);
   gfx::Rect clip_rect() const { return cc_layer_->clip_rect(); }
 
@@ -440,10 +441,8 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   // ContentLayerClient implementation.
   gfx::Rect PaintableRegion() override;
-  scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
-      ContentLayerClient::PaintingControlSetting painting_control) override;
+  scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList() override;
   bool FillsBoundsCompletely() const override;
-  size_t GetApproximateUnsharedMemoryUsage() const override;
 
   cc::MirrorLayer* mirror_layer_for_testing() { return mirror_layer_.get(); }
   cc::Layer* cc_layer_for_testing() { return cc_layer_; }
@@ -508,6 +507,10 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void SetSurfaceSize(gfx::Size surface_size_in_dip);
 
   bool ContainsMirrorForTest(Layer* mirror) const;
+
+  void SetCompositorForTesting(Compositor* compositor) {
+    compositor_ = compositor;
+  }
 
  private:
   friend class LayerOwner;

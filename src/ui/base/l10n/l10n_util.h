@@ -18,9 +18,9 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "ui/base/l10n/l10n_util_mac.h"
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
 namespace l10n_util {
 
@@ -57,11 +57,6 @@ std::string GetApplicationLocale(const std::string& pref_locale);
 COMPONENT_EXPORT(UI_BASE)
 bool IsLocaleNameTranslated(const char* locale,
                             const std::string& display_locale);
-
-// Given a locale code, return true if the OS is capable of supporting it.
-// For instance, Oriya is not well supported on Windows XP and we return
-// false for "or".
-bool IsLocaleSupportedByOS(const std::string& locale);
 
 // This method returns the display name of the locale code in |display_locale|.
 

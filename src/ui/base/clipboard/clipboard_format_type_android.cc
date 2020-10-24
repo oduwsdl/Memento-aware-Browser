@@ -34,7 +34,7 @@ bool ClipboardFormatType::operator<(const ClipboardFormatType& other) const {
   return data_ < other.data_;
 }
 
-bool ClipboardFormatType::Equals(const ClipboardFormatType& other) const {
+bool ClipboardFormatType::operator==(const ClipboardFormatType& other) const {
   return data_ == other.data_;
 }
 
@@ -68,6 +68,12 @@ const ClipboardFormatType& ClipboardFormatType::GetWebKitSmartPasteType() {
 // static
 const ClipboardFormatType& ClipboardFormatType::GetHtmlType() {
   static base::NoDestructor<ClipboardFormatType> type(kMimeTypeHTML);
+  return *type;
+}
+
+// static
+const ClipboardFormatType& ClipboardFormatType::GetSvgType() {
+  static base::NoDestructor<ClipboardFormatType> type(kMimeTypeSvg);
   return *type;
 }
 

@@ -118,6 +118,12 @@ class FileManagerUI {
     this.formatDialog = queryRequiredElement('#format-dialog');
 
     /**
+     * Dialog for password prompt
+     * @type {?FilesPasswordDialog}
+     */
+    this.passwordDialog_ = null;
+
+    /**
      * The container element of the dialog.
      * @type {!HTMLElement}
      */
@@ -272,24 +278,24 @@ class FileManagerUI {
         queryRequiredElement('#format-panel > .error', this.element);
 
     /**
-     * @type {!cr.ui.Menu}
+     * @type {!cr.ui.MultiMenu}
      * @const
      */
     this.fileContextMenu =
-        util.queryDecoratedElement('#file-context-menu', cr.ui.Menu);
+        util.queryDecoratedElement('#file-context-menu', cr.ui.MultiMenu);
 
     /**
-     * @type {!HTMLMenuItemElement}
+     * @public {!HTMLMenuItemElement}
      * @const
      */
-    this.fileContextMenu.defaultTaskMenuItem =
+    this.defaultTaskMenuItem =
         /** @type {!HTMLMenuItemElement} */
         (queryRequiredElement('#default-task-menu-item', this.fileContextMenu));
 
     /**
-     * @const {!cr.ui.MenuItem}
+     * @public @const {!cr.ui.MenuItem}
      */
-    this.fileContextMenu.tasksSeparator = /** @type {!cr.ui.MenuItem} */
+    this.tasksSeparator = /** @type {!cr.ui.MenuItem} */
         (queryRequiredElement('#tasks-separator', this.fileContextMenu));
 
     /**
@@ -368,6 +374,13 @@ class FileManagerUI {
         /** @type {!FilesToast} */ (document.querySelector('files-toast'));
 
     /**
+     * Container of file-type filter buttons.
+     * @const {!HTMLElement}
+     */
+    this.fileTypeFilterContainer =
+        queryRequiredElement('#file-type-filter-container', this.element);
+
+    /**
      * A hidden div that can be used to announce text to screen
      * reader/ChromeVox.
      * @private {!HTMLElement}
@@ -400,6 +413,20 @@ class FileManagerUI {
         e.stopPropagation();
       });
     }
+  }
+
+  /**
+   * Gets password dialog.
+   * @return {!Element}
+   */
+  get passwordDialog() {
+    if (this.passwordDialog_) {
+      return this.passwordDialog_;
+    }
+    this.passwordDialog_ = /** @type {!FilesPasswordDialog} */ (
+        document.createElement('files-password-dialog'));
+    this.element.appendChild(this.passwordDialog_);
+    return this.passwordDialog_;
   }
 
   /**
@@ -442,6 +469,21 @@ class FileManagerUI {
       document.addEventListener(eventType, (e) => {
         rootElement.classList.toggle('pointer-active', /down$/.test(e.type));
       }, true);
+    });
+
+    // Add global drag-drop-active handler.
+    let activeDropTarget = null;
+    ['dragenter', 'dragleave', 'drop'].forEach((eventType) => {
+      document.addEventListener(eventType, (event) => {
+        const dragDropActive = 'drag-drop-active';
+        if (event.type === 'dragenter') {
+          rootElement.classList.add(dragDropActive);
+          activeDropTarget = event.target;
+        } else if (activeDropTarget === event.target) {
+          rootElement.classList.remove(dragDropActive);
+          activeDropTarget = null;
+        }
+      });
     });
   }
 

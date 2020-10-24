@@ -1033,7 +1033,7 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
   }
 
   if (!root_) {
-    error_ = "Tree has no root.";
+    RecordError("Tree has no root.");
     return false;
   }
 
@@ -1304,8 +1304,8 @@ bool AXTree::ComputePendingChangesToNode(const AXNodeData& new_data,
   // is the new root and it can be created.
   if (!update_state->ShouldPendingNodeExistInTree(new_data.id)) {
     if (!is_new_root) {
-      error_ = base::StringPrintf(
-          "%d will not be in the tree and is not the new root", new_data.id);
+      RecordError(base::StringPrintf(
+          "%d will not be in the tree and is not the new root", new_data.id));
       return false;
     }
 
@@ -1313,9 +1313,9 @@ bool AXTree::ComputePendingChangesToNode(const AXNodeData& new_data,
     // pending for creation, then it must be a duplicate entry in the tree.
     if (!update_state->IncrementPendingCreateNodeCount(new_data.id,
                                                        base::nullopt)) {
-      error_ = base::StringPrintf(
+      RecordError(base::StringPrintf(
           "Node %d is already pending for creation, cannot be the new root",
-          new_data.id);
+          new_data.id));
       return false;
     }
     if (update_state->pending_root_id) {
@@ -1329,8 +1329,8 @@ bool AXTree::ComputePendingChangesToNode(const AXNodeData& new_data,
   std::set<AXNode::AXID> new_child_id_set;
   for (AXNode::AXID new_child_id : new_data.child_ids) {
     if (base::Contains(new_child_id_set, new_child_id)) {
-      error_ = base::StringPrintf("Node %d has duplicate child id %d",
-                                  new_data.id, new_child_id);
+      RecordError(base::StringPrintf("Node %d has duplicate child id %d",
+                                     new_data.id, new_child_id));
       return false;
     }
     new_child_id_set.insert(new_child_id);
@@ -1352,9 +1352,9 @@ bool AXTree::ComputePendingChangesToNode(const AXNodeData& new_data,
       update_state->invalidate_unignored_cached_values_ids.insert(child_id);
       if (!update_state->IncrementPendingCreateNodeCount(child_id,
                                                          new_data.id)) {
-        error_ = base::StringPrintf(
+        RecordError(base::StringPrintf(
             "Node %d is already pending for creation, cannot be a new child",
-            child_id);
+            child_id));
         return false;
       }
     }
@@ -1394,9 +1394,9 @@ bool AXTree::ComputePendingChangesToNode(const AXNodeData& new_data,
       // then adding it to a new parent would mean stealing the node from its
       // old parent which hadn't been updated to reflect the change.
       if (update_state->ShouldPendingNodeExistInTree(child_id)) {
-        error_ = base::StringPrintf(
+        RecordError(base::StringPrintf(
             "Node %d is not marked for destruction, would be reparented to %d",
-            child_id, new_data.id);
+            child_id, new_data.id));
         return false;
       }
 
@@ -1405,9 +1405,9 @@ bool AXTree::ComputePendingChangesToNode(const AXNodeData& new_data,
       update_state->invalidate_unignored_cached_values_ids.insert(child_id);
       if (!update_state->IncrementPendingCreateNodeCount(child_id,
                                                          new_data.id)) {
-        error_ = base::StringPrintf(
+        RecordError(base::StringPrintf(
             "Node %d is already pending for creation, cannot be a new child",
-            child_id);
+            child_id));
         return false;
       }
     } else {
@@ -1444,8 +1444,8 @@ bool AXTree::UpdateNode(const AXNodeData& src,
     node->SetData(src);
   } else {
     if (!is_new_root) {
-      error_ = base::StringPrintf(
-          "%d is not in the tree and not the new root", src.id);
+      RecordError(base::StringPrintf(
+          "%d is not in the tree and not the new root", src.id));
       return false;
     }
 
@@ -1737,9 +1737,10 @@ void AXTree::UpdateReverseRelations(AXNode* node, const AXNodeData& new_data) {
 bool AXTree::ValidatePendingChangesComplete(
     const AXTreeUpdateState& update_state) {
   if (!update_state.pending_nodes.empty()) {
-    error_ = "Nodes left pending by the update:";
+    std::string error = "Nodes left pending by the update:";
     for (const AXNode::AXID pending_id : update_state.pending_nodes)
-      error_ += base::StringPrintf(" %d", pending_id);
+      error += base::StringPrintf(" %d", pending_id);
+    RecordError(error);
     return false;
   }
 
@@ -1763,11 +1764,11 @@ bool AXTree::ValidatePendingChangesComplete(
       }
     }
     if (has_pending_changes) {
-      error_ = base::StringPrintf(
+      RecordError(base::StringPrintf(
           "Changes left pending by the update; "
           "destroy subtrees: %s, destroy nodes: %s, create nodes: %s",
           destroy_subtree_ids.c_str(), destroy_node_ids.c_str(),
-          create_node_ids.c_str());
+          create_node_ids.c_str()));
     }
     return !has_pending_changes;
   }
@@ -1871,11 +1872,9 @@ bool AXTree::CreateNewChildVector(AXNode* node,
         // This is a serious error - nodes should never be reparented.
         // If this case occurs, continue so this node isn't left in an
         // inconsistent state, but return failure at the end.
-        error_ = base::StringPrintf(
-            "Node %d reparented from %d to %d",
-            child->id(),
-            child->parent() ? child->parent()->id() : 0,
-            node->id());
+        RecordError(base::StringPrintf(
+            "Node %d reparented from %d to %d", child->id(),
+            child->parent() ? child->parent()->id() : 0, node->id()));
         success = false;
         continue;
       }
@@ -2092,7 +2091,8 @@ void AXTree::ComputeSetSizePosInSetAndCache(const AXNode& node,
   // would like it to inherit the SetSize from the kMenuListPopUp it wraps. To
   // do this, we treat the kMenuListPopUp as the ordered_set and eventually
   // assign its SetSize value to the kPopUpButton.
-  if (node.data().role == ax::mojom::Role::kPopUpButton) {
+  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+      node.GetUnignoredChildCount() > 0) {
     // kPopUpButtons are only allowed to contain one kMenuListPopUp.
     // The single element is guaranteed to be a kMenuListPopUp because that is
     // the only item role that matches the ordered set role of kPopUpButton.
@@ -2208,6 +2208,12 @@ void AXTree::ComputeSetSizePosInSetAndCacheHelper(
 }
 
 base::Optional<int> AXTree::GetPosInSet(const AXNode& node) {
+  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+      node.GetUnignoredChildCount() == 0 &&
+      node.HasIntAttribute(ax::mojom::IntAttribute::kPosInSet)) {
+    return node.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet);
+  }
+
   if (node_set_size_pos_in_set_info_map_.find(node.id()) !=
       node_set_size_pos_in_set_info_map_.end()) {
     // If item's id is in the cache, return stored PosInSet value.
@@ -2237,6 +2243,12 @@ base::Optional<int> AXTree::GetPosInSet(const AXNode& node) {
 }
 
 base::Optional<int> AXTree::GetSetSize(const AXNode& node) {
+  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+      node.GetUnignoredChildCount() == 0 &&
+      node.HasIntAttribute(ax::mojom::IntAttribute::kSetSize)) {
+    return node.GetIntAttribute(ax::mojom::IntAttribute::kSetSize);
+  }
+
   if (node_set_size_pos_in_set_info_map_.find(node.id()) !=
       node_set_size_pos_in_set_info_map_.end()) {
     // If item's id is in the cache, return stored SetSize value.
@@ -2261,6 +2273,23 @@ base::Optional<int> AXTree::GetSetSize(const AXNode& node) {
     ordered_set = node.GetOrderedSet();
   if (!ordered_set)
     return base::nullopt;
+
+  // For popup buttons that control a single element, inherit the controlled
+  // item's SetSize. Skip this block if the popup button controls itself.
+  if (node.data().role == ax::mojom::Role::kPopUpButton) {
+    const auto& controls_ids = node.data().GetIntListAttribute(
+        ax::mojom::IntListAttribute::kControlsIds);
+    if (controls_ids.size() == 1 && GetFromId(controls_ids[0]) &&
+        controls_ids[0] != node.id()) {
+      const AXNode& controlled_item = *GetFromId(controls_ids[0]);
+
+      base::Optional<int> controlled_item_set_size =
+          GetSetSize(controlled_item);
+      node_set_size_pos_in_set_info_map_[node.id()].set_size =
+          controlled_item_set_size;
+      return controlled_item_set_size;
+    }
+  }
 
   // Compute, cache, then return.
   ComputeSetSizePosInSetAndCache(node, ordered_set);
@@ -2400,6 +2429,12 @@ void AXTree::SetTreeUpdateInProgressState(bool set_tree_update_value) {
 
 bool AXTree::HasPaginationSupport() const {
   return has_pagination_support_;
+}
+
+void AXTree::RecordError(std::string new_error) {
+  if (!error_.empty())
+    error_ = error_ + "\n";  // Add visual separation between errors.
+  error_ = error_ + new_error;
 }
 
 }  // namespace ui

@@ -1247,12 +1247,22 @@ fileOperationUtil.ZipTask = class extends fileOperationUtil.Task {
 
 /**
  * @typedef {{
+ *  name: string,
+ *  filesEntry: !Entry,
+ *  infoEntry: !FileEntry
+ * }}
+ */
+fileOperationUtil.TrashItem;
+
+/**
+ * @typedef {{
  *  entries: Array<Entry>,
  *  taskId: string,
  *  entrySize: Object,
  *  totalBytes: number,
  *  processedBytes: number,
- *  cancelRequested: boolean
+ *  cancelRequested: boolean,
+ *  trashedItems: Array<!fileOperationUtil.TrashItem>,
  * }}
  */
 fileOperationUtil.DeleteTask;
@@ -1379,6 +1389,7 @@ fileOperationUtil.EventRouter = class extends cr.EventTarget {
     event.entries = task.entries;
     event.totalBytes = task.totalBytes;
     event.processedBytes = task.processedBytes;
+    event.trashedItems = task.trashedItems;
     this.dispatchEvent(event);
   }
 };
@@ -1419,7 +1430,7 @@ fileOperationUtil.Speedometer = class {
     this.length_ = bufferLength;
 
     /**
-     * @private {Array} internal buffer to track recent data.
+     * @private {!Array} internal buffer to track recent data.
      */
     this.buffer_ = [];
 
@@ -1477,6 +1488,15 @@ fileOperationUtil.Speedometer = class {
   updateCMA_(speed) {
     this.count_++;
     this.cma_ = Math.floor((this.cma_ * this.count_ + speed) / (this.count_));
+  }
+
+  /**
+   * Returns internal buffer for unit testing purposes.
+   *
+   * @returns {!Array} The internal buffer.
+   */
+  getBufferForTesting() {
+    return this.buffer_;
   }
 
   /**

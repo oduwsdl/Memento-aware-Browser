@@ -565,7 +565,7 @@ class NavigationListModel extends cr.EventTarget {
 
     if (this.recentModelItem_) {
       this.navigationItems_.push(this.recentModelItem_);
-      if (util.isUnifiedMediaViewEnabled()) {
+      if (util.isUnifiedMediaViewEnabled() && !util.isRecentsFilterEnabled()) {
         // Unified Media View (Images, Videos and Audio).
         this.navigationItems_.push(createFilteredRecentModelItem(
             str('MEDIA_VIEW_AUDIO_ROOT_LABEL'),
@@ -696,7 +696,8 @@ class NavigationListModel extends cr.EventTarget {
     // Add REMOVABLE volumes and partitions.
     const removableModels = new Map();
     for (const [devicePath, removableGroup] of groupRemovables().entries()) {
-      if (removableGroup.length == 1) {
+      if (removableGroup.length == 1 &&
+          !util.isSinglePartitionFormatEnabled()) {
         // Add unpartitioned removable device as a regular volume.
         this.navigationItems_.push(removableGroup[0]);
         removableGroup[0].section = NavigationSection.REMOVABLE;
@@ -716,7 +717,8 @@ class NavigationListModel extends cr.EventTarget {
             removableGroup[0].volumeInfo.driveLabel :
             /*default*/ 'External Drive';
         removableEntry = new EntryList(
-            rootLabel, VolumeManagerCommon.RootType.REMOVABLE, devicePath);
+            rootLabel, VolumeManagerCommon.RootType.REMOVABLE,
+            removableGroup[0].volumeInfo.devicePath);
         removableModel = new NavigationModelFakeItem(
             removableEntry.label, NavigationModelItemType.ENTRY_LIST,
             removableEntry);

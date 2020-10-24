@@ -628,6 +628,12 @@ void InkDropImpl::HostSizeChanged(const gfx::Size& new_size) {
   }
 }
 
+void InkDropImpl::HostTransformChanged(const gfx::Transform& new_transform) {
+  // If the host has a transform applied, the root and its children layers
+  // should be affected too.
+  root_layer_->SetTransform(new_transform);
+}
+
 InkDropState InkDropImpl::GetTargetInkDropState() const {
   if (!ink_drop_ripple_)
     return InkDropState::HIDDEN;
@@ -714,6 +720,11 @@ void InkDropImpl::CreateInkDropRipple() {
 void InkDropImpl::DestroyInkDropRipple() {
   if (!ink_drop_ripple_)
     return;
+
+  // Ensures no observer callback happens from removing from |root_layer_|
+  // or destroying |ink_drop_ripple_|. Speculative fix for crashes in
+  // https://crbug.com/1088432 and https://crbug.com/1099844.
+  ink_drop_ripple_->set_observer(nullptr);
   root_layer_->Remove(ink_drop_ripple_->GetRootLayer());
   ink_drop_ripple_.reset();
   RemoveRootLayerFromHostIfNeeded();
@@ -740,8 +751,12 @@ void InkDropImpl::CreateInkDropHighlight() {
 void InkDropImpl::DestroyInkDropHighlight() {
   if (!highlight_)
     return;
-  root_layer_->Remove(highlight_->layer());
+
+  // Ensures no observer callback happens from removing from |root_layer_|
+  // or destroying |highlight_|. Speculative fix for crashes in
+  // https://crbug.com/1088432 and https://crbug.com/1099844.
   highlight_->set_observer(nullptr);
+  root_layer_->Remove(highlight_->layer());
   highlight_.reset();
   RemoveRootLayerFromHostIfNeeded();
 }
@@ -766,6 +781,9 @@ void InkDropImpl::RemoveRootLayerFromHostIfNeeded() {
 // views::InkDropRippleObserver:
 
 void InkDropImpl::AnimationStarted(InkDropState ink_drop_state) {
+  // AnimationStarted should only be called from |ink_drop_ripple_|.
+  DCHECK(ink_drop_ripple_);
+
   highlight_state_->AnimationStarted(ink_drop_state);
   NotifyInkDropAnimationStarted();
 }
@@ -816,6 +834,8 @@ void InkDropImpl::SetHighlight(bool should_highlight,
   } else {
     highlight_->FadeOut(animation_duration);
   }
+
+  ink_drop_host_->OnInkDropHighlightedChanged();
 }
 
 bool InkDropImpl::ShouldHighlight() const {

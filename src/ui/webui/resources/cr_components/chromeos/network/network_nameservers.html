@@ -1,14 +1,15 @@
 <link rel="import" href="../../../html/polymer.html">
 
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="../../../cr_elements/cr_input/cr_input.html">
 <link rel="import" href="../../../cr_elements/cr_radio_button/cr_radio_button.html">
 <link rel="import" href="../../../cr_elements/cr_radio_group/cr_radio_group.html">
 <link rel="import" href="../../../cr_elements/policy/cr_policy_indicator.html">
-<link rel="import" href="../../../cr_elements/policy/cr_policy_network_behavior_mojo.html">
 <link rel="import" href="../../../html/i18n_behavior.html">
 <link rel="import" href="../../../cr_elements/md_select_css.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="cr_policy_network_behavior_mojo.html">
 <link rel="import" href="network_shared_css.html">
+<link rel="import" href="onc_mojo.html">
 
 <dom-module id="network-nameservers">
   <template>
@@ -82,7 +83,7 @@
           <template is="dom-if"
               if="[[i18nExists('networkGoogleNameserversLearnMoreUrl')]]">
             <a href="[[i18n('networkGoogleNameserversLearnMoreUrl')]]"
-                target="_blank" on-tap="doNothing_">
+                target="_blank" on-click="doNothing_">
               [[i18n('networkNameserversLearnMore')]]
             </a>
           </template>

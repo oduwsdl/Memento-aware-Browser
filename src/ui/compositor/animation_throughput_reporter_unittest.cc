@@ -85,7 +85,7 @@ TEST_F(AnimationThroughputReporterTest, ImplicitAnimation) {
     LayerAnimator* animator = layer.GetAnimator();
     AnimationThroughputReporter reporter(
         animator, base::BindLambdaForTesting(
-                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
                         run_loop.Quit();
                       }));
 
@@ -107,7 +107,7 @@ TEST_F(AnimationThroughputReporterTest, ImplicitAnimationLateAttach) {
     LayerAnimator* animator = layer.GetAnimator();
     AnimationThroughputReporter reporter(
         animator, base::BindLambdaForTesting(
-                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
                         run_loop.Quit();
                       }));
 
@@ -134,7 +134,7 @@ TEST_F(AnimationThroughputReporterTest, ExplicitAnimation) {
     LayerAnimator* animator = layer.GetAnimator();
     AnimationThroughputReporter reporter(
         animator, base::BindLambdaForTesting(
-                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
                         run_loop.Quit();
                       }));
 
@@ -159,9 +159,10 @@ TEST_F(AnimationThroughputReporterTest, PersistedAnimation) {
   std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
   // |reporter| keeps reporting as long as it is alive.
   AnimationThroughputReporter reporter(
-      animator,
-      base::BindLambdaForTesting(
-          [&](cc::FrameSequenceMetrics::ThroughputData) { run_loop->Quit(); }));
+      animator, base::BindLambdaForTesting(
+                    [&](const cc::FrameSequenceMetrics::CustomReportData&) {
+                      run_loop->Quit();
+                    }));
 
   // Report data for animation of opacity goes to 1.
   layer->SetOpacity(1.0f);
@@ -183,7 +184,7 @@ TEST_F(AnimationThroughputReporterTest, AbortedAnimation) {
     LayerAnimator* animator = layer->GetAnimator();
     AnimationThroughputReporter reporter(
         animator, base::BindLambdaForTesting(
-                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
                         ADD_FAILURE() << "No report for aborted animations.";
                       }));
 
@@ -213,7 +214,7 @@ TEST_F(AnimationThroughputReporterTest, NoReportOnDetach) {
     LayerAnimator* animator = layer->GetAnimator();
     AnimationThroughputReporter reporter(
         animator, base::BindLambdaForTesting(
-                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
                         ADD_FAILURE() << "No report for aborted animations.";
                       }));
 
@@ -246,7 +247,7 @@ TEST_F(AnimationThroughputReporterTest, EndDetachedNoReportNoLeak) {
   {
     AnimationThroughputReporter reporter(
         animator, base::BindLambdaForTesting(
-                      [&](cc::FrameSequenceMetrics::ThroughputData) {
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
                         ADD_FAILURE() << "No report for aborted animations.";
                       }));
 
@@ -266,6 +267,49 @@ TEST_F(AnimationThroughputReporterTest, EndDetachedNoReportNoLeak) {
   run_loop.Run();
 
   // AnimationTracker in |reporter| should not leak in asan.
+}
+
+// Tests animation throughput are reported if there was a previous animation
+// preempted under IMMEDIATELY_ANIMATE_TO_NEW_TARGET strategy.
+TEST_F(AnimationThroughputReporterTest, ReportForAnimateToNewTarget) {
+  auto layer = std::make_unique<Layer>();
+  layer->SetOpacity(0.f);
+  layer->SetBounds(gfx::Rect(0, 0, 1, 2));
+  root_layer()->Add(layer.get());
+
+  LayerAnimator* animator = layer->GetAnimator();
+
+  // Schedule an animation that will be preempted. No report should happen.
+  {
+    AnimationThroughputReporter reporter(
+        animator, base::BindLambdaForTesting(
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
+                        ADD_FAILURE() << "No report for aborted animations.";
+                      }));
+
+    ScopedLayerAnimationSettings settings(animator);
+    settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(50));
+    layer->SetOpacity(0.5f);
+    layer->SetBounds(gfx::Rect(0, 0, 3, 4));
+  }
+
+  // Animate to new target. Report should happen.
+  base::RunLoop run_loop;
+  {
+    AnimationThroughputReporter reporter(
+        animator, base::BindLambdaForTesting(
+                      [&](const cc::FrameSequenceMetrics::CustomReportData&) {
+                        run_loop.Quit();
+                      }));
+
+    ScopedLayerAnimationSettings settings(animator);
+    settings.SetPreemptionStrategy(
+        LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+    settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(50));
+    layer->SetOpacity(1.0f);
+    layer->SetBounds(gfx::Rect(0, 0, 5, 6));
+  }
+  run_loop.Run();
 }
 
 }  // namespace ui

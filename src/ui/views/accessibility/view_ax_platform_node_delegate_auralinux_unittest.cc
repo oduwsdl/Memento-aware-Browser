@@ -24,8 +24,7 @@ class ViewAXPlatformNodeDelegateAuraLinuxTest : public ViewsTestBase {
   }
 };
 
-TEST_F(ViewAXPlatformNodeDelegateAuraLinuxTest,
-       DISABLED_TextfieldAccessibility) {
+TEST_F(ViewAXPlatformNodeDelegateAuraLinuxTest, TextfieldAccessibility) {
   Widget widget;
   Widget::InitParams init_params = CreateParams(Widget::InitParams::TYPE_POPUP);
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -37,6 +36,10 @@ TEST_F(ViewAXPlatformNodeDelegateAuraLinuxTest,
   textfield->SetAccessibleName(base::UTF8ToUTF16("Name"));
   content->AddChildView(textfield);
 
+  ASSERT_EQ(0, atk_object_get_n_accessible_children(
+                   textfield->GetNativeViewAccessible()))
+      << "Text fields should be leaf nodes on this platform, otherwise no "
+         "descendants will be recognized by assistive software.";
   AtkText* atk_text = ATK_TEXT(textfield->GetNativeViewAccessible());
   ASSERT_NE(nullptr, atk_text);
 
@@ -139,6 +142,39 @@ TEST_F(ViewAXPlatformNodeDelegateAuraLinuxTest, AuraChildWidgets) {
       atk_object_ref_accessible_child(root_view_accessible, 1);
   ASSERT_EQ(second_child, child_widget_accessible);
   g_object_unref(second_child);
+}
+
+// Tests if atk_object_get_index_in_parent doesn't DCHECK when a widget is
+// destroyed while still owning its content view.
+TEST_F(ViewAXPlatformNodeDelegateAuraLinuxTest, IndexInParent) {
+  // Create the Widget that will represent the application
+  Widget parent_widget;
+  Widget::InitParams init_params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  parent_widget.Init(std::move(init_params));
+  parent_widget.Show();
+
+  // |widget| will be destroyed later.
+  std::unique_ptr<Widget> widget = std::make_unique<Widget>();
+  Widget::InitParams child_init_params =
+      CreateParams(Widget::InitParams::TYPE_POPUP);
+  child_init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  child_init_params.parent = parent_widget.GetNativeView();
+  widget->Init(std::move(child_init_params));
+  widget->Show();
+
+  View contents;
+  // Set it as owned by client in order to keep |contents| even though |widget|
+  // is destroyed.
+  contents.set_owned_by_client();
+  widget->SetContentsView(&contents);
+
+  AtkObject* atk_object = contents.GetNativeViewAccessible();
+  EXPECT_EQ(0, atk_object_get_index_in_parent(atk_object));
+
+  widget.reset();
+  EXPECT_EQ(-1, atk_object_get_index_in_parent(atk_object));
 }
 
 }  // namespace test

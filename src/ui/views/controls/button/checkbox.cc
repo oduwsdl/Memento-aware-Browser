@@ -44,15 +44,15 @@ class Checkbox::FocusRingHighlightPathGenerator
   }
 };
 
-Checkbox::Checkbox(const base::string16& label, ButtonListener* listener)
-    : LabelButton(listener, label), checked_(false), label_ax_id_(0) {
+Checkbox::Checkbox(const base::string16& label, PressedCallback callback)
+    : LabelButton(std::move(callback), label) {
   SetImageCentered(false);
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
   SetFocusForPlatform();
 
-  set_request_focus_on_press(false);
+  SetRequestFocusOnPress(false);
   SetInkDropMode(InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
+  SetHasInkDropActionOnClick(true);
 
   // Limit the checkbox height to match the legacy appearance.
   const gfx::Size preferred_size(LabelButton::CalculatePreferredSize());
@@ -68,6 +68,9 @@ Checkbox::Checkbox(const base::string16& label, ButtonListener* listener)
   // the checkbox view (otherwise it gets clipped which looks weird).
   views::InstallEmptyHighlightPathGenerator(this);
 }
+
+Checkbox::Checkbox(const base::string16& label, ButtonListener* listener)
+    : Checkbox(label, PressedCallback(listener, this)) {}
 
 Checkbox::~Checkbox() = default;
 
@@ -132,6 +135,24 @@ void Checkbox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   }
 }
 
+gfx::ImageSkia Checkbox::GetImage(ButtonState for_state) const {
+  int icon_state = 0;
+  if (GetChecked())
+    icon_state |= IconState::CHECKED;
+  if (for_state != STATE_DISABLED)
+    icon_state |= IconState::ENABLED;
+  return gfx::CreateVectorIcon(GetVectorIcon(), 16,
+                               GetIconImageColor(icon_state));
+}
+
+std::unique_ptr<LabelButtonBorder> Checkbox::CreateDefaultBorder() const {
+  std::unique_ptr<LabelButtonBorder> border =
+      LabelButton::CreateDefaultBorder();
+  border->set_insets(
+      LayoutProvider::Get()->GetInsetsMetric(INSETS_CHECKBOX_RADIO_BUTTON));
+  return border;
+}
+
 void Checkbox::OnThemeChanged() {
   LabelButton::OnThemeChanged();
   UpdateImage();
@@ -154,24 +175,6 @@ SkColor Checkbox::GetInkDropBaseColor() const {
   // Usually ink-drop ripples match the text color. Checkboxes use the color of
   // the unchecked, enabled icon.
   return GetIconImageColor(IconState::ENABLED);
-}
-
-gfx::ImageSkia Checkbox::GetImage(ButtonState for_state) const {
-  int icon_state = 0;
-  if (GetChecked())
-    icon_state |= IconState::CHECKED;
-  if (for_state != STATE_DISABLED)
-    icon_state |= IconState::ENABLED;
-  return gfx::CreateVectorIcon(GetVectorIcon(), 16,
-                               GetIconImageColor(icon_state));
-}
-
-std::unique_ptr<LabelButtonBorder> Checkbox::CreateDefaultBorder() const {
-  std::unique_ptr<LabelButtonBorder> border =
-      LabelButton::CreateDefaultBorder();
-  border->set_insets(
-      LayoutProvider::Get()->GetInsetsMetric(INSETS_CHECKBOX_RADIO_BUTTON));
-  return border;
 }
 
 SkPath Checkbox::GetFocusRingPath() const {
@@ -211,10 +214,9 @@ void Checkbox::GetExtraParams(ui::NativeTheme::ExtraParams* params) const {
   params->button.checked = GetChecked();
 }
 
-BEGIN_METADATA(Checkbox)
-METADATA_PARENT_CLASS(LabelButton)
-ADD_PROPERTY_METADATA(Checkbox, bool, Checked)
-ADD_PROPERTY_METADATA(Checkbox, bool, MultiLine)
-END_METADATA()
+BEGIN_METADATA(Checkbox, LabelButton)
+ADD_PROPERTY_METADATA(bool, Checked)
+ADD_PROPERTY_METADATA(bool, MultiLine)
+END_METADATA
 
 }  // namespace views

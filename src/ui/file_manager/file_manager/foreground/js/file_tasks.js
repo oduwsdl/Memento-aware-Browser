@@ -64,6 +64,12 @@ class FileTasks {
 
     /** @private @const {!ProgressCenter} */
     this.progressCenter_ = progressCenter;
+
+    /**
+     * Mutex used to serialize password dialogs.
+     * @private @const {!AsyncUtil.Queue}
+     */
+    this.mutex_ = new AsyncUtil.Queue();
   }
 
   /**
@@ -96,8 +102,8 @@ class FileTasks {
       progressCenter) {
     let tasks = [];
 
-    // getFileTasks supports only native entries.
-    entries = entries.filter(util.isNativeEntry);
+    // Cannot use fake entries with getFileTasks.
+    entries = entries.filter(e => !util.isFakeEntry(e));
     if (entries.length !== 0) {
       tasks = await new Promise(
           fulfill => chrome.fileManagerPrivate.getFileTasks(entries, fulfill));
@@ -128,9 +134,9 @@ class FileTasks {
             task.taskId !== FileTasks.ZIP_ARCHIVER_ZIP_USING_TMP_TASK_ID);
 
     // The Files App and the Zip Archiver are two extensions that can handle ZIP
-    // files. Depending on the state of the ZipNoNaCl flag, we want to filter
-    // out one of these extensions.
-    const toExclude = util.isZipNoNacl() ?
+    // files. Depending on the state of the FilesZipMount feature, we want to
+    // filter out one of these extensions.
+    const toExclude = util.isZipMountEnabled() ?
         FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID :
         FileTasks.FILES_OPEN_ZIP_TASK_ID;
     tasks = tasks.filter(task => task.taskId !== toExclude);
@@ -309,17 +315,6 @@ class FileTasks {
       metrics.recordEnum(
           'ZipFileTask', taskId, FileTasks.UMA_ZIP_HANDLER_TASK_IDS_);
     }
-  }
-
-  /**
-   * Records the type of dialog shown when using a crostini app to open a file.
-   * @param {!FileTasks.CrostiniShareDialogType} dialogType
-   * @private
-   */
-  static recordCrostiniShareDialogTypeUMA_(dialogType) {
-    metrics.recordEnum(
-        'CrostiniShareDialog', dialogType,
-        FileTasks.UMA_CROSTINI_SHARE_DIALOG_TYPES_);
   }
 
   /**
@@ -687,14 +682,8 @@ class FileTasks {
               ];
           const dialog = new FilesConfirmDialog(this.ui_.element);
           dialog.setOkLabel(strf(buttonId));
-          dialog.showHtml(
-              strf(
-                  'UNABLE_TO_OPEN_WITH_PLUGIN_VM_TITLE',
-                  strf('PLUGIN_VM_APP_NAME')),
-              strf(
-                  messageId, task.title, strf('PLUGIN_VM_APP_NAME'),
-                  strf('PLUGIN_VM_DIRECTORY_LABEL')),
-              async () => {
+          dialog.show(
+              strf(messageId, task.title), async () => {
                 if (!this.fileTransferController_) {
                   console.error('FileTransferController not set');
                   return;
@@ -835,16 +824,8 @@ class FileTasks {
    */
   executeInternalTask_(taskId) {
     const actionId = taskId.split('|')[2];
-    if (actionId === 'mount-archive') {
-      this.mountArchivesInternal_();
-      return;
-    }
-    if (actionId === 'open-zip') {
-      const item = new ProgressCenterItem();
-      item.id = 'open-zip';
-      item.message = 'Cannot open zip file: Not implemented yet';
-      item.state = ProgressItemState.ERROR;
-      this.progressCenter_.updateItem(item);
+    if (actionId === 'mount-archive' || actionId === 'open-zip') {
+      this.mountArchives_();
       return;
     }
     if (actionId === 'install-linux-package') {
@@ -881,43 +862,129 @@ class FileTasks {
   }
 
   /**
-   * The core implementation of mount archives.
+   * Mounts an archive file. Asks for password and retries if necessary.
+   * @param {string} url URL of the archive file to moumt.
+   * @return {!Promise<!VolumeInfo>}
    * @private
    */
-  async mountArchivesInternal_() {
+  async mountArchive_(url) {
+    const filename = util.extractFilePath(url).split('/').pop();
+
+    const item = new ProgressCenterItem();
+    item.id = 'Mounting: ' + url;
+    item.type = ProgressItemType.MOUNT_ARCHIVE;
+    item.message = strf('ARCHIVE_MOUNT_MESSAGE', filename);
+
+    // Display progress panel.
+    item.state = ProgressItemState.PROGRESSING;
+    this.progressCenter_.updateItem(item);
+
+    // First time, try without providing a password.
+    try {
+      return await this.volumeManager_.mountArchive(url);
+    } catch (error) {
+      // If error is not about needing a password, propagate it.
+      if (error !== VolumeManagerCommon.VolumeError.NEED_PASSWORD) {
+        throw error;
+      }
+    } finally {
+      // Remove progress panel.
+      item.state = ProgressItemState.COMPLETED;
+      this.progressCenter_.updateItem(item);
+    }
+
+    // We need a password.
+    const unlock = await this.mutex_.lock();
+    try {
+      /** @type {?string} */ let password = null;
+      while (true) {
+        // Ask for password.
+        do {
+          password =
+              await this.ui_.passwordDialog.askForPassword(filename, password);
+        } while (!password);
+
+        // Display progress panel.
+        item.state = ProgressItemState.PROGRESSING;
+        this.progressCenter_.updateItem(item);
+
+        // Mount archive with password.
+        try {
+          return await this.volumeManager_.mountArchive(url, password);
+        } catch (error) {
+          // If error is not about needing a password, propagate it.
+          if (error !== VolumeManagerCommon.VolumeError.NEED_PASSWORD) {
+            throw error;
+          }
+        } finally {
+          // Remove progress panel.
+          item.state = ProgressItemState.COMPLETED;
+          this.progressCenter_.updateItem(item);
+        }
+      }
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Mounts an archive file and changes directory. Asks for password if
+   * necessary. Displays error message if necessary.
+   * @param {Object} tracker
+   * @param {string} url URL of the archive file to moumt.
+   * @return {!Promise<void>} a promise that is never rejected.
+   * @private
+   */
+  async mountArchiveAndChangeDirectory_(tracker, url) {
+    try {
+      const volumeInfo = await this.mountArchive_(url);
+
+      if (tracker.hasChanged) {
+        return;
+      }
+
+      try {
+        const displayRoot = await volumeInfo.resolveDisplayRoot();
+        if (tracker.hasChanged) {
+          return;
+        }
+
+        this.directoryModel_.changeDirectoryEntry(displayRoot);
+      } catch (error) {
+        console.error(`Cannot resolve display root after mounting: ${
+            error.stack || error}`);
+      }
+    } catch (error) {
+      // No need to display an error message if user canceled.
+      if (error === FilesPasswordDialog.USER_CANCELLED) {
+        return;
+      }
+
+      const filename = util.extractFilePath(url).split('/').pop();
+      const item = new ProgressCenterItem();
+      item.id = 'Cannot mount: ' + url;
+      item.type = ProgressItemType.MOUNT_ARCHIVE;
+      item.message = strf('ARCHIVE_MOUNT_FAILED', filename);
+      item.state = ProgressItemState.ERROR;
+      this.progressCenter_.updateItem(item);
+
+      console.error(`Cannot mount '${url}': ${error.stack || error}`);
+    }
+  }
+
+  /**
+   * Mounts the selected archive(s). Asks for password if necessary.
+   * @private
+   */
+  async mountArchives_() {
     const tracker = this.directoryModel_.createDirectoryChangeTracker();
     tracker.start();
     try {
       // TODO(mtomasz): Move conversion from entry to url to custom bindings.
       // crbug.com/345527.
       const urls = util.entriesToURLs(this.entries_);
-      const promises = urls.map(async (url) => {
-        try {
-          const volumeInfo = await this.volumeManager_.mountArchive(url);
-          if (tracker.hasChanged) {
-            return;
-          }
-
-          try {
-            const displayRoot = await volumeInfo.resolveDisplayRoot();
-            if (tracker.hasChanged) {
-              return;
-            }
-
-            this.directoryModel_.changeDirectoryEntry(displayRoot);
-          } catch (error) {
-            console.error('Cannot resolve display root after mounting:', error);
-          }
-        } catch (error) {
-          const path = util.extractFilePath(url);
-          const namePos = path.lastIndexOf('/');
-          this.ui_.alertDialog.show(
-              strf('ARCHIVE_MOUNT_FAILED', path.substr(namePos + 1), error),
-              null, null);
-          console.error(`Cannot mount '${path}': ${error.stack || error}`);
-        }
-      });
-
+      const promises =
+          urls.map(url => this.mountArchiveAndChangeDirectory_(tracker, url));
       await Promise.all(promises);
     } finally {
       tracker.stop();
@@ -948,12 +1015,15 @@ class FileTasks {
   }
 
   /**
-   * Setup a task picker combobutton based on the given tasks.
+   * Setup a task picker combobutton based on the given tasks. The combobutton
+   * is not shown if there are no tasks, or if any entry is a directory.
+   *
    * @param {!cr.ui.ComboButton} combobutton
    * @param {!Array<!chrome.fileManagerPrivate.FileTask>} tasks
    */
   updateOpenComboButton_(combobutton, tasks) {
-    combobutton.hidden = tasks.length == 0;
+    combobutton.hidden =
+        tasks.length == 0 || this.entries_.some(e => e.isDirectory);
     if (tasks.length == 0) {
       return;
     }
@@ -1014,7 +1084,8 @@ class FileTasks {
     // Hide share icon for New Folder creation.  See https://crbug.com/571355.
     shareMenuButton.hidden =
         (driveShareCommand.disabled && tasks.length == 0) ||
-        this.namingController_.isRenamingInProgress();
+        this.namingController_.isRenamingInProgress() ||
+        util.isSharesheetEnabled();
     moreActionsSeparator.hidden = true;
 
     // Show the separator if Drive share command is enabled and there is at
@@ -1350,27 +1421,6 @@ FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_ = Object.freeze([
 FileTasks.UMA_ZIP_HANDLER_TASK_IDS_ = Object.freeze([
   FileTasks.ZIP_UNPACKER_TASK_ID, FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID,
   FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID
-]);
-
-/**
- * Crostini Share Dialog types.
- * Keep in sync with enums.xml FileManagerCrostiniShareDialogType.
- * @enum {string}
- */
-FileTasks.CrostiniShareDialogType = {
-  None: 'None',
-  ShareBeforeOpen: 'ShareBeforeOpen',
-  UnableToOpen: 'UnableToOpen',
-};
-
-/**
- * The indexes of these types must match with the values of
- * FileManagerCrostiniShareDialogType in enums.xml, and should not change.
- */
-FileTasks.UMA_CROSTINI_SHARE_DIALOG_TYPES_ = Object.freeze([
-  FileTasks.CrostiniShareDialogType.None,
-  FileTasks.CrostiniShareDialogType.ShareBeforeOpen,
-  FileTasks.CrostiniShareDialogType.UnableToOpen,
 ]);
 
 /**

@@ -4,9 +4,13 @@
 
 #include "ui/ozone/platform/wayland/test/wayland_test.h"
 
+#include <memory>
+
 #include "base/run_loop.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/ozone/layout/scoped_keyboard_layout_engine.h"
+#include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_screen.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
@@ -43,6 +47,16 @@ WaylandTest::WaylandTest()
 WaylandTest::~WaylandTest() {}
 
 void WaylandTest::SetUp() {
+  // TODO(1096425): remove this once Ozone is default on Linux. This is required
+  // to be able to run ozone_unittests locally without passing
+  // --enable-features=UseOzonePlatform explicitly. linux-ozone-rel bot does
+  // that automatically through changes done to "variants", which is also
+  // convenient to have locally so that we don't need to worry about that (it's
+  // the Wayland DragAndDrop that relies on the feature).
+  feature_list_.InitWithFeatures(
+      {features::kUseOzonePlatform, ui::kWaylandOverlayDelegation}, {});
+  ASSERT_TRUE(features::IsUsingOzonePlatform());
+
   ASSERT_TRUE(server_.Start(GetParam()));
   ASSERT_TRUE(connection_->Initialize());
   screen_ = connection_->wayland_output_manager()->CreateWaylandScreen(
@@ -64,11 +78,12 @@ void WaylandTest::SetUp() {
   // Pause the server after it has responded to all incoming events.
   server_.Pause();
 
-  surface_ = server_.GetObject<wl::MockSurface>(widget_);
+  auto id = window_->root_surface()->GetSurfaceId();
+  surface_ = server_.GetObject<wl::MockSurface>(id);
   ASSERT_TRUE(surface_);
 
   // The surface must be activated before buffers are attached.
-  ActivateSurface(server_.GetObject<wl::MockSurface>(widget_)->xdg_surface());
+  ActivateSurface(server_.GetObject<wl::MockSurface>(id)->xdg_surface());
 
   Sync();
 

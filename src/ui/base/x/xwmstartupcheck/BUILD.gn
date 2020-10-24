@@ -7,5 +7,10 @@ executable("xwmstartupcheck") {
 
   sources = [ "xwmstartupcheck.cc" ]
 
+  deps = [
+    "//base",
+    "//ui/gfx/x",
+  ]
+
   configs += [ "//build/config/linux:x11" ]
 }

@@ -384,6 +384,28 @@ CommandUtil.isDriveEntries = (entries, volumeManager) => {
   return false;
 };
 
+
+/**
+ * Extracts entry on which command event was dispatched.
+ *
+ * @param {!Event} event Command event to mark.
+ * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+ * @return {Entry|FilesAppDirEntry} Entry of the event node.
+ */
+CommandUtil.getEventEntry = (event, fileManager) => {
+  let entry;
+  if (fileManager.ui.directoryTree.contains(
+          /** @type {Node} */ (event.target))) {
+    // The command is executed from the directory tree context menu.
+    entry = CommandUtil.getCommandEntry(fileManager, event.target);
+  } else {
+    // The command is executed from the gear menu.
+    entry = fileManager.directoryModel.getCurrentDirEntry();
+  }
+  return entry;
+};
+
+
 /**
  * Handle of the command events.
  */
@@ -737,7 +759,59 @@ CommandHandler.COMMANDS_['format'] = new class extends Command {
     const removableRoot = location && isRoot &&
         location.rootType === VolumeManagerCommon.RootType.REMOVABLE;
     event.canExecute = removableRoot && (isUnrecognizedVolume || writable);
-    event.command.setHidden(!removableRoot);
+
+    if (util.isSinglePartitionFormatEnabled()) {
+      let isDevice = false;
+      if (root && root instanceof EntryList) {
+        // root entry is device node if it has child (partition).
+        isDevice = !!removableRoot && root.getUIChildren().length > 0;
+      }
+      // Disable format command on device when SinglePartitionFormat on,
+      // erase command will be available.
+      event.command.setHidden(!removableRoot || isDevice);
+    } else {
+      event.command.setHidden(!removableRoot);
+    }
+  }
+};
+
+/**
+ * Deletes removable device partition, creates single partition and formats it.
+ */
+CommandHandler.COMMANDS_['erase-device'] = new class extends Command {
+  execute(event, fileManager) {
+    const root = CommandUtil.getEventEntry(event, fileManager);
+
+    if (root && root instanceof EntryList) {
+      /** @type {FilesFormatDialogElement} */ (fileManager.ui.formatDialog)
+          .showEraseModal(root);
+    }
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    if (!util.isSinglePartitionFormatEnabled()) {
+      event.canExecute = false;
+      event.command.setHidden(true);
+      return;
+    }
+    const root = CommandUtil.getEventEntry(event, fileManager);
+    const location = root && fileManager.volumeManager.getLocationInfo(root);
+    const writable = location && !location.isReadOnly;
+    const isRoot = location && location.isRootEntry;
+
+    const removableRoot = location && isRoot &&
+        location.rootType === VolumeManagerCommon.RootType.REMOVABLE;
+
+    let isDevice = false;
+    if (root && root instanceof EntryList) {
+      // root entry is device node if it has child (partition).
+      isDevice = !!removableRoot && root.getUIChildren().length > 0;
+    }
+
+    event.canExecute = removableRoot && !writable;
+    // Enable the command if this is a removable and device node.
+    event.command.setHidden(!removableRoot || !isDevice);
   }
 };
 
@@ -1103,6 +1177,35 @@ CommandHandler.COMMANDS_['delete'] = new class extends Command {
           util.isNonModifiable(fileManager.volumeManager, entry);
     });
   }
+};
+
+/**
+ * Register listener on background for delete event, and show undo toast if
+ * files are in trash and can be restored.
+ * @param {!CommandHandlerDeps} fileManager
+ */
+CommandHandler.registerUndoDeleteToast = function(fileManager) {
+  /**
+   * @param {!FileOperationProgressEvent} e
+   */
+  const onDeleted = (e) => {
+    if (e.reason === 'BEGIN' || e.reason === 'PROGRESS' ||
+        !e.trashedItems.length) {
+      return;
+    }
+    const message = e.trashedItems.length === 1 ?
+        strf('UNDO_DELETE_ONE', e.trashedItems[0].name) :
+        strf('UNDO_DELETE_SOME', e.trashedItems.length);
+    fileManager.ui.toast.show(message, {
+      text: str('UNDO_DELETE_ACTION_LABEL'),
+      callback: () => {
+        fileManager.fileOperationManager.restoreDeleted(e.trashedItems);
+      }
+    });
+  };
+
+  util.addEventListenerToBackgroundComponent(
+      assert(fileManager.fileOperationManager), 'delete', onDeleted);
 };
 
 /**
@@ -1545,7 +1648,8 @@ CommandHandler.COMMANDS_['more-actions'] = new class extends Command {
 
   /** @override */
   canExecute(event, fileManager) {
-    const canExecute = fileManager.taskController.canExecuteMoreActions();
+    const canExecute = fileManager.taskController.canExecuteMoreActions() &&
+        !util.isSharesheetEnabled();
     event.canExecute = canExecute;
     event.command.setHidden(!canExecute);
   }
@@ -1564,6 +1668,135 @@ CommandHandler.COMMANDS_['show-submenu'] = new class extends Command {
     const canExecute = fileManager.taskController.canExecuteShowOverflow();
     event.canExecute = canExecute;
     event.command.setHidden(!canExecute);
+  }
+};
+
+
+/**
+ * Invoke Sharesheet.
+ */
+CommandHandler.COMMANDS_['invoke-sharesheet'] = new class extends Command {
+  execute(event, fileManager) {
+    const entries = fileManager.selectionHandler.selection.entries;
+    chrome.fileManagerPrivate.invokeSharesheet(entries, () => {
+      if (chrome.runtime.lastError) {
+        console.error(chrome.runtime.lastError.message);
+        return;
+      }
+    });
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    const entries = fileManager.selectionHandler.selection.entries;
+
+    if (!util.isSharesheetEnabled() || !entries || entries.length === 0 ||
+        (entries.some(entry => entry.isDirectory) &&
+         (!CommandUtil.isDriveEntries(entries, fileManager.volumeManager) ||
+          entries.length > 1))) {
+      event.canExecute = false;
+      event.command.setHidden(true);
+      event.command.disabled = true;
+      return;
+    }
+
+    event.canExecute = true;
+    // In the case where changing focus to action bar elements, it is safe to
+    // keep the command enabled if it was visible before, because there should
+    // be no change to the selected entries.
+    event.command.disabled =
+        !fileManager.ui.actionbar.contains(/** @type {Node} */ (event.target));
+
+    chrome.fileManagerPrivate.sharesheetHasTargets(entries, hasTargets => {
+      if (chrome.runtime.lastError) {
+        console.error(chrome.runtime.lastError.message);
+        return;
+      }
+      event.command.setHidden(!hasTargets);
+      event.canExecute = hasTargets;
+      event.command.disabled = !hasTargets;
+    });
+  }
+};
+
+CommandHandler.COMMANDS_['toggle-holding-space'] = new class extends Command {
+  constructor() {
+    super();
+    /**
+     * Whether the command adds or removed items from holding space. The value
+     * is set in <code>canExecute()</code>. It will be true unless all selected
+     * items are already in the holding space.
+     * @private {boolean|undefined}
+     */
+    this.addsItems_;
+  }
+
+  execute(event, fileManager) {
+    if (this.addsItems_ === undefined) {
+      return;
+    }
+
+    const entries = fileManager.selectionHandler.selection.entries;
+    chrome.fileManagerPrivate.toggleAddedToHoldingSpace(
+        entries, this.addsItems_);
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    const command = event.command;
+
+    if (!util.isHoldingSpaceEnabled()) {
+      event.canExecute = false;
+      command.setHidden(true);
+      return;
+    }
+
+    const allowedVolumeTypes = [
+      VolumeManagerCommon.VolumeType.MY_FILES,
+      VolumeManagerCommon.VolumeType.DOWNLOADS,
+      VolumeManagerCommon.VolumeType.DRIVE,
+      VolumeManagerCommon.VolumeType.CROSTINI,
+      VolumeManagerCommon.VolumeType.ANDROID_FILES,
+    ];
+
+    const currentVolumeInfo = fileManager.directoryModel.getCurrentVolumeInfo();
+    if (!currentVolumeInfo ||
+        !allowedVolumeTypes.includes(currentVolumeInfo.volumeType)) {
+      event.canExecute = false;
+      command.setHidden(true);
+      return;
+    }
+
+    const entries = fileManager.selectionHandler.selection.entries;
+
+    if (!entries || entries.length === 0) {
+      event.canExecute = false;
+      command.setHidden(true);
+      return;
+    }
+
+    event.canExecute = true;
+    command.setHidden(false);
+
+    // Update the command to add or remove holding space items depending on the
+    // current holding space state - the command will remove items only if all
+    // currently selected items are already in the holding space.
+    chrome.fileManagerPrivate.getHoldingSpaceState((state) => {
+      if (!state) {
+        command.setHidden(true);
+        return;
+      }
+
+      const itemsSet = {};
+      state.itemUrls.forEach((item) => itemsSet[item] = true);
+
+      const selectedUrls = util.entriesToURLs(entries);
+      this.addsItems_ = selectedUrls.some(url => !itemsSet[url]);
+
+      command.label = this.addsItems_ ?
+          str('HOLDING_SPACE_PIN_TO_SHELF_COMMAND_LABEL') :
+          str('HOLDING_SPACE_UNPIN_FROM_SHELF_COMMAND_LABEL');
+    });
   }
 };
 
@@ -1679,7 +1912,7 @@ CommandHandler.COMMANDS_['volume-switch-9'] =
  */
 CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
   execute(event, fileManager) {
-    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    const entries = fileManager.getSelection().entries;
     const actionsController = fileManager.actionsController;
 
     actionsController.getActionsForEntries(entries).then(
@@ -1692,7 +1925,10 @@ CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
           const offlineNotNeededAction = actionsModel.getAction(
               ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY);
           // Saving for offline has a priority if both actions are available.
-          const action = saveForOfflineAction || offlineNotNeededAction;
+          let action = offlineNotNeededAction;
+          if (saveForOfflineAction && saveForOfflineAction.canExecute()) {
+            action = saveForOfflineAction;
+          }
           if (action) {
             actionsController.executeAction(action);
           }
@@ -1701,7 +1937,7 @@ CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
 
   /** @override */
   canExecute(event, fileManager) {
-    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    const entries = fileManager.getSelection().entries;
     const command = event.command;
     const actionsController = fileManager.actionsController;
 
@@ -1721,8 +1957,12 @@ CommandHandler.COMMANDS_['toggle-pinned'] = new class extends Command {
           actionsModel.getAction(ActionsModel.CommonActionId.SAVE_FOR_OFFLINE);
       const offlineNotNeededAction = actionsModel.getAction(
           ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY);
-      const action = saveForOfflineAction || offlineNotNeededAction;
-      command.checked = !!offlineNotNeededAction && !saveForOfflineAction;
+      let action = offlineNotNeededAction;
+      command.checked = !!offlineNotNeededAction;
+      if (saveForOfflineAction && saveForOfflineAction.canExecute()) {
+        action = saveForOfflineAction;
+        command.checked = false;
+      }
       event.canExecute = action && action.canExecute();
       command.disabled = !event.canExecute;
     }
@@ -1754,7 +1994,7 @@ CommandHandler.COMMANDS_['zip-selection'] = new class extends Command {
       return;
     }
 
-    if (util.isZipNoNacl()) {
+    if (util.isZipPackEnabled()) {
       // TODO(crbug.com/912236) Implement and remove error notification.
       const item = new ProgressCenterItem();
       item.id = 'no_zip';

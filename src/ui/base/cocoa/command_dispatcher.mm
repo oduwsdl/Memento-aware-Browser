@@ -130,7 +130,8 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
   // First, give the delegate an opportunity to consume this event.
   ui::PerformKeyEquivalentResult result =
       [_delegate prePerformKeyEquivalent:event window:_owner];
-  if (result == ui::PerformKeyEquivalentResult::kHandled)
+  if (result == ui::PerformKeyEquivalentResult::kHandled ||
+      result == ui::PerformKeyEquivalentResult::kDrop)
     return YES;
   if (result == ui::PerformKeyEquivalentResult::kPassToMainMenu)
     return NO;
@@ -265,10 +266,6 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
     [handler commandDispatchUsingKeyModifiers:sender window:_owner];
   else
     [[self bubbleParent] commandDispatchUsingKeyModifiers:sender];
-}
-
-- (BOOL)isRedispatchingKeyEvent {
-  return _isRedispatchingKeyEvent;
 }
 
 - (NSWindow<CommandDispatchingWindow>*)bubbleParent {

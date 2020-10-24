@@ -63,6 +63,21 @@ base::string16 AXPlatformNodeDelegateBase::GetInnerText() const {
   return inner_text;
 }
 
+base::string16 AXPlatformNodeDelegateBase::GetValueForControl() const {
+  if (!IsControl(GetData().role) && !GetData().IsRangeValueSupported())
+    return base::string16();
+
+  base::string16 value =
+      GetData().GetString16Attribute(ax::mojom::StringAttribute::kValue);
+  float numeric_value;
+  if (GetData().IsRangeValueSupported() && value.empty() &&
+      GetData().GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange,
+                                  &numeric_value)) {
+    value = base::NumberToString16(numeric_value);
+  }
+  return value;
+}
+
 const AXTree::Selection AXPlatformNodeDelegateBase::GetUnignoredSelection()
     const {
   return AXTree::Selection{-1, -1, -1, ax::mojom::TextAffinity::kDownstream};
@@ -92,6 +107,10 @@ int AXPlatformNodeDelegateBase::GetChildCount() const {
 
 gfx::NativeViewAccessible AXPlatformNodeDelegateBase::ChildAtIndex(int index) {
   return nullptr;
+}
+
+bool AXPlatformNodeDelegateBase::HasModalDialog() const {
+  return false;
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetFirstChild() {
@@ -141,7 +160,11 @@ bool AXPlatformNodeDelegateBase::IsLeaf() const {
   return !GetChildCount();
 }
 
-bool AXPlatformNodeDelegateBase::IsChildOfPlainTextField() const {
+bool AXPlatformNodeDelegateBase::IsToplevelBrowserWindow() {
+  return false;
+}
+
+bool AXPlatformNodeDelegateBase::IsDescendantOfPlainTextField() const {
   return false;
 }
 
@@ -519,6 +542,10 @@ bool AXPlatformNodeDelegateBase::IsOffscreen() const {
 
 bool AXPlatformNodeDelegateBase::IsMinimized() const {
   return false;
+}
+
+bool AXPlatformNodeDelegateBase::IsText() const {
+  return ui::IsText(GetData().role);
 }
 
 bool AXPlatformNodeDelegateBase::IsWebContent() const {

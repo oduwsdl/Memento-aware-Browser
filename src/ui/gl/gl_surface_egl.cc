@@ -52,6 +52,10 @@
 #define EGL_OPENGL_ES3_BIT 0x00000040
 #endif
 
+#if defined(USE_X11)
+#include "ui/base/x/x11_util.h"
+#endif
+
 // Not present egl/eglext.h yet.
 
 #ifndef EGL_EXT_gl_colorspace_display_p3
@@ -116,6 +120,11 @@
 #define EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE 0x3450
 #endif /* EGL_ANGLE_platform_angle_vulkan */
 
+#ifndef EGL_ANGLE_platform_angle_metal
+#define EGL_ANGLE_platform_angle_metal 1
+#define EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE 0x3489
+#endif /* EGL_ANGLE_platform_angle_metal */
+
 #ifndef EGL_ANGLE_x11_visual
 #define EGL_ANGLE_x11_visual 1
 #define EGL_X11_VISUAL_ID_ANGLE 0x33A3
@@ -174,6 +183,7 @@ EGLDisplayPlatform g_native_display(EGL_DEFAULT_DISPLAY);
 
 const char* g_egl_extensions = nullptr;
 bool g_egl_create_context_robustness_supported = false;
+bool g_egl_robustness_video_memory_purge_supported = false;
 bool g_egl_create_context_bind_generates_resource_supported = false;
 bool g_egl_create_context_webgl_compatability_supported = false;
 bool g_egl_sync_control_supported = false;
@@ -188,6 +198,7 @@ bool g_egl_ext_colorspace_display_p3_passthrough = false;
 bool g_egl_flexible_surface_compatibility_supported = false;
 bool g_egl_robust_resource_init_supported = false;
 bool g_egl_display_texture_share_group_supported = false;
+bool g_egl_display_semaphore_share_group_supported = false;
 bool g_egl_create_context_client_arrays_supported = false;
 bool g_egl_android_native_fence_sync_supported = false;
 bool g_egl_ext_pixel_format_float_supported = false;
@@ -341,6 +352,7 @@ EGLDisplay GetPlatformANGLEDisplay(
   // TODO(dbehr) Add an attrib to Angle to pass EGL platform.
 
   display_attribs.push_back(EGL_NONE);
+
   // This is an EGL 1.5 function that we know ANGLE supports. It's used to pass
   // EGLAttribs (pointers) instead of EGLints into the display
   return eglGetPlatformDisplay(
@@ -461,6 +473,19 @@ EGLDisplay GetDisplayFromType(
           native_display, EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE,
           enabled_angle_features, disabled_angle_features,
           extra_display_attribs);
+    case ANGLE_METAL:
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE,
+          enabled_angle_features, disabled_angle_features,
+          extra_display_attribs);
+    case ANGLE_METAL_NULL:
+      extra_display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
+      extra_display_attribs.push_back(
+          EGL_PLATFORM_ANGLE_DEVICE_TYPE_NULL_ANGLE);
+      return GetPlatformANGLEDisplay(
+          native_display, EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE,
+          enabled_angle_features, disabled_angle_features,
+          extra_display_attribs);
     default:
       NOTREACHED();
       return EGL_NO_DISPLAY;
@@ -489,6 +514,9 @@ ANGLEImplementation GetANGLEImplementationFromDisplayType(
       return ANGLEImplementation::kVulkan;
     case ANGLE_SWIFTSHADER:
       return ANGLEImplementation::kSwiftShader;
+    case ANGLE_METAL:
+    case ANGLE_METAL_NULL:
+      return ANGLEImplementation::kMetal;
     default:
       return ANGLEImplementation::kNone;
   }
@@ -528,6 +556,10 @@ const char* DisplayTypeString(DisplayType display_type) {
       return "OpenGLEGL";
     case ANGLE_OPENGLES_EGL:
       return "OpenGLESEGL";
+    case ANGLE_METAL:
+      return "Metal";
+    case ANGLE_METAL_NULL:
+      return "MetalNull";
     default:
       NOTREACHED();
       return "Err";
@@ -752,6 +784,7 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
                         bool supports_angle_vulkan,
                         bool supports_angle_swiftshader,
                         bool supports_angle_egl,
+                        bool supports_angle_metal,
                         const base::CommandLine* command_line,
                         std::vector<DisplayType>* init_displays) {
   // SwiftShader does not use the platform extensions
@@ -777,11 +810,16 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   // If no display has been explicitly requested and the DefaultANGLEOpenGL
   // experiment is enabled, try creating OpenGL displays first.
   // TODO(oetuaho@nvidia.com): Only enable this path on specific GPUs with a
-  // blacklist entry. http://crbug.com/693090
+  // blocklist entry. http://crbug.com/693090
   if (supports_angle_opengl && use_angle_default &&
       base::FeatureList::IsEnabled(features::kDefaultANGLEOpenGL)) {
     AddInitDisplay(init_displays, ANGLE_OPENGL);
     AddInitDisplay(init_displays, ANGLE_OPENGLES);
+  }
+
+  if (supports_angle_metal && use_angle_default &&
+      base::FeatureList::IsEnabled(features::kDefaultANGLEMetal)) {
+    AddInitDisplay(init_displays, ANGLE_METAL);
   }
 
   if (supports_angle_d3d) {
@@ -850,6 +888,18 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
     }
   }
 
+  if (supports_angle_metal) {
+    if (use_angle_default) {
+      if (!supports_angle_opengl) {
+        AddInitDisplay(init_displays, ANGLE_METAL);
+      }
+    } else if (requested_renderer == kANGLEImplementationMetalName) {
+      AddInitDisplay(init_displays, ANGLE_METAL);
+    } else if (requested_renderer == kANGLEImplementationMetalNULLName) {
+      AddInitDisplay(init_displays, ANGLE_METAL_NULL);
+    }
+  }
+
   // If no displays are available due to missing angle extensions or invalid
   // flags, request the default display.
   if (init_displays->empty()) {
@@ -906,6 +956,8 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
 
   g_egl_create_context_robustness_supported =
       HasEGLExtension("EGL_EXT_create_context_robustness");
+  g_egl_robustness_video_memory_purge_supported =
+      HasEGLExtension("EGL_NV_robustness_video_memory_purge");
   g_egl_create_context_bind_generates_resource_supported =
       HasEGLExtension("EGL_CHROMIUM_create_context_bind_generates_resource");
   g_egl_create_context_webgl_compatability_supported =
@@ -943,6 +995,8 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
 
   g_egl_display_texture_share_group_supported =
       HasEGLExtension("EGL_ANGLE_display_texture_share_group");
+  g_egl_display_semaphore_share_group_supported =
+      HasEGLExtension("EGL_ANGLE_display_semaphore_share_group");
   g_egl_create_context_client_arrays_supported =
       HasEGLExtension("EGL_ANGLE_create_context_client_arrays");
   g_egl_robust_resource_init_supported =
@@ -1044,6 +1098,7 @@ void GLSurfaceEGL::ShutdownOneOff() {
 
   g_egl_extensions = nullptr;
   g_egl_create_context_robustness_supported = false;
+  g_egl_robustness_video_memory_purge_supported = false;
   g_egl_create_context_bind_generates_resource_supported = false;
   g_egl_create_context_webgl_compatability_supported = false;
   g_egl_sync_control_supported = false;
@@ -1084,6 +1139,11 @@ bool GLSurfaceEGL::IsCreateContextRobustnessSupported() {
   return g_egl_create_context_robustness_supported;
 }
 
+// static
+bool GLSurfaceEGL::IsRobustnessVideoMemoryPurgeSupported() {
+  return g_egl_robustness_video_memory_purge_supported;
+}
+
 bool GLSurfaceEGL::IsCreateContextBindGeneratesResourceSupported() {
   return g_egl_create_context_bind_generates_resource_supported;
 }
@@ -1113,6 +1173,10 @@ bool GLSurfaceEGL::IsRobustResourceInitSupported() {
 
 bool GLSurfaceEGL::IsDisplayTextureShareGroupSupported() {
   return g_egl_display_texture_share_group_supported;
+}
+
+bool GLSurfaceEGL::IsDisplaySemaphoreShareGroupSupported() {
+  return g_egl_display_semaphore_share_group_supported;
 }
 
 bool GLSurfaceEGL::IsCreateContextClientArraysSupported() {
@@ -1178,6 +1242,7 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
   bool supports_angle_vulkan = false;
   bool supports_angle_swiftshader = false;
   bool supports_angle_egl = false;
+  bool supports_angle_metal = false;
   // Check for availability of ANGLE extensions.
   if (client_extensions &&
       ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle")) {
@@ -1193,11 +1258,13 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
         client_extensions, "EGL_ANGLE_platform_angle_device_type_swiftshader");
     supports_angle_egl = ExtensionsContain(
         client_extensions, "EGL_ANGLE_platform_angle_device_type_egl_angle");
+    supports_angle_metal =
+        ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle_metal");
   }
 
   bool supports_angle = supports_angle_d3d || supports_angle_opengl ||
                         supports_angle_null || supports_angle_vulkan ||
-                        supports_angle_swiftshader;
+                        supports_angle_swiftshader || supports_angle_metal;
 
   if (client_extensions) {
     g_egl_angle_feature_control_supported =
@@ -1209,7 +1276,7 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
   GetEGLInitDisplays(supports_angle_d3d, supports_angle_opengl,
                      supports_angle_null, supports_angle_vulkan,
                      supports_angle_swiftshader, supports_angle_egl,
-                     command_line, &init_displays);
+                     supports_angle_metal, command_line, &init_displays);
 
   std::vector<std::string> enabled_angle_features =
       GetStringVectorFromCommandLine(command_line,
@@ -1240,6 +1307,14 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
       SetANGLEImplementation(
           GetANGLEImplementationFromDisplayType(display_type));
     }
+
+#if defined(USE_X11)
+    // Unset DISPLAY env, so the vulkan can be initialized successfully, if the
+    // X server doesn't support Vulkan surface.
+    base::Optional<ui::ScopedUnsetDisplay> unset_display;
+    if (display_type == ANGLE_VULKAN && !ui::IsVulkanSurfaceSupported())
+      unset_display.emplace();
+#endif  // defined(USE_X11)
 
     if (!eglInitialize(display, nullptr, nullptr)) {
       bool is_last = disp_index == init_displays.size() - 1;

@@ -5,8 +5,6 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_CURSOR_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_CURSOR_H_
 
-#include <wayland-client.h>
-
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -56,7 +54,7 @@ class WaylandCursor {
 
   // Holds the buffers and their memory until the compositor releases them.
   base::flat_map<wl_buffer*, WaylandShmBuffer> buffers_;
-  wl::Object<wl_surface> pointer_surface_;
+  const wl::Object<wl_surface> pointer_surface_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandCursor);
 };

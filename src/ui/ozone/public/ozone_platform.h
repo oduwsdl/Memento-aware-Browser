@@ -24,14 +24,15 @@ class NativeDisplayDelegate;
 
 namespace ui {
 class CursorFactory;
-class InputController;
 class GpuPlatformSupportHost;
+class InputController;
 class OverlayManagerOzone;
+class PlatformClipboard;
+class PlatformGLEGLUtility;
+class PlatformMenuUtils;
 class PlatformScreen;
 class SurfaceFactoryOzone;
 class SystemInputInjector;
-class PlatformClipboard;
-class PlatformGLEGLUtility;
 
 namespace internal {
 class InputMethodDelegate;
@@ -70,6 +71,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
 
   // Struct used to indicate platform properties.
   struct PlatformProperties {
+    PlatformProperties();
+    PlatformProperties(const PlatformProperties& other) = delete;
+    PlatformProperties& operator=(const PlatformProperties& other) = delete;
+    ~PlatformProperties();
+
     // Fuchsia only: set to true when the platforms requires |view_token| field
     // in PlatformWindowInitProperties when creating a window.
     bool needs_view_token = false;
@@ -87,12 +93,32 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     base::MessagePumpType message_pump_type_for_gpu =
         base::MessagePumpType::DEFAULT;
 
+    // Determines the type of message pump that should be used for viz
+    // compositor thread.
+    base::MessagePumpType message_pump_type_for_viz_compositor =
+        base::MessagePumpType::DEFAULT;
+
     // Determines if the platform supports vulkan swap chain.
     bool supports_vulkan_swap_chain = false;
 
     // Wayland only: determines if the client must ignore the screen bounds when
     // calculating bounds of menu windows.
     bool ignore_screen_bounds_for_menus = false;
+
+    // Wayland only: determines whether BufferQueue needs a background image to
+    // be stacked below an AcceleratedWidget to make a widget opaque.
+    bool needs_background_image = false;
+
+    // If true, the platform shows and updates the drag image.
+    bool platform_shows_drag_image = true;
+
+    // Linux only, but see a TODO in BrowserDesktopWindowTreeHostLinux.
+    // Determines whether the platform supports the global application menu.
+    bool supports_global_application_menus = false;
+
+    // Determines if the application modal dialogs should use the event blocker
+    // to allow the only browser window receiving UI events.
+    bool app_modal_dialogs_use_event_blocker = false;
   };
 
   // Properties available in the host process after initialization.
@@ -167,6 +193,7 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
       internal::InputMethodDelegate* delegate,
       gfx::AcceleratedWidget widget) = 0;
   virtual PlatformGLEGLUtility* GetPlatformGLEGLUtility();
+  virtual PlatformMenuUtils* GetPlatformMenuUtils();
 
   // Returns true if the specified buffer format is supported.
   virtual bool IsNativePixmapConfigSupported(gfx::BufferFormat format,
@@ -223,7 +250,10 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
   bool initialized_gpu_ = false;
   bool prearly_initialized_ = false;
 
-  bool single_process_ = false;
+  // This value is checked on multiple threads. Declaring it volatile makes
+  // modifications to |single_process_| visible by other threads. Mutex is not
+  // needed since it's set before other threads are started.
+  volatile bool single_process_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(OzonePlatform);
 };

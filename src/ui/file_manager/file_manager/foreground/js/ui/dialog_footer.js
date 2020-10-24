@@ -190,47 +190,58 @@ class DialogFooter {
    */
   onKeyDown_(evt) {
     const options = this.fileTypeSelector.querySelector('.options');
+    const selectedItem = options.querySelector('.selected');
+    const isExpanded = options.getAttribute('expanded') === 'expanded';
+
+    const fireChangeEvent = () => {
+      this.fileTypeSelector.dispatchEvent(new Event('change'));
+    };
+
+    const changeSelection = (element) => {
+      this.setOptionSelected(/** @type {HTMLOptionElement} */ (element));
+      if (!isExpanded) {
+        fireChangeEvent();  // crbug.com/1002410
+      }
+    };
 
     switch (evt.key) {
       case 'Escape':
         // If options are open, stop the window from closing.
-        if (options.getAttribute('expanded') === 'expanded') {
+        if (isExpanded) {
           evt.stopPropagation();
           evt.preventDefault();
         }
-        // Drop through.
+        // fall through
       case 'Tab':
         this.selectHideDropDown(options);
         break;
       case 'Enter':
       case ' ':
-        if (options.getAttribute('expanded') === 'expanded') {
-          const changeEvent = new Event('change');
-          this.fileTypeSelector.dispatchEvent(changeEvent);
+        if (isExpanded) {
+          fireChangeEvent();
           this.selectHideDropDown(options);
         } else {
           this.selectShowDropDown(options);
         }
         break;
+      case 'ArrowRight':
+        if (isExpanded) {
+          break;
+        }
+        // fall through
       case 'ArrowDown':
+        if (selectedItem && selectedItem.nextSibling) {
+          changeSelection(selectedItem.nextSibling);
+        }
+        break;
+      case 'ArrowLeft':
+        if (isExpanded) {
+          break;
+        }
+        // fall through
       case 'ArrowUp':
-        if (options.getAttribute('expanded') === 'expanded') {
-          const selectedItem = options.querySelector('.selected');
-          if (selectedItem) {
-            if (evt.key === 'ArrowDown') {
-              if (selectedItem.nextSibling) {
-                this.setOptionSelected(
-                    /** @type {HTMLOptionElement} */ (
-                        selectedItem.nextSibling));
-              }
-            } else {  // ArrowUp.
-              if (selectedItem.previousSibling) {
-                this.setOptionSelected(
-                    /** @type {HTMLOptionElement} */ (
-                        selectedItem.previousSibling));
-              }
-            }
-          }
+        if (selectedItem && selectedItem.previousSibling) {
+          changeSelection(selectedItem.previousSibling);
         }
         break;
     }
@@ -365,21 +376,18 @@ class DialogFooter {
     }
 
     const options = this.fileTypeSelector.querySelectorAll('option');
-    if (options.length >= 2) {
-      // There is in fact no choice, show the selector.
-      this.fileTypeSelector.hidden = false;
-      if (util.isFilesNg()) {
-        // Make sure one of the options is selected to match real <select>.
-        let selectedOption =
-            this.fileTypeSelector.querySelector('.options .selected');
-        if (!selectedOption) {
-          selectedOption =
-              this.fileTypeSelector.querySelector('.options option');
-          this.setOptionSelected(
-              /** @type {HTMLOptionElement } */ (selectedOption));
-        }
+    if (options.length > 0 && util.isFilesNg()) {
+      // Make sure one of the options is selected to match real <select>.
+      let selectedOption =
+          this.fileTypeSelector.querySelector('.options .selected');
+      if (!selectedOption) {
+        selectedOption = this.fileTypeSelector.querySelector('.options option');
+        this.setOptionSelected(
+            /** @type {HTMLOptionElement } */ (selectedOption));
       }
     }
+    // Hide the UI if there is actually no choice to be made (0 or 1 option).
+    this.fileTypeSelector.hidden = options.length < 2;
   }
 
   /**

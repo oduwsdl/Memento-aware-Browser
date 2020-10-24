@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">日语输入法（适用于美式键盘）</translation>
 <translation id="1047956942837015229">正在删除<ph name="COUNT" />项内容…</translation>
 <translation id="1049926623896334335">Word 文档</translation>
+<translation id="1060368002126861100">如需使用 <ph name="APP_NAME" /> 打开文件，请先将文件移至“Windows 文件”文件夹。</translation>
 <translation id="1062407476771304334">替换</translation>
 <translation id="1065449928621190041">法语（加拿大）键盘</translation>
 <translation id="1119069657431255176">bzip2 压缩的 tar 归档</translation>
@@ -20,6 +21,7 @@
 <translation id="1150565364351027703">太阳镜</translation>
 <translation id="115443833402798225">韩语（安马太）</translation>
 <translation id="1155759005174418845">加泰罗尼亚语</translation>
+<translation id="1172970565351728681">还需大约 <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">重命名</translation>
 <translation id="117624967391683467">正在复制<ph name="FILE_NAME" />…</translation>
 <translation id="1178581264944972037">暂停</translation>
@@ -28,6 +30,7 @@
 <translation id="1208421848177517699">音译(namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">上传</translation>
 <translation id="1249250836236328755">流派</translation>
+<translation id="1276362640455948667">葡萄牙语，美式国标键盘</translation>
 <translation id="1278813325885878377">匈牙利语 QWERTY 键盘</translation>
 <translation id="1293556467332435079">文件</translation>
 <translation id="1297922636971898492">Google云端硬盘暂时无法使用。Google云端硬盘恢复正常后，系统将自动重新开始上传。</translation>
@@ -45,6 +48,7 @@
 <translation id="1395262318152388157">进度滑块</translation>
 <translation id="1399648040768741453">泰卢固语键盘（注音）</translation>
 <translation id="1430915738399379752">打印</translation>
+<translation id="1435838927755162558">与 Parallels Desktop 共享文件夹</translation>
 <translation id="1439494416798956626">已移至“<ph name="FOLDER_NAME" />”。</translation>
 <translation id="1441841714100794440">越南语键盘（电传机）</translation>
 <translation id="1455548678241328678">挪威语键盘</translation>
@@ -56,9 +60,11 @@
 <translation id="1538729222189715449">正在打开 Linux 文件…</translation>
 <translation id="1547964879613821194">加拿大英语</translation>
 <translation id="1556189134700913550">全部应用</translation>
+<translation id="1561842594491319104">Chrome 设备</translation>
 <translation id="1572585716423026576">设为壁纸</translation>
 <translation id="158809615184981282">法罗语键盘</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">摄像头</translation>
 <translation id="1646136617204068573">匈牙利语键盘</translation>
 <translation id="164729547906544836">泰米尔语键盘(itrans)</translation>
 <translation id="164969095109328410">Chrome设备</translation>
@@ -66,6 +72,7 @@
 <translation id="1673103856845176271">出于安全原因，无法访问该文件。</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434">正在压缩 <ph name="NUMBER_OF_ITEMS" /> 项内容…</translation>
+<translation id="1731889557567069540">已复制 <ph name="NUMBER_OF_ITEMS" /> 项。</translation>
 <translation id="174173592514158117">显示所有 Play 文件夹</translation>
 <translation id="174937106936716857">文件总数</translation>
 <translation id="1775381402323441512">视频信息</translation>
@@ -79,6 +86,7 @@
 <translation id="1844692022597038441">此文件无法在离线模式下播放。</translation>
 <translation id="184633654410729720">泰语键盘(Kedmanee)</translation>
 <translation id="1847880352285315359">已保存</translation>
+<translation id="1853795129690976061">已与 Linux 共享此文件夹</translation>
 <translation id="1864756863218646478">找不到该文件。</translation>
 <translation id="1921986354447415460">土耳其语 F 键盘</translation>
 <translation id="1924372192547904021">已将“<ph name="DRIVE_NAME" />”格式化</translation>
@@ -102,7 +110,6 @@
 <translation id="2085470240340828803">名为“<ph name="FILENAME" />”的文件已存在，要如何处理？</translation>
 <translation id="2121825465123208577">调整大小</translation>
 <translation id="2136953289241069843">音译(namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">无法打开“<ph name="PATH" />”：<ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">字符无效：<ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">越南语键盘(TCVN)</translation>
 <translation id="2168214441502403371">波斯语键盘</translation>
@@ -110,7 +117,9 @@
 <translation id="2208158072373999562">Zip 归档</translation>
 <translation id="2225536596944493418">确定要删除这 <ph name="NUMBER_OF_ITEMS" /> 项吗？</translation>
 <translation id="2230062665678605299">无法创建文件夹“<ph name="FOLDER_NAME" />”。<ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">已移动。</translation>
 <translation id="2278988676849463018">卡纳达语键盘（注音）</translation>
+<translation id="2287742181953707290">葡萄牙语，美式国际 PC 键盘</translation>
 <translation id="2288278176040912387">电唱机</translation>
 <translation id="2291538123825441971">正在打开 <ph name="NUMBER_OF_FILES" /> 个文件。</translation>
 <translation id="2303301624314357662">正在打开文件“<ph name="FILE_NAME" />”</translation>
@@ -133,6 +142,7 @@
 <translation id="2494837236724268445">古吉拉特语键盘（注音）</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2529133382850673012">英语（美国）键盘</translation>
+<translation id="2534155362429831547">删除了 <ph name="NUMBER_OF_ITEMS" /> 项</translation>
 <translation id="2542049655219295786">Google 表格</translation>
 <translation id="2547921442987553570">添加到“<ph name="EXTENSION_NAME" />”</translation>
 <translation id="255937426064304553">美国英语（国际）</translation>
@@ -165,7 +175,6 @@
 <translation id="2924296707677495905">音译(namaskaram → ನಮಸ್ಕಾರ)</translation>
 <translation id="2925966894897775835">表格</translation>
 <translation id="2938685643439809023">蒙古语</translation>
-<translation id="2939410873710774399">如需使用 <ph name="APP_NAME" /> (<ph name="VM_SOFTWARE_NAME" />) 打开文件，请先将文件移到“<ph name="FOLDER_NAME" />”文件夹。</translation>
 <translation id="2942290791863759244">德语Neo 2键盘</translation>
 <translation id="2943400156390503548">幻灯片</translation>
 <translation id="2943503720238418293">请使用一个较短的名称</translation>
@@ -180,8 +189,9 @@
 <translation id="303198083543495566">地理位置</translation>
 <translation id="3057861065630527966">备份您的照片和视频</translation>
 <translation id="3064388234319122767">音译(zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows 文件</translation>
 <translation id="3078461028045006476">使用“<ph name="EXTENSION_NAME" />”分享</translation>
-<translation id="3088034400796962477">音译(salam ← سلام)</translation>
+<translation id="3083975830683400843">Chromebit</translation>
 <translation id="3116361045094675131">英语（英国）键盘</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">完成</translation>
@@ -194,9 +204,11 @@
 <translation id="3236289833370040187">所有权将被转移到 <ph name="DESTINATION_DOMAIN" />。</translation>
 <translation id="3241720467332021590">爱尔兰语</translation>
 <translation id="3245321423178950146">未知艺术家</translation>
+<translation id="3248185426436836442">待处理</translation>
 <translation id="3252266817569339921">法语</translation>
 <translation id="3254434849914415189">选择用于打开 <ph name="FILE_TYPE" /> 文件的默认应用：</translation>
 <translation id="3264582393905923483">上下文</translation>
+<translation id="3272909651715601089">无法打开“<ph name="PATH" />”</translation>
 <translation id="3280431534455935878">正在准备</translation>
 <translation id="3280987981688031357">黑胶唱片</translation>
 <translation id="3296763833017966289">格鲁吉亚语</translation>
@@ -204,6 +216,7 @@
 <translation id="3335337277364016868">录制年份</translation>
 <translation id="3338239663705455570">斯洛文尼亚语键盘</translation>
 <translation id="3353984535370177728">选择要上传的文件夹</translation>
+<translation id="3356580349448036450">已完成</translation>
 <translation id="3399597614303179694">马其顿语键盘</translation>
 <translation id="3414856743105198592">格式化可移动设备会删除其中的所有数据。您要继续吗？</translation>
 <translation id="3437801641691368414">创建时间</translation>
@@ -213,11 +226,13 @@
 <translation id="3473378059788601120">已复制到“<ph name="FOLDER_NAME" />”。</translation>
 <translation id="3475447146579922140">Google 电子表格</translation>
 <translation id="3495304270784461826"><ph name="COUNT" />个错误。</translation>
+<translation id="349603508045926994">波斯语音译</translation>
 <translation id="3519867315646775981">音译(shalom ← שלום)</translation>
 <translation id="3522708245912499433">葡萄牙语</translation>
 <translation id="3524311639100184459">警告：这些都是临时文件，可能会被系统自动删除以释放磁盘空间。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">文件夹</translation>
 <translation id="3549797760399244642">转到 drive.google.com...</translation>
+<translation id="3553048479571901246">如需使用 <ph name="APP_NAME" /> 打开文件，请先将文件复制到“Windows 文件”文件夹。</translation>
 <translation id="357479282490346887">立陶宛语</translation>
 <translation id="3583509704582854624">字母数字输入法（适用于日语键盘）</translation>
 <translation id="3603385196401704894">加拿大法语</translation>
@@ -228,6 +243,7 @@
 <translation id="3620292326130836921">所有文件都已备份！</translation>
 <translation id="3626281679859535460">亮度</translation>
 <translation id="3644896802912593514">宽度</translation>
+<translation id="3645233063072417428">已移动 <ph name="NUMBER_OF_ITEMS" /> 项。</translation>
 <translation id="3645531960514756307">取消固定文件夹</translation>
 <translation id="3678559383040232393">马耳他语键盘</translation>
 <translation id="3685122418104378273">当您使用移动数据网络时，Google 云端硬盘同步功能默认情况下处于停用状态。</translation>
@@ -238,6 +254,7 @@
 <translation id="3780536599611287598">您无权将文件移动到“<ph name="FOLDER_NAME" />”中。</translation>
 <translation id="3786301125658655746">您处于离线状态</translation>
 <translation id="3789841737615482174">安装</translation>
+<translation id="3793469551756281394">还需大约 <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">版本</translation>
 <translation id="3801082500826908679">法罗语</translation>
 <translation id="3809272675881623365">兔子</translation>
@@ -249,9 +266,8 @@
 <translation id="3830674330436234648">无法播放</translation>
 <translation id="3833761542219863804">音译(mausam → ਮੌਸਮ)</translation>
 <translation id="383652340667548381">塞尔维亚语</translation>
-<translation id="385051799172605136">后退</translation>
+<translation id="385051799172605136">返回</translation>
 <translation id="3855472144336161447">德语Neo 2</translation>
-<translation id="3856075812838139784">只读</translation>
 <translation id="3858678421048828670">意大利语键盘</translation>
 <translation id="386548886866354912">使用“<ph name="EXTENSION_NAME" />”打包</translation>
 <translation id="3866249974567520381">说明</translation>
@@ -262,11 +278,13 @@
 <translation id="3943857333388298514">粘贴</translation>
 <translation id="3958548648197196644">猕猴桃</translation>
 <translation id="3966388904776714213">音频播放器</translation>
+<translation id="3984317463833596033">授权 Parallels Desktop 修改“<ph name="FOLDER_NAME" />”文件夹中的文件</translation>
 <translation id="4002066346123236978">标题</translation>
 <translation id="4070370845051020638">粤语输入法</translation>
 <translation id="4072248638558688893">泰米尔语键盘（注音）</translation>
 <translation id="4124935795427217608">独角兽</translation>
 <translation id="4158739975813877944">打开播放列表</translation>
+<translation id="4159731583141908892">已移动 <ph name="FILE_NAME" />。</translation>
 <translation id="418179967336296930">俄语注音 (YaZHert) 键盘</translation>
 <translation id="4193154014135846272">Google 文档</translation>
 <translation id="4195249722193633765">通过 Linux（测试版）安装应用</translation>
@@ -280,6 +298,7 @@
 <translation id="4298972503445160211">丹麦语键盘</translation>
 <translation id="4299729908419173967">巴西</translation>
 <translation id="4309915981827077375">基本信息</translation>
+<translation id="4315949787858895817">荷兰语（比利时）</translation>
 <translation id="4326192123064055915">咖啡</translation>
 <translation id="4336032328163998280">复制操作失败。<ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">甜瓜</translation>
@@ -290,8 +309,8 @@
 <translation id="4470564870223067757">韩语(2 Set)</translation>
 <translation id="4477219268485577442">保加利亚语（注音）</translation>
 <translation id="4479812471636796472">英语（美国）德沃夏克键盘</translation>
-<translation id="4487088045714738411">比利时键盘</translation>
 <translation id="4522570452068850558">详细信息</translation>
+<translation id="4527800702232535228">已与 Parallels Desktop 共享此文件夹</translation>
 <translation id="4552678318981539154">购买更多存储空间</translation>
 <translation id="4559767610552730302">焦外成像</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> 文件</translation>
@@ -300,6 +319,7 @@
 <translation id="4582497162516204941">通过 Linux（测试版）安装</translation>
 <translation id="4594543368593301662">目前显示的是与“<ph name="SEARCH_TERM" />”相符的搜索结果。</translation>
 <translation id="4603392156942865207">正在将 <ph name="FILE_NAME" /> 复制到“<ph name="FOLDER_NAME" />”</translation>
+<translation id="4627439232948440198">梵语</translation>
 <translation id="4631887759990505102">艺术家</translation>
 <translation id="4656293982926141856">此计算机</translation>
 <translation id="4669606053856530811">“<ph name="SOURCE_NAME" />”的成员将不再能够访问这些内容（除非与他们共享了这些内容）。</translation>
@@ -308,6 +328,7 @@
 <translation id="4694604912444486114">猴子</translation>
 <translation id="4697043402264950621">文件列表按<ph name="COLUMN_NAME" />升序排序。</translation>
 <translation id="4711094779914110278">土耳其语</translation>
+<translation id="4712283082407695269">正在打开“<ph name="PATH" />”</translation>
 <translation id="4713544552769165154">此文件适用于采用Macintosh软件的计算机，不适用于运行Chrome操作系统的设备。请在<ph name="BEGIN_LINK" />Chrome网上应用店<ph name="END_LINK" />中搜索合适的替代应用。<ph name="BEGIN_LINK_HELP" />了解详情<ph name="END_LINK_HELP" /></translation>
 <translation id="4724850507808590449">已备份 <ph name="FILE_COUNT" /> 张照片</translation>
 <translation id="4725511304875193254">柯基犬</translation>
@@ -325,20 +346,22 @@
 <translation id="4804827417948292437">牛油果</translation>
 <translation id="4823651846660089135">设备目前处于只读模式</translation>
 <translation id="4839847978919684242">已经选择 <ph name="SELCTED_FILES_COUNT" /> 个文件或目录</translation>
+<translation id="4843566743023903107">Chromebase</translation>
+<translation id="4849981557599196363">德语（比利时）</translation>
 <translation id="4850886885716139402">视图</translation>
 <translation id="485316830061041779">德语</translation>
-<translation id="4859297381873413734">如需使用 <ph name="APP_NAME" /> (<ph name="VM_SOFTWARE_NAME" />) 打开文件，请先将文件复制到“<ph name="FOLDER_NAME" />”文件夹。</translation>
 <translation id="4867079195717347957">点击即可按降序对此列排序。</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> 字节</translation>
 <translation id="4880214202172289027">音量滑块</translation>
 <translation id="4880520557730313061">自动修正</translation>
 <translation id="4881695831933465202">打开</translation>
 <translation id="4886021172213954916">泰米尔语键盘（打字机）</translation>
-<translation id="4892969127351273348">无法使用“<ph name="APP_NAME" />”打开</translation>
+<translation id="4900532980794411603">与 Parallels Desktop 共享</translation>
 <translation id="4905417359854579806">可以开始备份 <ph name="FILE_COUNT" />了</translation>
 <translation id="4924638091161556692">已修正</translation>
 <translation id="4935975195727477204">杂色菊</translation>
 <translation id="4943368462779413526">美式足球</translation>
+<translation id="4961158930123534723">已与 Parallels Desktop 共享 1 个文件夹</translation>
 <translation id="4969785127455456148">专辑</translation>
 <translation id="497244430928947428">马拉雅拉姆语键盘（注音）</translation>
 <translation id="4973523518332075481">所用名称的长度不得超过 <ph name="MAX_LENGTH" /> 个字符</translation>
@@ -350,6 +373,8 @@
 <translation id="5010406651457630570">计算机</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">某项操作所用的时间超出预期。要取消该操作吗？</translation>
+<translation id="5026887030745057099">印地语</translation>
+<translation id="5036159836254554629">管理与 Parallels Desktop 的共享</translation>
 <translation id="5038625366300922036">查看更多…</translation>
 <translation id="5061708541166515394">对比度</translation>
 <translation id="5068919226082848014">披萨</translation>
@@ -359,6 +384,7 @@
 <translation id="5098629044894065541">希伯来语</translation>
 <translation id="5123433949759960244">篮球</translation>
 <translation id="5129662217315786329">波兰语</translation>
+<translation id="5132435854979302863">菲律宾语</translation>
 <translation id="5144820558584035333">韩语（3 Set，390版）</translation>
 <translation id="5145331109270917438">修改日期</translation>
 <translation id="515594325917491223">国际象棋</translation>
@@ -378,7 +404,9 @@
 <translation id="5253070652067921974">创建者</translation>
 <translation id="5257456363153333584">蜻蜓</translation>
 <translation id="5262311848634918433"><ph name="MARKUP_1" />可随时随地访问文件，即使处于离线状态也没关系。<ph name="MARKUP_2" />Google 云端硬盘上的文件是最新的，并可通过任意设备访问。<ph name="MARKUP_3" /><ph name="MARKUP_4" />可确保文件安全。<ph name="MARKUP_5" />无论您的设备出现什么状况，您的文件都会安全地存储在 Google 云端硬盘上。<ph name="MARKUP_6" /><ph name="MARKUP_7" />文件集中存储，方便您与他人在同一个地方共享、创建和协作处理<ph name="MARKUP_8" />文件。<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">已复制。</translation>
 <translation id="5275973617553375938">从 Google 云端硬盘恢复的文件</translation>
+<translation id="5283140566205748520">法语（比利时）</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5318819489018851358">与 Linux 共享</translation>
@@ -395,16 +423,17 @@
 <translation id="5418923334382419584">缅甸语键盘</translation>
 <translation id="5428105026674456456">西班牙语</translation>
 <translation id="5438282218546237410">没有与“<ph name="SEARCH_TERM" />”相符的结果。</translation>
+<translation id="5449551289610225147">密码无效</translation>
 <translation id="5464696796438641524">波兰语键盘</translation>
 <translation id="5465122519792752163">尼泊尔语键盘(InScript)</translation>
 <translation id="5469868506864199649">意大利语</translation>
+<translation id="5484429245813572665">印度尼西亚语</translation>
 <translation id="5494920125229734069">全选</translation>
 <translation id="5500122897333236901">冰岛语</translation>
 <translation id="5508696409934741614">圆点</translation>
 <translation id="5522908512596376669">文件列表已切换到列表视图。</translation>
 <translation id="5524517123096967210">无法读取该文件。</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> 图片</translation>
-<translation id="5533555070048896610">音译(namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">正在计算大小</translation>
 <translation id="5583640892426849032">退格</translation>
 <translation id="5605830556594064952">美国英语(Dvorak)</translation>
@@ -442,6 +471,7 @@
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5949281959820712067">授权 Linux 应用修改您 Google 云端硬盘中的文件。相关更改会同步到您的其他设备。</translation>
 <translation id="5955954492236143329"><ph name="NUMBER_OF_ITEMS" /> 项内容</translation>
+<translation id="5957366693331451795">Chromebox</translation>
 <translation id="5982621672636444458">排序选项</translation>
 <translation id="6005282720244019462">拉丁美洲文键盘</translation>
 <translation id="6007237601604674381">移动失败。<ph name="ERROR_MESSAGE" /></translation>
@@ -493,11 +523,14 @@
 <translation id="6558280019477628686">出错了。系统可能尚未删除某些项。</translation>
 <translation id="656398493051028875">正在删除“<ph name="FILENAME" />”…</translation>
 <translation id="6581162200855843583">Google 云端硬盘链接</translation>
+<translation id="6594855146910089723">已与 Linux 和 Parallels Desktop 共享此文件夹</translation>
 <translation id="6607272825297743757">文件信息</translation>
+<translation id="6609332149380188670">已与 Parallels Desktop 共享 <ph name="NUMBER_OF_ITEMS" /> 个文件夹</translation>
 <translation id="6629841649550503054">所有文件都已备份到 <ph name="BEGIN_LINK" />Google 云端硬盘<ph name="END_LINK" />！</translation>
 <translation id="6643016212128521049">清除</translation>
 <translation id="6650726141019353908">粉蝴蝶</translation>
-<translation id="6710213216561001401">上一个</translation>
+<translation id="6657585470893396449">密码</translation>
+<translation id="6710213216561001401">上一项</translation>
 <translation id="6718273304615422081">正在压缩…</translation>
 <translation id="6751256176799620176">已选择 1 个文件夹</translation>
 <translation id="6760765581316020278">越南语键盘(VNI)</translation>
@@ -537,7 +570,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">安装失败。</translation>
 <translation id="7040138676081995583">打开方式...</translation>
-<translation id="7059566040011178088">不到 <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">已选择 <ph name="COUNT" /> 项</translation>
 <translation id="7106346894903675391">购买更多存储空间...</translation>
 <translation id="7126604456862387217">&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt; - 搜索云端硬盘&lt;em&gt;&lt;/em&gt;</translation>
@@ -564,7 +596,6 @@
 <translation id="7417705661718309329">Google 地图</translation>
 <translation id="7419631653042041064">加泰罗尼亚语键盘</translation>
 <translation id="7434823369735508263">英语（英国）德沃夏克键盘</translation>
-<translation id="7447678886297481665">此文件夹中的文件都是只读文件，所以不支持某些活动。</translation>
 <translation id="7460898608667578234">乌克兰语</translation>
 <translation id="7474889694310679759">英语（加拿大）键盘</translation>
 <translation id="7489215562877293245">找到了 <ph name="FILE_COUNT" />
@@ -575,6 +606,7 @@
 <translation id="751507702149411736">白俄罗斯语</translation>
 <translation id="7544853251252956727">随机播放</translation>
 <translation id="7547811415869834682">荷兰语</translation>
+<translation id="7551643184018910560">固定到任务栏</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">请稍候</translation>
 <translation id="7603724359189955920">网格</translation>
@@ -583,8 +615,10 @@
 <translation id="7649070708921625228">帮助</translation>
 <translation id="7654209398114106148">正在移动 <ph name="NUMBER_OF_ITEMS" /> 项内容…</translation>
 <translation id="7658239707568436148">取消</translation>
+<translation id="7693909743393669729">将 U 盘格式化会清空其中存储的所有数据，并会移除所有现有分区（包括未必可见的分区）。此操作无法撤消。</translation>
 <translation id="7695430100978772476">无法将“<ph name="DRIVE_NAME" />”格式化</translation>
 <translation id="770015031906360009">希腊语</translation>
+<translation id="7705251383879779343">已复制 <ph name="FILE_NAME" />。</translation>
 <translation id="7706319470528945664">葡萄牙语键盘</translation>
 <translation id="7711920809702896782">图片信息</translation>
 <translation id="7724603315864178912">剪切</translation>
@@ -597,6 +631,7 @@
     <ph name="MARKUP_4" />删除“下载内容”文件夹中的文件<ph name="MARKUP_5" /></translation>
 <translation id="7794058097940213561">格式化设备</translation>
 <translation id="7799329977874311193">HTML 文档</translation>
+<translation id="7801354353640549019">Chromebook</translation>
 <translation id="7805768142964895445">状态</translation>
 <translation id="7821462174190887129">找到了 <ph name="FILE_COUNT" />。
     <ph name="LINE_BREAK1" />
@@ -614,6 +649,7 @@
 <translation id="78946041517601018">共享云端硬盘</translation>
 <translation id="7896906914454843592">美式扩展键盘</translation>
 <translation id="7898607018410277265">古吉拉特语键盘（新注音）</translation>
+<translation id="7908793776359722643">将分区格式化会清空其中存储的所有数据。此操作无法撤消。</translation>
 <translation id="7917972308273378936">立陶宛语键盘</translation>
 <translation id="7925686952655276919">不使用移动数据进行同步</translation>
 <translation id="7928710562641958568">卸载设备</translation>
@@ -648,7 +684,6 @@
 <translation id="8193175696669055101">设备型号</translation>
 <translation id="8208580316430297579">图片</translation>
 <translation id="8223479393428528563">要保存这些文件以供离线使用，请恢复联网状态，右键点击文件，然后选择<ph name="OFFLINE_CHECKBOX_NAME" />选项。</translation>
-<translation id="8231972167769262174">大约 <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">取消</translation>
 <translation id="8261506727792406068">删除</translation>
 <translation id="8269755669432358899">收起文件反馈面板</translation>
@@ -659,7 +694,9 @@
 <translation id="8299269255470343364">日语</translation>
 <translation id="8312871300878166382">粘贴到文件夹中</translation>
 <translation id="8329978297633540474">纯文本</translation>
+<translation id="8335587457941836791">取消固定到任务栏</translation>
 <translation id="8336153091935557858">昨天<ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">尼泊尔语音译</translation>
 <translation id="8336579025507394412">冰岛语键盘</translation>
 <translation id="8342318071240498787">已存在具有相同名称的文件或目录。</translation>
 <translation id="8382450452152102026">目标文件夹：<ph name="FOLDER_NAME" /></translation>
@@ -675,6 +712,7 @@
 <translation id="8475647382427415476">Google 云端硬盘暂时无法同步“<ph name="FILENAME" />”，将在稍后重试。</translation>
 <translation id="8477649328507734757">同心圆</translation>
 <translation id="8487700953926739672">可离线使用</translation>
+<translation id="8490342535582768689">授权 Parallels Desktop 修改您 Google 云端硬盘中的文件。相关更改会同步到您的其他设备。</translation>
 <translation id="8521441079177373948">英国英语</translation>
 <translation id="8525306231823319788">全屏</translation>
 <translation id="8551494947769799688">拉脱维亚语</translation>
@@ -684,12 +722,14 @@
 <translation id="8600173386174225982">文件列表已切换到缩略图视图。</translation>
 <translation id="8601932370724196034">Crostini 映像文件</translation>
 <translation id="8669949407341943408">正在移动…</translation>
+<translation id="8694836330346852143">乌尔都语</translation>
 <translation id="8698464937041809063">Google 绘图</translation>
 <translation id="8714406895390098252">自行车</translation>
 <translation id="8719721339511222681">已选择<ph name="ENTRY_NAME" />。</translation>
 <translation id="8722421161699219904">美式国标键盘</translation>
 <translation id="872537912056138402">克罗地亚语</translation>
 <translation id="874420130893181774">传统拼音输入法</translation>
+<translation id="8770002329960263418">荷兰语（荷兰），美式国际 PC 键盘</translation>
 <translation id="8775404590947523323">系统会自动保存您所做的修改。<ph name="BREAKS" />要保留原始图像的副本，请取消选中“覆盖原始文件”。</translation>
 <translation id="8803496343472038847">俄语注音键盘</translation>
 <translation id="8808686172382650546">猫</translation>
@@ -700,6 +740,7 @@
 <translation id="8900820606136623064">匈牙利语</translation>
 <translation id="8901822611024316615">捷克语 QWERTY 键盘</translation>
 <translation id="8919081441417203123">丹麦语</translation>
+<translation id="8941776146379310519">马来语</translation>
 <translation id="8960999352790021682">孟加拉语键盘（注音）</translation>
 <translation id="8965697826696209160">空间不足。</translation>
 <translation id="9017798300203431059">俄语（注音）</translation>
@@ -710,6 +751,7 @@
 <translation id="9065203028668620118">编辑</translation>
 <translation id="9099674669267916096">页数</translation>
 <translation id="9110990317705400362">我们在不断寻找各种方式来提高上网安全。之前，任何网站都可以提示您在浏览器中添加扩展程序；而在最新版本的Google Chrome中，您必须明确告诉Chrome您想要安装这些扩展程序（即：在“扩展程序”页添加它们）后才可以。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">解锁</translation>
 <translation id="912419004897138677">编解码器</translation>
 <translation id="9129931661813833980">固定文件夹</translation>
 <translation id="9130775360844693113">“<ph name="DESTINATION_NAME" />”的成员将会有权访问这些内容。</translation>

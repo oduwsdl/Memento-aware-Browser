@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ui/gfx/x/connection.h"
+#include "base/memory/ref_counted_memory.h"
 #include "ui/gfx/x/xproto.h"
 
 #undef Bool
@@ -72,23 +73,23 @@ TEST(X11ConnectionTest, Event) {
   });
   EXPECT_FALSE(cwa_future.Sync().error);
 
+  std::vector<uint8_t> data{0};
   auto prop_future = connection.ChangeProperty({
       .window = static_cast<x11::Window>(window),
       .property = x11::Atom::WM_NAME,
       .type = x11::Atom::STRING,
       .format = CHAR_BIT,
       .data_len = 1,
-      .data = std::vector<uint8_t>{0},
+      .data = base::RefCountedBytes::TakeVector(&data),
   });
   EXPECT_FALSE(prop_future.Sync().error);
 
   connection.ReadResponses();
   ASSERT_EQ(connection.events().size(), 1u);
-  XEvent& event = connection.events().front().xlib_event();
-  auto property_notify_opcode = PropertyNotifyEvent::opcode;
-  EXPECT_EQ(event.type, property_notify_opcode);
-  EXPECT_EQ(event.xproperty.atom, static_cast<uint32_t>(x11::Atom::WM_NAME));
-  EXPECT_EQ(event.xproperty.state, static_cast<int>(Property::NewValue));
+  auto* prop = connection.events().front().As<x11::PropertyNotifyEvent>();
+  ASSERT_TRUE(prop);
+  EXPECT_EQ(prop->atom, x11::Atom::WM_NAME);
+  EXPECT_EQ(prop->state, Property::NewValue);
 }
 
 TEST(X11ConnectionTest, Error) {
@@ -100,9 +101,11 @@ TEST(X11ConnectionTest, Error) {
 
   auto geometry = connection.GetGeometry({invalid_window}).Sync();
   ASSERT_FALSE(geometry);
-  xcb_generic_error_t* error = geometry.error.get();
-  EXPECT_EQ(error->error_code, XCB_DRAWABLE);
-  EXPECT_EQ(error->resource_id, static_cast<uint32_t>(invalid_window));
+  auto* error = geometry.error.get();
+  ASSERT_TRUE(error);
+  // TODO(thomasanderson): Implement As<> for errors, similar to events.
+  auto* drawable_error = reinterpret_cast<x11::DrawableError*>(error);
+  EXPECT_EQ(drawable_error->bad_value, static_cast<uint32_t>(invalid_window));
 }
 
 }  // namespace x11

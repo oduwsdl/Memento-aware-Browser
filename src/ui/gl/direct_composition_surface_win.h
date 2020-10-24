@@ -21,16 +21,12 @@
 namespace gl {
 class DCLayerTree;
 class DirectCompositionChildSurfaceWin;
-class GLSurfacePresentationHelper;
-class VSyncThreadWin;
 
 class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
-                                              public VSyncObserver,
                                               public ui::GpuSwitchingObserver {
  public:
   using VSyncCallback =
       base::RepeatingCallback<void(base::TimeTicks, base::TimeDelta)>;
-
   using OverlayHDRInfoUpdateCallback = base::RepeatingClosure;
 
   struct Settings {
@@ -39,12 +35,13 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
     bool disable_vp_scaling = false;
     size_t max_pending_frames = 2;
     bool use_angle_texture_offset = false;
+    bool reset_vp_when_colorspace_changes = false;
+    bool force_root_surface_full_damage = false;
   };
 
   DirectCompositionSurfaceWin(
-      std::unique_ptr<gfx::VSyncProvider> vsync_provider,
-      VSyncCallback vsync_callback,
       HWND parent_window,
+      VSyncCallback vsync_callback,
       const DirectCompositionSurfaceWin::Settings& settings);
 
   // Returns true if direct composition is supported.  We prefer to use direct
@@ -60,6 +57,7 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
 
   // Returns true if zero copy decode swap chain is supported.
   static bool IsDecodeSwapChainSupported();
+  static void DisableDecodeSwapChain();
 
   // After this is called, overlay support is disabled during the
   // current GPU process' lifetime.
@@ -72,7 +70,7 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
   static bool AreScaledOverlaysSupported();
 
   // Returns preferred overlay format set when detecting overlay support.
-  static DXGI_FORMAT GetOverlayFormatUsed();
+  static DXGI_FORMAT GetOverlayFormatUsedForSDR();
 
   // Returns monitor size.
   static gfx::Size GetOverlayMonitorSize();
@@ -80,6 +78,7 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
   // Returns overlay support flags for the given format.
   // Caller should check for DXGI_OVERLAY_SUPPORT_FLAG_DIRECT and
   // DXGI_OVERLAY_SUPPORT_FLAG_SCALING bits.
+  // This function is thread safe.
   static UINT GetOverlaySupportFlags(DXGI_FORMAT format);
 
   // Returns true if there is an HDR capable display connected.
@@ -96,6 +95,15 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
 
   static void SetOverlayHDRGpuInfoUpdateCallback(
       OverlayHDRInfoUpdateCallback callback);
+
+  // On Intel GPUs where YUV overlays are supported, BGRA8 overlays are
+  // supported as well but IDXGIOutput3::CheckOverlaySupport() returns
+  // unsupported. So allow manually enabling BGRA8 overlay support.
+  static void EnableBGRA8OverlaysWithYUVOverlaySupport();
+
+  // Forces to enable NV12 overlay support regardless of the query results from
+  // IDXGIOutput3::CheckOverlaySupport().
+  static void ForceNV12OverlaySupport();
 
   // GLSurfaceEGL implementation.
   bool Initialize(GLSurfaceFormat format) override;
@@ -131,9 +139,7 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
   // scheduled with ScheduleDCLayer, as it's automatically placed in the layer
   // tree at z-order 0.
   bool ScheduleDCLayer(const ui::DCRendererLayerParams& params) override;
-
-  // VSyncObserver implementation.
-  void OnVSync(base::TimeTicks vsync_time, base::TimeDelta interval) override;
+  void SetFrameRate(float frame_rate) override;
 
   // Implements GpuSwitchingObserver.
   void OnGpuSwitched(gl::GpuPreference active_gpu_heuristic) override;
@@ -157,56 +163,14 @@ class GL_EXPORT DirectCompositionSurfaceWin : public GLSurfaceEGL,
   ~DirectCompositionSurfaceWin() override;
 
  private:
-  struct PendingFrame {
-    PendingFrame(Microsoft::WRL::ComPtr<ID3D11Query> query,
-                 PresentationCallback callback);
-    PendingFrame(PendingFrame&& other);
-    ~PendingFrame();
-    PendingFrame& operator=(PendingFrame&& other);
-
-    // Event query issued after frame is presented.
-    Microsoft::WRL::ComPtr<ID3D11Query> query;
-
-    // Presentation callback enqueued in SwapBuffers().
-    PresentationCallback callback;
-  };
-
-  void EnqueuePendingFrame(PresentationCallback callback);
-  void CheckPendingFrames();
-
-  bool VSyncCallbackEnabled() const;
-
-  void StartOrStopVSyncThread();
-  void HandleVSyncOnMainThread(base::TimeTicks vsync_time,
-                               base::TimeDelta interval);
-
   HWND window_ = nullptr;
   ChildWindowWin child_window_;
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   scoped_refptr<DirectCompositionChildSurfaceWin> root_surface_;
   std::unique_ptr<DCLayerTree> layer_tree_;
-  std::unique_ptr<GLSurfacePresentationHelper> presentation_helper_;
-
-  std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
-
-  const VSyncCallback vsync_callback_;
-  mutable base::Lock vsync_callback_lock_;
-  bool GUARDED_BY(vsync_callback_lock_) vsync_callback_enabled_ = false;
-  VSyncThreadWin* vsync_thread_ = nullptr;
-
-  base::TimeTicks last_vsync_time_;
-  base::TimeDelta last_vsync_interval_;
-
-  // Queue of pending presentation callbacks.
-  base::circular_deque<PendingFrame> pending_frames_;
-  const size_t max_pending_frames_;
 
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
   Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device_;
-
-  base::WeakPtr<DirectCompositionSurfaceWin> weak_ptr_;
-  base::WeakPtrFactory<DirectCompositionSurfaceWin> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(DirectCompositionSurfaceWin);
 };

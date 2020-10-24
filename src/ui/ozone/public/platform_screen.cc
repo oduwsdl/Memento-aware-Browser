@@ -23,4 +23,13 @@ std::string PlatformScreen::GetCurrentWorkspace() {
   return {};
 }
 
+void PlatformScreen::SetScreenSaverSuspended(bool suspend) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+base::Value PlatformScreen::GetGpuExtraInfoAsListValue(
+    const gfx::GpuExtraInfo& gpu_extra_info) {
+  return base::Value(base::Value::Type::LIST);
+}
+
 }  // namespace ui

@@ -2,24 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
-import("//build/config/sysroot.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
-import("//ui/ozone/ozone.gni")
 
 assert(use_x11 || ozone_platform_x11)
 
-declare_args() {
-  xcbproto_path = ""
-}
-
-if (xcbproto_path == "") {
-  if (use_sysroot) {
-    xcbproto_path = "$sysroot/usr/share/xcb"
-  } else {
-    xcbproto_path = "/usr/share/xcb"
-  }
-}
+xcbproto_path = "//third_party/xcbproto/src"
 
 config("x11_private_config") {
   cflags = [
@@ -71,13 +59,13 @@ action("gen_xprotos") {
   sources = []
   outputs = [
     "$target_gen_dir/read_event.cc",
+    "$target_gen_dir/read_error.cc",
     "$target_gen_dir/extension_manager.h",
     "$target_gen_dir/extension_manager.cc",
   ]
   foreach(proto, protos) {
-    sources += [ "$xcbproto_path/${proto}.xml" ]
+    sources += [ "$xcbproto_path/src/${proto}.xml" ]
     outputs += [
-      "$target_gen_dir/${proto}_undef.h",
       "$target_gen_dir/${proto}.h",
       "$target_gen_dir/${proto}.cc",
     ]
@@ -88,31 +76,33 @@ action("gen_xprotos") {
                        target_gen_dir,
                      ],
                      root_build_dir) + protos
-  if (use_sysroot) {
-    args += [
-      "--sysroot",
-      rebase_path(sysroot, root_build_dir),
-    ]
-  }
 }
 
 component("xprotos") {
   deps = [
     ":gen_xprotos",
     "//base",
+    "//base:i18n",
+    "//ui/events/platform",
   ]
+  public_deps = [ "//ui/gfx/x/keysyms" ]
   sources = get_target_outputs(":gen_xprotos") + [
               "xproto_internal.h",
+              "xproto_internal.cc",
               "xproto_types.h",
               "xproto_types.cc",
               "xproto_util.h",
-              "xproto_util.cc",
               "connection.h",
               "connection.cc",
               "event.h",
               "event.cc",
+              "error.h",
+              "error.cc",
+              "scoped_ignore_errors.h",
+              "scoped_ignore_errors.cc",
               "x11_switches.cc",
               "x11_switches.h",
+              "x11.h",
             ]
   configs += [
     ":x11_private_config",
@@ -120,16 +110,13 @@ component("xprotos") {
   ]
 }
 
-jumbo_component("x") {
+component("x") {
   output_name = "gfx_x11"
 
   sources = [
     "../gfx_export.h",
-    "x11.h",
     "x11_atom_cache.cc",
     "x11_atom_cache.h",
-    "x11_error_tracker.cc",
-    "x11_error_tracker.h",
     "x11_path.cc",
     "x11_path.h",
     "x11_types.cc",
@@ -151,6 +138,7 @@ source_set("unit_test") {
   testonly = true
   sources = [ "connection_unittest.cc" ]
   deps = [
+    "//base",
     "//testing/gtest",
     "//ui/gfx/x",
   ]

@@ -179,20 +179,17 @@ TEST(ColorSpace, RangeAdjust) {
   }
 }
 
-TEST(ColorSpace, RasterAndBlend) {
+TEST(ColorSpace, Blending) {
   ColorSpace display_color_space;
 
   // A linear transfer function being used for HDR should be blended using an
   // sRGB-like transfer function.
   display_color_space = ColorSpace::CreateSCRGBLinear();
   EXPECT_FALSE(display_color_space.IsSuitableForBlending());
-  EXPECT_EQ(ColorSpace::CreateDisplayP3D65(),
-            display_color_space.GetRasterColorSpace());
 
   // If not used for HDR, a linear transfer function should be left unchanged.
   display_color_space = ColorSpace::CreateXYZD50();
   EXPECT_TRUE(display_color_space.IsSuitableForBlending());
-  EXPECT_EQ(display_color_space, display_color_space.GetRasterColorSpace());
 }
 
 TEST(ColorSpace, ConversionToAndFromSkColorSpace) {
@@ -244,6 +241,34 @@ TEST(ColorSpace, ConversionToAndFromSkColorSpace) {
   }
 }
 
+TEST(ColorSpace, PQToSkColorSpace) {
+  ColorSpace color_space;
+  ColorSpace roundtrip_color_space;
+  float roundtrip_sdr_white_level;
+  const float kEpsilon = 1.e-5f;
+
+  // We expect that when a white point is specified, the conversion from
+  // ColorSpace -> SkColorSpace -> ColorSpace be the identity. Because of
+  // rounding error, this will not quite be the case.
+  color_space = ColorSpace::CreateHDR10(50.f);
+  roundtrip_color_space = ColorSpace(*color_space.ToSkColorSpace());
+  EXPECT_TRUE(
+      roundtrip_color_space.GetPQSDRWhiteLevel(&roundtrip_sdr_white_level));
+  EXPECT_NEAR(50.f, roundtrip_sdr_white_level, kEpsilon);
+  EXPECT_EQ(ColorSpace::TransferID::SMPTEST2084,
+            roundtrip_color_space.GetTransferID());
+
+  // When no white level is specified, we should get an SkColorSpace that
+  // specifies the default white level. Of note is that in the roundtrip, the
+  // value of kDefaultSDRWhiteLevel gets baked in.
+  color_space = ColorSpace::CreateHDR10();
+  roundtrip_color_space = ColorSpace(*color_space.ToSkColorSpace());
+  EXPECT_TRUE(
+      roundtrip_color_space.GetPQSDRWhiteLevel(&roundtrip_sdr_white_level));
+  EXPECT_NEAR(ColorSpace::kDefaultSDRWhiteLevel, roundtrip_sdr_white_level,
+              kEpsilon);
+}
+
 TEST(ColorSpace, MixedInvalid) {
   ColorSpace color_space;
   color_space = color_space.GetWithMatrixAndRange(ColorSpace::MatrixID::INVALID,
@@ -284,6 +309,90 @@ TEST(ColorSpace, GetsPrimariesTransferMatrixAndRange) {
   EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::BT709);
   EXPECT_EQ(color_space.GetMatrixID(), ColorSpace::MatrixID::BT709);
   EXPECT_EQ(color_space.GetRangeID(), ColorSpace::RangeID::LIMITED);
+}
+
+TEST(ColorSpace, PQWhiteLevel) {
+  constexpr float kCustomWhiteLevel = 200.f;
+
+  ColorSpace color_space = ColorSpace::CreateHDR10(kCustomWhiteLevel);
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::SMPTEST2084);
+  float sdr_white_level;
+  EXPECT_TRUE(color_space.GetPQSDRWhiteLevel(&sdr_white_level));
+  EXPECT_EQ(sdr_white_level, kCustomWhiteLevel);
+
+  color_space = ColorSpace::CreateHDR10();
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::SMPTEST2084);
+  EXPECT_TRUE(color_space.GetPQSDRWhiteLevel(&sdr_white_level));
+  EXPECT_EQ(sdr_white_level, ColorSpace::kDefaultSDRWhiteLevel);
+
+  color_space = color_space.GetWithSDRWhiteLevel(kCustomWhiteLevel);
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::SMPTEST2084);
+  EXPECT_TRUE(color_space.GetPQSDRWhiteLevel(&sdr_white_level));
+  EXPECT_EQ(sdr_white_level, kCustomWhiteLevel);
+
+  constexpr float kCustomWhiteLevel2 = kCustomWhiteLevel * 2;
+  color_space = color_space.GetWithSDRWhiteLevel(kCustomWhiteLevel2);
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::SMPTEST2084);
+  EXPECT_TRUE(color_space.GetPQSDRWhiteLevel(&sdr_white_level));
+  EXPECT_EQ(sdr_white_level, kCustomWhiteLevel2);
+}
+
+TEST(ColorSpace, LinearHDRWhiteLevel) {
+  constexpr float kCustomWhiteLevel = 200.f;
+  constexpr float kCustomSlope =
+      ColorSpace::kDefaultScrgbLinearSdrWhiteLevel / kCustomWhiteLevel;
+
+  ColorSpace color_space = ColorSpace::CreateSCRGBLinear(kCustomWhiteLevel);
+  skcms_TransferFunction fn;
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::CUSTOM_HDR);
+  EXPECT_TRUE(color_space.GetTransferFunction(&fn));
+  EXPECT_EQ(std::make_tuple(fn.g, fn.a, fn.b, fn.c, fn.d, fn.e, fn.f),
+            std::make_tuple(1.f, kCustomSlope, 0.f, 0.f, 0.f, 0.f, 0.f));
+
+  color_space = ColorSpace::CreateSCRGBLinear();
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::LINEAR_HDR);
+  EXPECT_TRUE(color_space.GetTransferFunction(&fn));
+  EXPECT_EQ(std::make_tuple(fn.g, fn.a, fn.b, fn.c, fn.d, fn.e, fn.f),
+            std::make_tuple(1.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f));
+
+  color_space = color_space.GetWithSDRWhiteLevel(kCustomWhiteLevel);
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::CUSTOM_HDR);
+  EXPECT_TRUE(color_space.GetTransferFunction(&fn));
+  EXPECT_EQ(std::make_tuple(fn.g, fn.a, fn.b, fn.c, fn.d, fn.e, fn.f),
+            std::make_tuple(1.f, kCustomSlope, 0.f, 0.f, 0.f, 0.f, 0.f));
+}
+
+TEST(ColorSpace, ExpectationsMatchSRGB) {
+  ColorSpace::PrimaryID primary_ids[] = {
+      ColorSpace::PrimaryID::BT709,
+      ColorSpace::PrimaryID::BT470M,
+      ColorSpace::PrimaryID::BT470BG,
+      ColorSpace::PrimaryID::SMPTE170M,
+      ColorSpace::PrimaryID::SMPTE240M,
+      ColorSpace::PrimaryID::FILM,
+      ColorSpace::PrimaryID::BT2020,
+      ColorSpace::PrimaryID::SMPTEST428_1,
+      ColorSpace::PrimaryID::SMPTEST431_2,
+      ColorSpace::PrimaryID::SMPTEST432_1,
+      ColorSpace::PrimaryID::XYZ_D50,
+      ColorSpace::PrimaryID::ADOBE_RGB,
+      ColorSpace::PrimaryID::APPLE_GENERIC_RGB,
+      ColorSpace::PrimaryID::WIDE_GAMUT_COLOR_SPIN,
+  };
+
+  // Create a custom color space with the sRGB primary matrix.
+  ColorSpace srgb = ColorSpace::CreateSRGB();
+  skcms_Matrix3x3 to_XYZD50;
+  srgb.GetPrimaryMatrix(&to_XYZD50);
+  ColorSpace custom_srgb =
+      ColorSpace::CreateCustom(to_XYZD50, ColorSpace::TransferID::IEC61966_2_1);
+
+  for (auto id : primary_ids) {
+    ColorSpace color_space(id, ColorSpace::TransferID::IEC61966_2_1);
+    // The precomputed results for Contains(sRGB) should match the calculation
+    // performed on a custom color space with sRGB primaries.
+    EXPECT_EQ(color_space.Contains(srgb), color_space.Contains(custom_srgb));
+  }
 }
 
 }  // namespace

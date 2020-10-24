@@ -114,7 +114,7 @@ class TestContextMenuController : public ContextMenuController {
 // and VKEY_APPS) by the pre-target handler installed on RootView.
 TEST_F(RootViewTest, ContextMenuFromKeyEvent) {
   // This behavior is intentionally unsupported on macOS.
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   Widget widget;
   Widget::InitParams init_params =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -125,9 +125,8 @@ TEST_F(RootViewTest, ContextMenuFromKeyEvent) {
       static_cast<internal::RootView*>(widget.GetRootView());
 
   TestContextMenuController controller;
-  View* focused_view = new View;
+  View* focused_view = widget.SetContentsView(std::make_unique<View>());
   focused_view->set_context_menu_controller(&controller);
-  widget.SetContentsView(focused_view);
   focused_view->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   focused_view->RequestFocus();
 
@@ -194,9 +193,8 @@ TEST_F(RootViewTest, ContextMenuFromLongPress) {
   // Create a view capable of showing the context menu with two children one of
   // which handles all gesture events (e.g. a button).
   TestContextMenuController controller;
-  View* parent_view = new View;
+  View* parent_view = widget.SetContentsView(std::make_unique<View>());
   parent_view->set_context_menu_controller(&controller);
-  widget.SetContentsView(parent_view);
 
   View* gesture_handling_child_view = new GestureHandlingView;
   gesture_handling_child_view->SetBoundsRect(gfx::Rect(10, 10));
@@ -268,10 +266,9 @@ TEST_F(RootViewTest, ContextMenuFromLongPressOnDisabledView) {
   // which handles all gesture events (e.g. a button). Also mark this view
   // as disabled.
   TestContextMenuController controller;
-  View* parent_view = new View;
+  View* parent_view = widget.SetContentsView(std::make_unique<View>());
   parent_view->set_context_menu_controller(&controller);
   parent_view->SetEnabled(false);
-  widget.SetContentsView(parent_view);
 
   View* gesture_handling_child_view = new GestureHandlingView;
   gesture_handling_child_view->SetBoundsRect(gfx::Rect(10, 10));
@@ -698,7 +695,7 @@ TEST_F(RootViewTest, DeleteWidgetOnMouseExitDispatchFromChild) {
   subchild->SetBounds(0, 0, 100, 100);
 
   // Make mouse enter and exit events get propagated from |subchild| to |child|.
-  child->set_notify_enter_exit_on_child(true);
+  child->SetNotifyEnterExitOnChild(true);
 
   internal::RootView* root_view =
       static_cast<internal::RootView*>(widget->GetRootView());
@@ -766,7 +763,7 @@ TEST_F(RootViewDesktopNativeWidgetTest, SingleLayoutDuringInit) {
   widget->CloseNow();
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 
 // Tests that AnnounceText sets up the correct text value on the hidden view,
 // and that the resulting hidden view actually stays hidden.
@@ -796,7 +793,7 @@ TEST_F(RootViewTest, AnnounceTextTest) {
             node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
 }
 
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_APPLE)
 
 TEST_F(RootViewTest, MouseEventDispatchedToClosestEnabledView) {
   Widget widget;

@@ -5,14 +5,13 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_DATA_DEVICE_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_DATA_DEVICE_H_
 
-#include <wayland-client.h>
-
 #include <cstdint>
 #include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/files/scoped_file.h"
+#include "base/gtest_prod_util.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_device_base.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_source.h"
@@ -32,8 +31,7 @@ class WaylandWindow;
 // such as copy-and-paste and drag-and-drop mechanisms.
 class WaylandDataDevice : public WaylandDataDeviceBase {
  public:
-  using RequestDataCallback =
-      base::OnceCallback<void(const PlatformClipboard::Data&)>;
+  using RequestDataCallback = base::OnceCallback<void(PlatformClipboard::Data)>;
 
   // DragDelegate is responsible for handling drag and drop sessions.
   class DragDelegate {
@@ -63,6 +61,10 @@ class WaylandDataDevice : public WaylandDataDeviceBase {
                  wl_surface* icon_surface,
                  DragDelegate* delegate);
 
+  // Reset the drag delegate, assuming there is one set. Any wl_data_device
+  // event received after this will be ignored until a new delegate is set.
+  void ResetDragDelegate();
+
   // Requests data for an |offer| in a format specified by |mime_type|. The
   // transfer happens asynchronously and |callback| is called when it is done.
   void RequestData(WaylandDataOffer* offer,
@@ -75,6 +77,8 @@ class WaylandDataDevice : public WaylandDataDeviceBase {
   void SetSelectionSource(WaylandDataSource* source);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(WaylandDataDragControllerTest, StartDrag);
+
   void ReadDragDataFromFD(base::ScopedFD fd, RequestDataCallback callback);
 
   // wl_data_device_listener callbacks

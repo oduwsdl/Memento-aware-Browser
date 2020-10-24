@@ -86,6 +86,13 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // e.g. aria-label and HTML title, is not returned.
   virtual base::string16 GetInnerText() const = 0;
 
+  // Returns the value of a control such as a text field, a slider, a <select>
+  // element, a date picker or an ARIA combo box. In order to minimize
+  // cross-process communication between the renderer and the browser, may
+  // compute the value from the control's inner text in the case of a text
+  // field.
+  virtual base::string16 GetValueForControl() const = 0;
+
   // Get the unignored selection from the tree
   virtual const AXTree::Selection GetUnignoredSelection() const = 0;
 
@@ -115,6 +122,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // Get the child of a node given a 0-based index.
   virtual gfx::NativeViewAccessible ChildAtIndex(int index) = 0;
 
+  // Returns true if it has a modal dialog.
+  virtual bool HasModalDialog() const = 0;
+
   // Gets the first child of a node, or nullptr if no children exist.
   virtual gfx::NativeViewAccessible GetFirstChild() = 0;
 
@@ -135,12 +145,17 @@ class AX_EXPORT AXPlatformNodeDelegate {
 
   // Returns true if this current node is editable and the root editable node is
   // a plain text field.
-  virtual bool IsChildOfPlainTextField() const = 0;
+  virtual bool IsDescendantOfPlainTextField() const = 0;
 
   // Returns true if this is a leaf node, meaning all its
   // children should not be exposed to any platform's native accessibility
   // layer.
   virtual bool IsLeaf() const = 0;
+
+  // Returns true if this is a top-level browser window that doesn't have a
+  // parent accessible node, or its parent is the application accessible node on
+  // platforms that have one.
+  virtual bool IsToplevelBrowserWindow() = 0;
 
   // If this object is exposed to the platform's accessibility layer, returns
   // this object. Otherwise, returns the platform leaf under which this object
@@ -251,6 +266,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
 
   // Get whether this node is a minimized window.
   virtual bool IsMinimized() const = 0;
+
+  // See AXNode::IsText().
+  virtual bool IsText() const = 0;
 
   // Get whether this node is in web content.
   virtual bool IsWebContent() const = 0;

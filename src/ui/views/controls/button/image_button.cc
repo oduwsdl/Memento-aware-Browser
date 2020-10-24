@@ -28,12 +28,18 @@ static constexpr int kDefaultHeight = 14;
 ////////////////////////////////////////////////////////////////////////////////
 // ImageButton, public:
 
-ImageButton::ImageButton(ButtonListener* listener) : Button(listener) {
+ImageButton::ImageButton(PressedCallback callback)
+    : Button(std::move(callback)) {
   // By default, we request that the gfx::Canvas passed to our View::OnPaint()
   // implementation is flipped horizontally so that the button's images are
   // mirrored when the UI directionality is right-to-left.
-  EnableCanvasFlippingForRTLUI(true);
+  SetFlipCanvasOnPaintForRTLUI(true);
+  // Not focusable by default, only for accessibility.
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 }
+
+ImageButton::ImageButton(ButtonListener* listener)
+    : ImageButton(PressedCallback(listener, this)) {}
 
 ImageButton::~ImageButton() = default;
 
@@ -47,7 +53,7 @@ void ImageButton::SetImage(ButtonState for_state, const gfx::ImageSkia* image) {
 
 void ImageButton::SetImage(ButtonState for_state, const gfx::ImageSkia& image) {
   if (for_state == STATE_HOVERED)
-    set_animate_on_state_change(!image.isNull());
+    SetAnimateOnStateChange(!image.isNull());
   const gfx::Size old_preferred_size = GetPreferredSize();
   images_[for_state] = image;
 
@@ -172,7 +178,7 @@ gfx::ImageSkia ImageButton::GetImageToPaint() {
         images_[STATE_NORMAL], images_[STATE_HOVERED],
         hover_animation().GetCurrentValue());
   } else {
-    img = images_[state()];
+    img = images_[GetState()];
   }
 
   return !img.isNull() ? img : images_[STATE_NORMAL];
@@ -212,10 +218,17 @@ const gfx::Point ImageButton::ComputeImagePaintPosition(
 ////////////////////////////////////////////////////////////////////////////////
 // ToggleImageButton, public:
 
+ToggleImageButton::ToggleImageButton(PressedCallback callback)
+    : ImageButton(std::move(callback)) {}
+
 ToggleImageButton::ToggleImageButton(ButtonListener* listener)
-    : ImageButton(listener), toggled_(false) {}
+    : ToggleImageButton(PressedCallback(listener, this)) {}
 
 ToggleImageButton::~ToggleImageButton() = default;
+
+bool ToggleImageButton::GetToggled() const {
+  return toggled_;
+}
 
 void ToggleImageButton::SetToggled(bool toggled) {
   if (toggled == toggled_)
@@ -224,8 +237,8 @@ void ToggleImageButton::SetToggled(bool toggled) {
   for (int i = 0; i < STATE_COUNT; ++i)
     std::swap(images_[i], alternate_images_[i]);
   toggled_ = toggled;
-  SchedulePaint();
 
+  OnPropertyChanged(&toggled_, kPropertyEffectsPaint);
   NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged, true);
 }
 
@@ -233,15 +246,33 @@ void ToggleImageButton::SetToggledImage(ButtonState image_state,
                                         const gfx::ImageSkia* image) {
   if (toggled_) {
     images_[image_state] = image ? *image : gfx::ImageSkia();
-    if (state() == image_state)
+    if (GetState() == image_state)
       SchedulePaint();
   } else {
     alternate_images_[image_state] = image ? *image : gfx::ImageSkia();
   }
 }
 
+base::string16 ToggleImageButton::GetToggledTooltipText() const {
+  return toggled_tooltip_text_;
+}
+
 void ToggleImageButton::SetToggledTooltipText(const base::string16& tooltip) {
+  if (tooltip == toggled_tooltip_text_)
+    return;
   toggled_tooltip_text_ = tooltip;
+  OnPropertyChanged(&toggled_tooltip_text_, kPropertyEffectsNone);
+}
+
+base::string16 ToggleImageButton::GetToggledAccessibleName() const {
+  return toggled_accessible_name_;
+}
+
+void ToggleImageButton::SetToggledAccessibleName(const base::string16& name) {
+  if (name == toggled_accessible_name_)
+    return;
+  toggled_accessible_name_ = name;
+  OnPropertyChanged(&toggled_accessible_name_, kPropertyEffectsNone);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,7 +291,7 @@ void ToggleImageButton::SetImage(ButtonState image_state,
     alternate_images_[image_state] = image;
   } else {
     images_[image_state] = image;
-    if (state() == image_state)
+    if (GetState() == image_state)
       SchedulePaint();
   }
   PreferredSizeChanged();
@@ -277,7 +308,13 @@ base::string16 ToggleImageButton::GetTooltipText(const gfx::Point& p) const {
 
 void ToggleImageButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ImageButton::GetAccessibleNodeData(node_data);
-  node_data->SetName(GetTooltipText(gfx::Point()));
+  if (!toggled_)
+    return;
+
+  if (!toggled_accessible_name_.empty())
+    node_data->SetName(toggled_accessible_name_);
+  else if (!toggled_tooltip_text_.empty())
+    node_data->SetName(toggled_tooltip_text_);
 
   // Use the visual pressed image as a cue for making this control into an
   // accessible toggle button.
@@ -287,10 +324,6 @@ void ToggleImageButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     node_data->SetCheckedState(toggled_ ? ax::mojom::CheckedState::kTrue
                                         : ax::mojom::CheckedState::kFalse);
   }
-}
-
-bool ToggleImageButton::toggled_for_testing() const {
-  return toggled_;
 }
 
 DEFINE_ENUM_CONVERTERS(ImageButton::HorizontalAlignment,
@@ -308,13 +341,16 @@ DEFINE_ENUM_CONVERTERS(ImageButton::VerticalAlignment,
                        {ImageButton::VerticalAlignment::ALIGN_BOTTOM,
                         base::ASCIIToUTF16("ALIGN_BOTTOM")})
 
-BEGIN_METADATA(ImageButton)
-METADATA_PARENT_CLASS(Button)
-ADD_PROPERTY_METADATA(ImageButton,
-                      HorizontalAlignment,
-                      ImageHorizontalAlignment)
-ADD_PROPERTY_METADATA(ImageButton, VerticalAlignment, ImageVerticalAlignment)
-ADD_PROPERTY_METADATA(ImageButton, gfx::Size, MinimumImageSize)
-END_METADATA()
+BEGIN_METADATA(ImageButton, Button)
+ADD_PROPERTY_METADATA(HorizontalAlignment, ImageHorizontalAlignment)
+ADD_PROPERTY_METADATA(VerticalAlignment, ImageVerticalAlignment)
+ADD_PROPERTY_METADATA(gfx::Size, MinimumImageSize)
+END_METADATA
+
+BEGIN_METADATA(ToggleImageButton, ImageButton)
+ADD_PROPERTY_METADATA(bool, Toggled)
+ADD_PROPERTY_METADATA(base::string16, ToggledTooltipText)
+ADD_PROPERTY_METADATA(base::string16, ToggledAccessibleName)
+END_METADATA
 
 }  // namespace views

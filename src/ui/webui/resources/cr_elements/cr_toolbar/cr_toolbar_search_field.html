@@ -50,7 +50,7 @@
       }
 
       #prompt {
-        --cr-toolbar-search-field-prompt-opacity: .7;
+        color: var(--cr-toolbar-search-field-prompt-color, white);
         opacity: 0;
       }
 
@@ -118,8 +118,7 @@
       }
 
       input[type='search']::-webkit-search-cancel-button {
-        -webkit-appearance: none;
-        margin: 0;
+        display: none;
       }
 
       :host([narrow]) {
@@ -139,13 +138,15 @@
       }
 
       :host(:not([narrow]):not([showing-search])) #icon {
-        opacity: .7;
+        opacity: var(--cr-toolbar-search-field-icon-opacity, .7);
       }
 
       :host(:not([narrow])) #prompt {
-        margin-inline-start:
-            var(--cr-toolbar-search-field-prompt-margin-inline-start);
-        opacity: var(--cr-toolbar-search-field-prompt-opacity);
+        opacity: var(--cr-toolbar-search-field-prompt-opacity, .7);
+      }
+
+      :host([narrow]) #prompt {
+        opacity: var(--cr-toolbar-search-field-narrow-mode-prompt-opacity, 0);
       }
 
       :host([narrow]:not([showing-search])) #searchTerm {
@@ -174,7 +175,8 @@
     </template>
     <cr-icon-button id="icon" iron-icon="cr:search" title="[[label]]" dir="ltr"
         tabindex$="[[computeIconTabIndex_(narrow, hasSearchText)]]"
-        aria-hidden$="[[computeIconAriaHidden_(narrow, hasSearchText)]]">
+        aria-hidden$="[[computeIconAriaHidden_(narrow, hasSearchText)]]"
+        on-click="onSearchIconClicked_">
     </cr-icon-button>
     <div id="searchTerm">
       <label id="prompt" for="searchInput" aria-hidden="true">[[label]]</label>

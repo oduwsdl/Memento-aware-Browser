@@ -66,7 +66,8 @@
 # #include <xcb/xcb.h>
 # #include <xcb/xcbext.h>
 #
-# #include "base/logging.h"
+# #include "base/notreached.h"
+# #include "base/check_op.h"
 # #include "ui/gfx/x/xproto_internal.h"
 #
 # namespace x11 {
@@ -188,6 +189,7 @@ RENAME = {
     'COLORMAP': 'ColorMap',
     'Connection': 'RandRConnection',
     'CP': 'CreatePictureAttribute',
+    'CS': 'ClientSpec',
     'CW': 'CreateWindowAttribute',
     'DAMAGE': 'DamageId',
     'DIRECTFORMAT': 'DirectFormat',
@@ -231,6 +233,13 @@ READ_SPECIAL = set([
 
 WRITE_SPECIAL = set([
     ('xcb', 'ClientMessage'),
+    ('xcb', 'Expose'),
+    ('xcb', 'UnmapNotify'),
+    ('xcb', 'SelectionNotify'),
+    ('xcb', 'MotionNotify'),
+    ('xcb', 'Key'),
+    ('xcb', 'Button'),
+    ('xcb', 'PropertyNotify'),
 ])
 
 
@@ -278,6 +287,11 @@ def event_base_name(names):
                                          zip(*names)))
     assert name
     return name
+
+
+def list_size(name, list_type):
+    separator = '->' if list_type.is_ref_counted_memory else '.'
+    return '%s%ssize()' % (name, separator)
 
 
 # Left-pad with 2 spaces while this class is alive.
@@ -355,8 +369,6 @@ class GenXproto(FileWriter):
         self.xml_filename = os.path.join(proto_dir, '%s.xml' % proto)
         self.header_file = open(os.path.join(gen_dir, '%s.h' % proto), 'w')
         self.source_file = open(os.path.join(gen_dir, '%s.cc' % proto), 'w')
-        self.undef_file = open(os.path.join(gen_dir, '%s_undef.h' % proto),
-                               'w')
 
         # Top-level xcbgen python module
         self.xcbgen = xcbgen
@@ -451,6 +463,8 @@ class GenXproto(FileWriter):
         return '::'.join(name[chop:])
 
     def fieldtype(self, field):
+        if field.isfd:
+            return 'base::ScopedFD'
         return self.qualtype(field.type,
                              field.enum if field.enum else field.field_type)
 
@@ -483,7 +497,10 @@ class GenXproto(FileWriter):
         if field.type.is_list:
             len_name = field_name + '_len'
             if not self.field_from_scope(len_name):
-                self.write('size_t %s = %s.size();' % (len_name, field_name))
+                len_expr = list_size(field_name, field.type)
+                if field.type.is_ref_counted_memory:
+                    len_expr = '%s ? %s : 0' % (field_name, len_expr)
+                self.write('size_t %s = %s;' % (len_name, len_expr))
 
         return 1
 
@@ -494,12 +511,6 @@ class GenXproto(FileWriter):
             if field.field_name == name:
                 return field
         return None
-
-    # Work around conflicts caused by Xlib's liberal use of macros.
-    def undef(self, name):
-        print('#ifdef %s' % name, file=self.undef_file)
-        print('#undef %s' % name, file=self.undef_file)
-        print('#endif', file=self.undef_file)
 
     def expr(self, expr):
         if expr.op == 'popcount':
@@ -572,14 +583,6 @@ class GenXproto(FileWriter):
         if (name[-1] in ('FLOAT32', 'FLOAT64')
                 or renamed in self.replace_with_enum):
             return
-        elif name[-1] == 'FP1616':
-            # Xcbproto defines FP1616 as uint32_t instead of a struct of
-            # two 16-bit ints, which is how it's intended to be used.
-            with Indent(self, 'struct Fp1616 {', '};'):
-                self.write('int16_t integral;')
-                self.write('uint16_t frac;')
-            self.write()
-            return
 
         xidunion = self.get_xidunion_element(name)
         if xidunion:
@@ -590,8 +593,19 @@ class GenXproto(FileWriter):
         self.write()
 
     def copy_primitive(self, name):
-        self.write('%s(&%s, &buf);' %
-                   ('Read' if self.is_read else 'Write', name))
+        if self.is_read:
+            self.write('Read(&%s, &buf);' % name)
+        else:
+            self.write('buf.Write(&%s);' % name)
+
+    def copy_fd(self, field, name):
+        if self.is_read:
+            self.write('%s = base::ScopedFD(buf.TakeFd());' % name)
+        else:
+            # We take the request struct as const&, so dup() the fd to preserve
+            # const-correctness because XCB close()s it after writing it.
+            self.write('buf.fds().push_back(HANDLE_EINTR(dup(%s.get())));' %
+                       name)
 
     def copy_special_field(self, field):
         type_name = self.fieldtype(field)
@@ -615,7 +629,11 @@ class GenXproto(FileWriter):
             else:
                 container_type, container_name = field.parent
                 assert container_type.is_event
-                opcode = container_type.opcodes[container_name]
+                # Extension events require offsetting the opcode, so make
+                # sure this path is only hit for non-extension events for now.
+                assert not self.module.namespace.is_ext
+                opcode = container_type.opcodes.get(container_name,
+                                                    'obj.opcode')
                 self.write('%s %s = %s;' % (type_name, name, opcode))
                 self.copy_primitive(name)
         elif name in ('extension', 'error_code', 'event_type'):
@@ -644,10 +662,11 @@ class GenXproto(FileWriter):
         if not case.field_name:
             return fields
         name = safe_name(case.field_name)
-        with Indent(self, 'struct %s_t {' % name, '};'):
+        typename = adjust_type_name(name)
+        with Indent(self, 'struct %s {' % typename, '};'):
             for field in fields:
                 self.write('%s %s{};' % field)
-        return [(name + '_t', name)]
+        return [(typename, name)]
 
     def copy_case(self, case, switch_name):
         op = 'CaseEq' if case.type.is_case else 'CaseAnd'
@@ -690,26 +709,29 @@ class GenXproto(FileWriter):
         name = safe_name(field.field_name)
 
         assert (t.nmemb not in (0, 1))
-        if t.nmemb:
+        if t.is_ref_counted_memory:
+            type_name = 'scoped_refptr<base::RefCountedMemory>'
+        elif t.nmemb:
             type_name = 'std::array<%s, %d>' % (type_name, t.nmemb)
+        elif type_name == 'char':
+            type_name = 'std::string'
         else:
-            if type_name == 'void':
-                # xcb uses void* in some places, but we prefer to use
-                # std::vector<T> when possible.  Use T=uint8_t instead of
-                # T=void for containers.
-                type_name = 'std::vector<uint8_t>'
-            elif type_name == 'char':
-                type_name = 'std::string'
-            else:
-                type_name = 'std::vector<%s>' % type_name
+            type_name = 'std::vector<%s>' % type_name
         return [(type_name, name)]
 
     def copy_list(self, field):
         t = field.type
         name = safe_name(field.field_name)
+        size = self.expr(t.expr)
+
+        if t.is_ref_counted_memory:
+            if self.is_read:
+                self.write('%s = buffer->ReadAndAdvance(%s);' % (name, size))
+            else:
+                self.write('buf.AppendBuffer(%s, %s);' % (name, size))
+            return
 
         if not t.nmemb:
-            size = self.expr(t.expr)
             if self.is_read:
                 self.write('%s.resize(%s);' % (name, size))
             else:
@@ -767,8 +789,9 @@ class GenXproto(FileWriter):
         # variable from the given context.
         if not self.is_read:
             if field.for_list:
-                self.write('%s = %s.size();' %
-                           (name, safe_name(field.for_list.field_name)))
+                size = list_size(safe_name(field.for_list.field_name),
+                                 field.for_list.type)
+                self.write('%s = %s;' % (name, size))
             if field.for_switch:
                 self.generate_switch_var(field)
 
@@ -790,12 +813,11 @@ class GenXproto(FileWriter):
         elif t.is_container:
             with Indent(self, '{', '}'):
                 self.copy_container(t, name)
-        elif t.is_fd:
-            # TODO(https://crbug.com/1066670): Copy FDs out of band.
-            self.write('NOTIMPLEMENTED();')
         else:
             assert t.is_simple
-            if field.enum:
+            if field.isfd:
+                self.copy_fd(field, name)
+            elif field.enum:
                 self.copy_enum(field)
             else:
                 self.copy_primitive(name)
@@ -805,10 +827,8 @@ class GenXproto(FileWriter):
     def declare_enum(self, enum):
         def declare_enum_entry(name, value):
             name = safe_name(name)
-            self.undef(name)
             self.write('%s = %s,' % (name, value))
 
-        self.undef(enum.name[-1])
         with Indent(
                 self, 'enum class %s : %s {' %
             (adjust_type_name(enum.name[-1]), self.enum_types[enum.name][0]
@@ -843,9 +863,42 @@ class GenXproto(FileWriter):
             for field_type_name in self.declare_field(field):
                 self.write('%s %s{};' % field_type_name)
 
+    # This tries to match XEvent.xany.window, except the window will be
+    # x11::Window::None for events that don't have a window, unlike the XEvent
+    # union which will get whatever data happened to be at the offset of
+    # xany.window.
+    def get_window_field(self, event):
+        # The window field is not stored at any particular offset in the event,
+        # so get a list of all the window fields.
+        WINDOW_TYPES = set([
+            ('xcb', 'WINDOW'),
+            ('xcb', 'DRAWABLE'),
+            ('xcb', 'Glx', 'DRAWABLE'),
+        ])
+        # The window we want may not be the first in the list if there are
+        # multiple windows. This is a list of all possible window names,
+        # ordered from highest to lowest priority.
+        WINDOW_NAMES = [
+            'event',
+            'window',
+            'request_window',
+            'owner',
+        ]
+        windows = set([
+            field.field_name for field in event.fields
+            if field.field_type in WINDOW_TYPES
+        ])
+        if len(windows) == 0:
+            return ''
+        if len(windows) == 1:
+            return list(windows)[0]
+        for name in WINDOW_NAMES:
+            if name in windows:
+                return name
+        assert False
+
     def declare_event(self, event, name):
         event_name = name[-1] + 'Event'
-        self.undef(event_name)
         with Indent(self, 'struct %s {' % adjust_type_name(event_name), '};'):
             self.write('static constexpr int type_id = %d;' % event.type_id)
             if len(event.opcodes) == 1:
@@ -856,14 +909,26 @@ class GenXproto(FileWriter):
                     items = [(int(x), y)
                              for (y, x) in event.enum_opcodes.items()]
                     for opcode, opname in sorted(items):
-                        self.undef(opname)
                         self.write('%s = %s,' % (opname, opcode))
+            self.write('bool send_event{};')
             self.declare_fields(event.fields)
+            self.write()
+            window_field = self.get_window_field(event)
+            ret = ('reinterpret_cast<x11::Window*>(&%s)' %
+                   window_field if window_field else 'nullptr')
+            self.write('x11::Window* GetWindow() { return %s; }' % ret)
+        self.write()
+
+    def declare_error(self, error, name):
+        name = adjust_type_name(name[-1] + 'Error')
+        with Indent(self, 'struct %s : public x11::Error {' % name, '};'):
+            self.declare_fields(error.fields)
+            self.write()
+            self.write('std::string ToString() const override;')
         self.write()
 
     def declare_container(self, struct, struct_name):
         name = struct_name[-1] + self.type_suffix(struct)
-        self.undef(name)
         with Indent(self, 'struct %s {' % adjust_type_name(name), '};'):
             self.declare_fields(struct.fields)
         self.write()
@@ -879,8 +944,8 @@ class GenXproto(FileWriter):
         name = self.qualtype(struct, name)
         self.write('template <> COMPONENT_EXPORT(X11)')
         self.write('%s Read<%s>(' % (name, name))
-        with Indent(self, '    const uint8_t* buffer) {', '}'):
-            self.write('ReadBuffer buf{buffer, 0UL};')
+        with Indent(self, '    ReadBuffer* buffer) {', '}'):
+            self.write('auto& buf = *buffer;')
             self.write('%s obj;' % name)
             self.write()
             self.is_read = True
@@ -892,7 +957,7 @@ class GenXproto(FileWriter):
         self.namespace = ['x11']
         name = self.qualtype(struct, name)
         self.write('template <> COMPONENT_EXPORT(X11)')
-        self.write('std::vector<uint8_t> Write<%s>(' % name)
+        self.write('WriteBuffer Write<%s>(' % name)
         with Indent(self, '    const %s& obj) {' % name, '}'):
             self.write('WriteBuffer buf;')
             self.write()
@@ -967,8 +1032,10 @@ class GenXproto(FileWriter):
             self.copy_container(request, 'request')
             self.write('Align(&buf, 4);')
             self.write()
-            self.write('return x11::SendRequest<%s>(connection_, &buf);' %
-                       reply_name)
+            reply_has_fds = reply and any(field.isfd for field in reply.fields)
+            self.write(
+                'return x11::SendRequest<%s>(connection_, &buf, %s, "%s");' %
+                (reply_name, 'true' if reply_has_fds else 'false', prefix))
         self.write()
 
         if not reply:
@@ -976,10 +1043,10 @@ class GenXproto(FileWriter):
 
         self.write('template<> COMPONENT_EXPORT(X11)')
         self.write('std::unique_ptr<%s>' % reply_name)
-        sig = 'detail::ReadReply<%s>(const uint8_t* buffer) {' % reply_name
+        sig = 'detail::ReadReply<%s>(ReadBuffer* buffer) {' % reply_name
         with Indent(self, sig, '}'):
             self.namespace = ['x11']
-            self.write('ReadBuffer buf{buffer, 0UL};')
+            self.write('auto& buf = *buffer;')
             self.write('auto reply = std::make_unique<%s>();' % reply_name)
             self.write()
             self.is_read = True
@@ -996,13 +1063,40 @@ class GenXproto(FileWriter):
         name = self.qualtype(event, name)
         self.write('template <> COMPONENT_EXPORT(X11)')
         self.write('void ReadEvent<%s>(' % name)
-        with Indent(self, '    %s* event_, const uint8_t* buffer) {' % name,
-                    '}'):
-            self.write('ReadBuffer buf{buffer, 0UL};')
+        with Indent(self, '    %s* event_, ReadBuffer* buffer) {' % name, '}'):
+            self.write('auto& buf = *buffer;')
             self.write()
             self.is_read = True
             self.copy_container(event, '(*event_)')
+            if event.is_ge_event:
+                self.write('Align(&buf, 4);')
+                self.write('DCHECK_EQ(buf.offset, 32 + 4 * length);')
+            else:
+                self.write('DCHECK_LE(buf.offset, 32ul);')
         self.write()
+
+    def define_error(self, error, name):
+        self.namespace = ['x11']
+        name = self.qualtype(error, name)
+        with Indent(self, 'std::string %s::ToString() const {' % name, '}'):
+            self.write('std::stringstream ss_;')
+            self.write('ss_ << "x11::%s{";' % name)
+            fields = [field for field in error.fields if field.visible]
+            for i, field in enumerate(fields):
+                terminator = '' if i == len(fields) - 1 else ' << ", "'
+                self.write('ss_ << ".%s = " << static_cast<uint64_t>(%s)%s;' %
+                           (field.field_name, field.field_name, terminator))
+            self.write('ss_ << "}";')
+            self.write('return ss_.str();')
+        self.write()
+        self.write('template <>')
+        self.write('void ReadError<%s>(' % name)
+        with Indent(self, '    %s* error_, ReadBuffer* buffer) {' % name, '}'):
+            self.write('auto& buf = *buffer;')
+            self.write()
+            self.is_read = True
+            self.copy_container(error, '(*error_)')
+            self.write('DCHECK_LE(buf.offset, 32ul);')
 
     def define_type(self, item, name):
         if name in READ_SPECIAL:
@@ -1013,6 +1107,8 @@ class GenXproto(FileWriter):
             self.define_request(item)
         elif item.is_event:
             self.define_event(item, name)
+        elif isinstance(item, self.xcbgen.xtypes.Error):
+            self.define_error(item, name)
 
     def declare_type(self, item, name):
         if item.is_union:
@@ -1021,6 +1117,8 @@ class GenXproto(FileWriter):
             self.declare_request(item)
         elif item.is_event:
             self.declare_event(item, name)
+        elif isinstance(item, self.xcbgen.xtypes.Error):
+            self.declare_error(item, name)
         elif item.is_container:
             self.declare_container(item, name)
         elif isinstance(item, self.xcbgen.xtypes.Enum):
@@ -1078,6 +1176,12 @@ class GenXproto(FileWriter):
             if field.field_name == 'sequence':
                 field.visible = True
             field.parent = (t, name)
+
+            if field.type.is_list:
+                # xcb uses void* in some places to represent arbitrary data.
+                field.type.is_ref_counted_memory = (
+                    not field.type.nmemb and field.field_type[0] == 'void')
+
             # |for_list| and |for_switch| may have already been set when
             # processing other fields in this structure.
             field.for_list = getattr(field, 'for_list', None)
@@ -1242,14 +1346,17 @@ class GenXproto(FileWriter):
         self.write('#include <vector>')
         self.write()
         self.write('#include "base/component_export.h"')
+        self.write('#include "base/memory/ref_counted_memory.h"')
+        self.write('#include "base/memory/scoped_refptr.h"')
         self.write('#include "base/optional.h"')
+        self.write('#include "base/files/scoped_file.h"')
+        self.write('#include "ui/gfx/x/error.h"')
         self.write('#include "ui/gfx/x/xproto_types.h"')
         imports = set(self.module.direct_imports)
         if self.module.namespace.is_ext:
             imports.add(('xproto', 'xproto'))
         for direct_import in sorted(list(imports)):
             self.write('#include "%s.h"' % direct_import[-1])
-        self.write('#include "%s_undef.h"' % self.module.namespace.header)
         self.write()
         self.write('namespace x11 {')
         self.write()
@@ -1262,7 +1369,6 @@ class GenXproto(FileWriter):
                 self.declare_type(item, name)
 
         name = self.class_name
-        self.undef(name)
         with Indent(self, 'class COMPONENT_EXPORT(X11) %s {' % name, '};'):
             self.namespace = ['x11', self.class_name]
             self.write('public:')
@@ -1303,14 +1409,20 @@ class GenXproto(FileWriter):
         self.write('}  // namespace x11')
         self.write()
         self.namespace = []
-        for enum, name in self.bitenums:
-            name = self.qualtype(enum, name)
-            self.write('inline %s operator|(' % name)
+
+        def binop(op, name):
+            self.write('inline constexpr %s operator%s(' % (name, op))
             with Indent(self, '    {0} l, {0} r)'.format(name) + ' {', '}'):
                 self.write('using T = std::underlying_type_t<%s>;' % name)
                 self.write('return static_cast<%s>(' % name)
-                self.write('    static_cast<T>(l) | static_cast<T>(r));')
+                self.write('    static_cast<T>(l) %s static_cast<T>(r));' % op)
             self.write()
+
+        for enum, name in self.bitenums:
+            name = self.qualtype(enum, name)
+            binop('|', name)
+            binop('&', name)
+
         self.write()
         self.write('#endif  // ' + include_guard)
 
@@ -1322,6 +1434,7 @@ class GenXproto(FileWriter):
         self.write('#include <xcb/xcbext.h>')
         self.write()
         self.write('#include "base/logging.h"')
+        self.write('#include "base/posix/eintr_wrapper.h"')
         self.write('#include "ui/gfx/x/xproto_internal.h"')
         self.write()
         self.write('namespace x11 {')
@@ -1368,9 +1481,6 @@ class GenExtensionManager(FileWriter):
         self.write('#include <memory>')
         self.write()
         self.write('#include "base/component_export.h"')
-        self.write()
-        self.write('// Avoid conflicts caused by the GenericEvent macro.')
-        self.write('#include "ui/gfx/x/ge_undef.h"')
         self.write()
         self.write('namespace x11 {')
         self.write()
@@ -1457,12 +1567,14 @@ class GenReadEvent(FileWriter):
             # GenericEvent extension event
             conds.extend([
                 'evtype == GeGenericEvent::opcode',
+                '%s.present()' % ext,
                 'ge->extension == %s.major_opcode()' % ext,
             ])
             opcode = 'ge->event_type'
         else:
             # Extension event
             opcode = 'evtype - %s.first_event()' % ext
+            conds.append('%s.present()' % ext)
 
         if len(event.opcodes) == 1:
             conds.append('%s == %s::opcode' % (opcode, typename))
@@ -1489,11 +1601,13 @@ class GenReadEvent(FileWriter):
             with Indent(self, 'event->deleter_ = [](void* event) {', '};'):
                 self.write('delete reinterpret_cast<%s*>(event);' % typename)
             self.write('auto* event_ = new %s;' % typename)
-            self.write('ReadEvent(event_, buf);')
+            self.write('ReadEvent(event_, buffer);')
             if len(event.opcodes) > 1:
                 self.write('{0} = static_cast<decltype({0})>({1});'.format(
                     'event_->opcode', opcode))
+            self.write('event_->send_event = send_event;')
             self.write('event->event_ = event_;')
+            self.write('event->window_ = event_->GetWindow();')
             self.write('return;')
         self.write()
 
@@ -1508,12 +1622,14 @@ class GenReadEvent(FileWriter):
         self.write('namespace x11 {')
         self.write()
         self.write('void ReadEvent(')
-        args = 'Event* event, Connection* conn, const uint8_t* buf'
+        args = 'Event* event, Connection* conn, ReadBuffer* buffer'
         with Indent(self, '    %s) {' % args, '}'):
+            self.write('auto* buf = buffer->data->data();')
             cast = 'auto* %s = reinterpret_cast<const %s*>(buf);'
             self.write(cast % ('ev', 'xcb_generic_event_t'))
             self.write(cast % ('ge', 'xcb_ge_generic_event_t'))
             self.write('auto evtype = ev->response_type & ~kSendEventMask;')
+            self.write('bool send_event = ev->response_type & kSendEventMask;')
             self.write()
             for name, event, proto in self.events:
                 self.gen_event(name, event, proto)
@@ -1522,25 +1638,105 @@ class GenReadEvent(FileWriter):
         self.write('}  // namespace x11')
 
 
+class GenReadError(FileWriter):
+    def __init__(self, gen_dir, genprotos, xcbgen):
+        FileWriter.__init__(self)
+
+        self.gen_dir = gen_dir
+        self.genprotos = genprotos
+        self.xcbgen = xcbgen
+
+    def get_errors_for_proto(self, proto):
+        errors = {}
+        for _, item in proto.module.all:
+            if isinstance(item, self.xcbgen.xtypes.Error):
+                for name in item.opcodes:
+                    id = int(item.opcodes[name])
+                    if id < 0:
+                        continue
+                    name = [adjust_type_name(part) for part in name[1:]]
+                    typename = '::'.join(name) + 'Error'
+                    errors[id] = typename
+        return errors
+
+    def gen_errors_for_proto(self, errors, proto):
+        if proto.module.namespace.is_ext:
+            cond = 'if (%s().present()) {' % proto.proto
+            first_error = '%s().first_error()' % proto.proto
+        else:
+            cond = '{'
+            first_error = '0'
+        with Indent(self, cond, '}'):
+            self.write('uint8_t first_error = %s;' % first_error)
+            for id, name in sorted(errors.items()):
+                with Indent(self, '{', '}'):
+                    self.write('auto error_code = first_error + %d;' % id)
+                    self.write('auto parse = MakeError<%s>;' % name)
+                    self.write('add_parser(error_code, first_error, parse);')
+        self.write()
+
+    def gen_init_error_parsers(self):
+        self.write('uint8_t first_errors[256];')
+        self.write('memset(first_errors, 0, sizeof(first_errors));')
+        self.write()
+        args = 'uint8_t error_code, uint8_t first_error, ErrorParser parser'
+        with Indent(self, 'auto add_parser = [&](%s) {' % args, '};'):
+            cond = ('!error_parsers_[error_code] || ' +
+                    'first_error > first_errors[error_code]')
+            with Indent(self, 'if (%s) {' % cond, '}'):
+                self.write('first_errors[error_code] = error_code;')
+                self.write('error_parsers_[error_code] = parser;')
+        self.write()
+        for proto in self.genprotos:
+            errors = self.get_errors_for_proto(proto)
+            if errors:
+                self.gen_errors_for_proto(errors, proto)
+
+    def gen_source(self):
+        self.file = open(os.path.join(self.gen_dir, 'read_error.cc'), 'w')
+        self.write('#include "ui/gfx/x/connection.h"')
+        self.write('#include "ui/gfx/x/error.h"')
+        self.write('#include "ui/gfx/x/xproto_internal.h"')
+        self.write()
+        for genproto in self.genprotos:
+            self.write('#include "ui/gfx/x/%s.h"' % genproto.proto)
+        self.write()
+        self.write('namespace x11 {')
+        self.write()
+        self.write('namespace {')
+        self.write()
+        self.write('template <typename T>')
+        sig = 'std::unique_ptr<Error> MakeError(FutureBase::RawError error_)'
+        with Indent(self, '%s {' % sig, '}'):
+            self.write('ReadBuffer buf(error_);')
+            self.write('auto error = std::make_unique<T>();')
+            self.write('ReadError(error.get(), &buf);')
+            self.write('return error;')
+        self.write()
+        self.write('}  // namespace')
+        self.write()
+        with Indent(self, 'void Connection::InitErrorParsers() {', '}'):
+            self.gen_init_error_parsers()
+
+        self.write()
+        self.write('}  // namespace x11')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('proto_dir', type=str)
+    parser.add_argument('xcbproto_dir', type=str)
     parser.add_argument('gen_dir', type=str)
     parser.add_argument('protos', type=str, nargs='*')
-    parser.add_argument('--sysroot')
     args = parser.parse_args()
 
-    if args.sysroot:
-        path = os.path.join(args.sysroot, 'usr', 'lib', 'python2.7',
-                            'dist-packages')
-        sys.path.insert(1, path)
-
+    sys.path.insert(1, args.xcbproto_dir)
     import xcbgen.xtypes
     import xcbgen.state
 
     all_types = {}
+    proto_src_dir = os.path.join(args.xcbproto_dir, 'src')
     genprotos = [
-        GenXproto(proto, args.proto_dir, args.gen_dir, xcbgen, all_types)
+        GenXproto(proto, proto_src_dir, args.gen_dir, xcbgen, all_types)
         for proto in args.protos
     ]
     for genproto in genprotos:
@@ -1564,8 +1760,9 @@ def main():
     gen_extension_manager.gen_header()
     gen_extension_manager.gen_source()
 
-    gen_read_event = GenReadEvent(args.gen_dir, genprotos)
-    gen_read_event.gen_source()
+    GenReadEvent(args.gen_dir, genprotos).gen_source()
+
+    GenReadError(args.gen_dir, genprotos, xcbgen).gen_source()
 
     return 0
 

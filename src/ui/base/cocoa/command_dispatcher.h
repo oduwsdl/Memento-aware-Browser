@@ -58,9 +58,6 @@ COMPONENT_EXPORT(UI_BASE)
 - (void)dispatchUsingKeyModifiers:(id)sender
                        forHandler:(id<UserInterfaceItemCommandHandler>)handler;
 
-// TODO(bokan): Temporary to help debug https://crbug.com/1039833.
-- (BOOL)isRedispatchingKeyEvent;
-
 @end
 
 // If the NSWindow's firstResponder implements CommandDispatcherTarget, then
@@ -89,6 +86,11 @@ enum class PerformKeyEquivalentResult {
   // the event to be passed to the MainMenu, which will handle the key
   // equivalent.
   kPassToMainMenu,
+
+  // The CommandDispatcherDelegate determined the event should not be handled.
+  // This can occur when an event has been sent via key repeat that we've
+  // determined should not be triggered via repeat.
+  kDrop,
 };
 
 }  // namespace ui

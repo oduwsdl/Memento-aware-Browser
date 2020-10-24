@@ -13,11 +13,13 @@
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_controller.h"
 
-#if defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+    BUILDFLAG(ENABLE_DESKTOP_AURA)
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 #endif
 
 #if defined(USE_X11)
+#include "ui/base/x/x11_util.h"  // nogncheck
 #include "ui/gfx/x/x11.h"        // nogncheck
 #include "ui/gfx/x/x11_types.h"  // nogncheck
 #endif
@@ -72,7 +74,8 @@ BOOL CALLBACK FindAllWindowsCallback(HWND hwnd, LPARAM param) {
 
 std::vector<aura::Window*> GetAllTopLevelWindows() {
   std::vector<aura::Window*> roots;
-#if defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+    BUILDFLAG(ENABLE_DESKTOP_AURA)
   roots = DesktopWindowTreeHostLinux::GetAllOpenWindows();
 #elif defined(OS_WIN)
   {
@@ -126,13 +129,18 @@ gfx::Size WidgetTest::GetNativeWidgetMinimumContentSize(Widget* widget) {
 #if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
   return widget->GetNativeWindow()->delegate()->GetMinimumSize();
 #elif defined(USE_X11)
-  XSizeHints hints;
-  long supplied_return;  // NOLINT(runtime/int)
-  XGetWMNormalHints(
-      gfx::GetXDisplay(),
-      static_cast<uint32_t>(
+  if (features::IsUsingOzonePlatform()) {
+    // TODO(https://crbug.com/1109114): this is effectively the same as the
+    // NOTREACHED in the #else section. Figure why that is there and fix for
+    // Ozone if needed.
+    NOTREACHED();
+    return gfx::Size();
+  }
+  ui::SizeHints hints;
+  ui::GetWmNormalHints(
+      static_cast<x11::Window>(
           widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget()),
-      &hints, &supplied_return);
+      &hints);
   return gfx::Size(hints.min_width, hints.min_height);
 #else
   NOTREACHED();

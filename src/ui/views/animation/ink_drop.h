@@ -30,6 +30,9 @@ class VIEWS_EXPORT InkDrop {
   // Called by ink drop hosts when their size is changed.
   virtual void HostSizeChanged(const gfx::Size& new_size) = 0;
 
+  // Called by ink drop hosts when their transform is changed.
+  virtual void HostTransformChanged(const gfx::Transform& new_transform) = 0;
+
   // Gets the target state of the ink drop.
   virtual InkDropState GetTargetInkDropState() const = 0;
 
@@ -97,7 +100,7 @@ class VIEWS_EXPORT InkDropContainerView : public views::View {
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer);
 
   // View:
-  bool CanProcessEventsWithinSubtree() const override;
+  bool GetCanProcessEventsWithinSubtree() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InkDropContainerView);

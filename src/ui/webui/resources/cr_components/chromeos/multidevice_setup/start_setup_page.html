@@ -153,6 +153,24 @@
                       locale, 'startSetupPageFeatureListAwm')]]">
               </span>
             </div>
+            <template is="dom-if" if="[[phoneHubEnabled_]]">
+              <div class="feature-detail">
+                <iron-icon icon="multidevice-setup-icons-20:notifications">
+                </iron-icon>
+                <span>
+                  [[i18nDynamic(locale, 'startSetupPageFeatureMirrorPhoneNotifications')]]
+                </span>
+              </div>
+            </template>
+            <template is="dom-if" if="[[wifiSyncEnabled_]]">
+              <div class="feature-detail">
+                <iron-icon icon="multidevice-setup-icons-20:wifi">
+                </iron-icon>
+                <span>
+                  [[i18nDynamic(locale, 'startSetupPageFeatureWifiSync')]]
+                </span>
+              </div>
+            </template>
             <div class="feature-detail">
               <iron-icon icon="multidevice-setup-icons-20:downloads">
               </iron-icon>

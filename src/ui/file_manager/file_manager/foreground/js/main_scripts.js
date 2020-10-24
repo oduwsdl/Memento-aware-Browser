@@ -88,8 +88,10 @@
 // <include src="../../common/js/importer_common.js">
 //
 // <include src="constants.js">
+// <include src="crossover_search_utils.js">
 // <include src="web_store_utils.js">
 // <include src="ui/multi_menu.js">
+// <include src="ui/multi_menu_button.js">
 // <include src="ui/combobutton.js">
 // <include src="ui/commandbutton.js">
 // <include src="ui/file_manager_dialog_base.js">
@@ -107,6 +109,7 @@
 // <include src="android_app_list_model.js">
 // <include src="app_state_controller.js">
 // <include src="column_visibility_controller.js">
+// <include src="crostini_controller.js">
 // <include src="dialog_action_controller.js">
 // <include src="dialog_type.js">
 // <include src="directory_contents.js">
@@ -120,6 +123,7 @@
 // <include src="file_selection.js">
 // <include src="file_tasks.js">
 // <include src="file_transfer_controller.js">
+// <include src="file_type_filters_controller.js">
 // <include src="file_watcher.js">
 // <include src="folder_shortcuts_data_model.js">
 // <include src="sort_menu_controller.js">
@@ -195,4 +199,6 @@ window.fileManager = fileManager;
 
 // Exports
 window.util = util;
+// TODO(crbug.com/1115792) remove this export.
+window.AsyncUtil = AsyncUtil;
 })();

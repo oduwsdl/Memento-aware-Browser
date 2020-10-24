@@ -9,9 +9,9 @@
 // <include src="display_manager_types.js">
 
 // TODO(xiyuan): Find a better to share those constants.
+/** @const */ var SCREEN_WELCOME = 'connect';
 /** @const */ var SCREEN_OOBE_NETWORK = 'network-selection';
 /** @const */ var SCREEN_OOBE_HID_DETECTION = 'hid-detection';
-/** @const */ var SCREEN_OOBE_EULA = 'eula';
 /** @const */ var SCREEN_OOBE_ENABLE_DEBUGGING = 'debugging';
 /** @const */ var SCREEN_OOBE_UPDATE = 'oobe-update';
 /** @const */ var SCREEN_OOBE_RESET = 'reset';
@@ -42,9 +42,10 @@
 /** @const */ var SCREEN_DISCOVER = 'discover';
 /** @const */ var SCREEN_MARKETING_OPT_IN = 'marketing-opt-in';
 
-/* Accelerator identifiers. Must be kept in sync with webui_login_view.cc. */
+/* Accelerator identifiers.
+ * Must be kept in sync with webui_accelerator_mapping.cc.
+ */
 /** @const */ var ACCELERATOR_CANCEL = 'cancel';
-/** @const */ var ACCELERATOR_ENABLE_DEBBUGING = 'debugging';
 /** @const */ var ACCELERATOR_ENROLLMENT = 'enrollment';
 /** @const */ var ACCELERATOR_KIOSK_ENABLE = 'kiosk_enable';
 /** @const */ var ACCELERATOR_VERSION = 'version';
@@ -55,7 +56,6 @@
 /** @const */ var ACCELERATOR_APP_LAUNCH_BAILOUT = 'app_launch_bailout';
 /** @const */ var ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG =
     'app_launch_network_config';
-/** @const */ var ACCELERATOR_DEMO_MODE = "demo_mode";
 /** @const */ var ACCELERATOR_SEND_FEEDBACK = "send_feedback";
 
 /* Possible UI states of the error screen. */
@@ -93,7 +93,6 @@ cr.define('cr.ui.login', function() {
    */
   var RESET_AVAILABLE_SCREEN_GROUP = [
     SCREEN_OOBE_NETWORK,
-    SCREEN_OOBE_EULA,
     SCREEN_OOBE_AUTO_ENROLLMENT_CHECK,
     SCREEN_GAIA_SIGNIN,
     SCREEN_ACCOUNT_PICKER,
@@ -103,35 +102,10 @@ cr.define('cr.ui.login', function() {
     SCREEN_ARC_TERMS_OF_SERVICE,
     SCREEN_CONFIRM_PASSWORD,
     SCREEN_UPDATE_REQUIRED,
-    SCREEN_FATAL_ERROR,
     SCREEN_SYNC_CONSENT,
     SCREEN_APP_DOWNLOADING,
     SCREEN_DISCOVER,
     SCREEN_MARKETING_OPT_IN,
-  ];
-
-  /**
-   * Group of screens (screen IDs) where enable debuggingscreen invocation is
-   * available. Newer screens using Polymer use the attribute
-   * `enableDebuggingAllowed` in their `ready()` method.
-   * @type Array<string>
-   * @const
-   */
-  var ENABLE_DEBUGGING_AVAILABLE_SCREEN_GROUP = [
-    SCREEN_OOBE_NETWORK,
-    SCREEN_OOBE_EULA,
-    SCREEN_OOBE_UPDATE
-  ];
-
-  /**
-   * Group of screens (screen IDs) that are not participating in
-   * left-current-right animation.
-   * @type Array<string>
-   * @const
-   */
-  var NOT_ANIMATED_SCREEN_GROUP = [
-    SCREEN_OOBE_ENABLE_DEBUGGING,
-    SCREEN_OOBE_RESET,
   ];
 
   /**
@@ -403,24 +377,12 @@ cr.define('cr.ui.login', function() {
         if (this.currentScreen && this.currentScreen.cancel) {
           this.currentScreen.cancel();
         }
-      } else if (name == ACCELERATOR_ENABLE_DEBBUGING) {
-        if (attributes.enableDebuggingAllowed ||
-            ENABLE_DEBUGGING_AVAILABLE_SCREEN_GROUP.indexOf(currentStepId) !=
-            -1) {
-          chrome.send('toggleEnableDebuggingScreen');
-        }
       } else if (name == ACCELERATOR_ENROLLMENT) {
         if (attributes.startEnrollmentAllowed ||
             currentStepId == SCREEN_GAIA_SIGNIN ||
             currentStepId == SCREEN_PACKAGED_LICENSE ||
             currentStepId == SCREEN_ACCOUNT_PICKER) {
           chrome.send('toggleEnrollmentScreen');
-        } else if (attributes.postponeEnrollmentAllowed ||
-            currentStepId == SCREEN_OOBE_NETWORK ||
-            currentStepId == SCREEN_OOBE_EULA) {
-          // In this case update check will be skipped and OOBE will
-          // proceed straight to enrollment screen when EULA is accepted.
-          chrome.send('skipUpdateEnrollAfterEula');
         } else {
           console.warn('No action for current step ID: ' + currentStepId);
         }
@@ -453,8 +415,6 @@ cr.define('cr.ui.login', function() {
       } else if (name == ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG) {
         if (currentStepId == SCREEN_APP_LAUNCH_SPLASH)
           chrome.send('networkConfigRequest');
-      } else if (name == ACCELERATOR_DEMO_MODE) {
-        this.startDemoModeFlow();
       } else if (name == ACCELERATOR_SEND_FEEDBACK) {
         chrome.send('sendFeedback');
       }
@@ -485,35 +445,6 @@ cr.define('cr.ui.login', function() {
           '#' + screen.id + '-controls button:not(.preserve-disabled-state)');
       for (var i = 0; i < buttons.length; ++i) {
         buttons[i].disabled = disabled;
-      }
-    },
-
-    screenIsAnimated_: function(screenId) {
-      return NOT_ANIMATED_SCREEN_GROUP.indexOf(screenId) != -1;
-    },
-
-    /**
-     * Updates a step's css classes to reflect left, current, or right position.
-     * @param {number} stepIndex step index.
-     * @param {string} state one of 'left', 'current', 'right'.
-     */
-    updateStep_: function(stepIndex, state) {
-      var stepId = this.screens_[stepIndex];
-      var step = $(stepId);
-      var header = $('header-' + stepId);
-      var states = ['left', 'right', 'current'];
-      for (var i = 0; i < states.length; ++i) {
-        if (states[i] != state) {
-          step.classList.remove(states[i]);
-          if (header) {
-            header.classList.remove(states[i]);
-          }
-        }
-      }
-
-      step.classList.add(state);
-      if (header) {
-        header.classList.add(state);
       }
     },
 
@@ -565,32 +496,9 @@ cr.define('cr.ui.login', function() {
 
       newStep.classList.remove('hidden');
 
-      var currentIsAnimated = !currentStepAttributes.noAnimatedTransition &&
-                              this.screenIsAnimated_(currentStepId);
-      var newIsAnimated = !newStepAttributes.noAnimatedTransition &&
-                          this.screenIsAnimated_(nextStepId);
-
-      if (this.isOobeUI() && currentIsAnimated && newIsAnimated) {
-        // Start gliding animation for OOBE steps.
-        if (nextStepIndex > this.currentStep_) {
-          for (var i = this.currentStep_; i < nextStepIndex; ++i)
-            this.updateStep_(i, 'left');
-          this.updateStep_(nextStepIndex, 'current');
-        } else if (nextStepIndex < this.currentStep_) {
-          for (var i = this.currentStep_; i > nextStepIndex; --i)
-            this.updateStep_(i, 'right');
-          this.updateStep_(nextStepIndex, 'current');
-        }
-      } else {
-        // Start fading animation for login display or reset screen.
-        oldStep.classList.add('faded');
-        newStep.classList.remove('faded');
-        if (newStepAttributes.noAnimatedTransition ||
-            !this.screenIsAnimated_(nextStepId)) {
-          newStep.classList.remove('left');
-          newStep.classList.remove('right');
-        }
-      }
+      // Start fading animation for login display or reset screen.
+      oldStep.classList.add('faded');
+      newStep.classList.remove('faded');
 
       this.disableButtons_(newStep, false);
 
@@ -605,30 +513,10 @@ cr.define('cr.ui.login', function() {
       var isOOBE = this.isOobeUI();
       if (this.currentStep_ != nextStepIndex &&
           !oldStep.classList.contains('hidden')) {
-        if (oldStep.classList.contains('animated')) {
-          innerContainer.classList.add('animation');
-          oldStep.addEventListener('transitionend', function f(e) {
-            oldStep.removeEventListener('transitionend', f);
-            if (oldStep.classList.contains('faded') ||
-                oldStep.classList.contains('left') ||
-                oldStep.classList.contains('right')) {
-              innerContainer.classList.remove('animation');
-              oldStep.classList.add('hidden');
-              if (!isOOBE)
-                oldStep.hidden = true;
-            }
-            // Refresh defaultControl. It could have changed.
-            var defaultControl = newStep.defaultControl;
-            if (defaultControl)
-              defaultControl.focus();
-          });
-          ensureTransitionEndEvent(oldStep, MAX_SCREEN_TRANSITION_DURATION);
-        } else {
-          oldStep.classList.add('hidden');
-          oldStep.hidden = true;
-          if (defaultControl)
-            defaultControl.focus();
-        }
+        oldStep.classList.add('hidden');
+        oldStep.hidden = true;
+        if (defaultControl)
+          defaultControl.focus();
       } else {
         // First screen on OOBE launch.
         if (this.isOobeUI() && innerContainer.classList.contains('down')) {
@@ -860,7 +748,12 @@ cr.define('cr.ui.login', function() {
     initializeDemoModeMultiTapListener: function() {
       if (this.displayType_ == DISPLAY_TYPE.OOBE) {
         this.demoModeStartListener_ = new MultiTapDetector(
-            $('outer-container'), 10, this.startDemoModeFlow.bind(this));
+            $('outer-container'), 10, () => {
+              let currentScreen = Oobe.getInstance().currentScreen;
+              if (currentScreen.id === SCREEN_WELCOME) {
+                currentScreen.onSetupDemoModeGesture();
+              }
+        });
       }
     },
 
@@ -868,12 +761,6 @@ cr.define('cr.ui.login', function() {
      * Prepares screens to use in login display.
      */
     prepareForLoginDisplay_: function() {
-      for (var i = 0, screenId; screenId = this.screens_[i]; ++i) {
-        var screen = $(screenId);
-        screen.classList.add('faded');
-        screen.classList.remove('right');
-        screen.classList.remove('left');
-      }
       if (this.showingViewsLogin) {
         $('top-header-bar').hidden = true;
       }
@@ -950,43 +837,6 @@ cr.define('cr.ui.login', function() {
           function() {  // onCancel
             chrome.send('setDeviceRequisition', ['none']);
           });
-    },
-
-    /**
-     * Starts demo mode flow. Shows the enable demo mode dialog if needed.
-     */
-    startDemoModeFlow: function() {
-      var isDemoModeEnabled = loadTimeData.getBoolean('isDemoModeEnabled');
-      if (!isDemoModeEnabled) {
-        console.warn('Cannot setup demo mode, because it is disabled.');
-        return;
-      }
-
-      var currentStepId = this.screens_[this.currentStep_];
-      var attributes = this.screensAttributes_[this.currentStep_] || {};
-      if (!attributes.enterDemoModeAllowed)
-        return;
-
-      if (!this.enableDemoModeDialog_) {
-        this.enableDemoModeDialog_ =
-            new cr.ui.dialogs.ConfirmDialog(document.body);
-        this.enableDemoModeDialog_.setOkLabel(
-            loadTimeData.getString('enableDemoModeDialogConfirm'));
-        this.enableDemoModeDialog_.setCancelLabel(
-            loadTimeData.getString('enableDemoModeDialogCancel'));
-      }
-      var configuration = Oobe.getInstance().getOobeConfiguration();
-      if (configuration && configuration.enableDemoMode) {
-        // Bypass showing dialog.
-        chrome.send('setupDemoMode');
-      } else {
-        this.enableDemoModeDialog_.showWithTitle(
-            loadTimeData.getString('enableDemoModeDialogTitle'),
-            loadTimeData.getString('enableDemoModeDialogText'),
-            function() {  // onOk
-              chrome.send('setupDemoMode');
-            });
-      }
     },
 
     /**
@@ -1199,15 +1049,6 @@ cr.define('cr.ui.login', function() {
         typeof currentScreen.hideDetachableBaseWarningBubble === 'function') {
       currentScreen.hideDetachableBaseWarningBubble(username);
     }
-  };
-
-  /**
-   * Shows password change screen for Active Directory users.
-   * @param {string} username Display name of the user whose password is being
-   * changed.
-   */
-  DisplayManager.showActiveDirectoryPasswordChangeScreen = function(username) {
-    login.ActiveDirectoryPasswordChangeScreen.show(username);
   };
 
   /**

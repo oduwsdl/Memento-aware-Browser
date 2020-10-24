@@ -10,12 +10,14 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/view_factory.h"
 #include "ui/views/selection_controller_delegate.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view.h"
@@ -150,10 +152,9 @@ class VIEWS_EXPORT Label : public View,
   void SetVerticalAlignment(gfx::VerticalAlignment alignment);
 
   // Get or set the distance in pixels between baselines of multi-line text.
-  // Default is 0, indicating the distance between lines should be the standard
-  // one for the label's text, font list, and platform.
+  // Default is the height of the default font.
   int GetLineHeight() const;
-  void SetLineHeight(int height);
+  void SetLineHeight(int line_height);
 
   // Get or set if the label text can wrap on multiple lines; default is false.
   bool GetMultiLine() const;
@@ -186,7 +187,10 @@ class VIEWS_EXPORT Label : public View,
   // returns the text position of the first character of that line.
   size_t GetTextIndexOfLine(size_t line) const;
 
-  // Set the truncate length of the rendered text.
+  // Set the truncate length of the |full_text_|.
+  // NOTE: This does not affect the |display_text_|, since right now the only
+  // consumer does not need that; if you need this function, you may need to
+  // implement this.
   void SetTruncateLength(size_t truncate_length);
 
   // Gets/Sets the eliding or fading behavior, applied as necessary. The default
@@ -261,7 +265,7 @@ class VIEWS_EXPORT Label : public View,
   void SelectRange(const gfx::Range& range);
 
   views::PropertyChangedSubscription AddTextChangedCallback(
-      views::PropertyChangedCallback callback);
+      views::PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
   // View:
   int GetBaseline() const override;
@@ -269,11 +273,10 @@ class VIEWS_EXPORT Label : public View,
   gfx::Size GetMinimumSize() const override;
   int GetHeightForWidth(int w) const override;
   View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
-  bool CanProcessEventsWithinSubtree() const override;
+  bool GetCanProcessEventsWithinSubtree() const override;
   WordLookupClient* GetWordLookupClient() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   base::string16 GetTooltipText(const gfx::Point& p) const override;
-  void OnHandlePropertyChangeEffects(PropertyEffects property_effects) override;
 
  protected:
   // Create a single RenderText instance to actually be painted.
@@ -311,6 +314,7 @@ class VIEWS_EXPORT Label : public View,
   FRIEND_TEST_ALL_PREFIXES(LabelTest, FocusBounds);
   FRIEND_TEST_ALL_PREFIXES(LabelTest, MultiLineSizingWithElide);
   FRIEND_TEST_ALL_PREFIXES(LabelTest, IsDisplayTextTruncated);
+  FRIEND_TEST_ALL_PREFIXES(LabelTest, ChecksSubpixelRenderingOntoOpaqueSurface);
   friend class LabelSelectionTest;
 
   // ContextMenuController overrides:
@@ -353,8 +357,6 @@ class VIEWS_EXPORT Label : public View,
             const gfx::FontList& font_list,
             gfx::DirectionalityMode directionality_mode);
 
-  void ResetLayout();
-
   // Set up |display_text_| to actually be painted.
   void MaybeBuildDisplayText() const;
 
@@ -377,7 +379,10 @@ class VIEWS_EXPORT Label : public View,
   bool ShouldShowDefaultTooltip() const;
 
   // Clears |display_text_| and updates |stored_selection_range_|.
-  void ClearDisplayText() const;
+  // TODO(crbug.com/1103804) Most uses of this function are inefficient; either
+  // replace with setting attributes on both RenderTexts or collapse them to one
+  // RenderText.
+  void ClearDisplayText();
 
   // Returns the currently selected text.
   base::string16 GetSelectedText() const;
@@ -390,6 +395,7 @@ class VIEWS_EXPORT Label : public View,
 
   const int text_context_;
   int text_style_;
+  base::Optional<int> line_height_;
 
   // An un-elided and single-line RenderText object used for preferred sizing.
   std::unique_ptr<gfx::RenderText> full_text_;
@@ -437,6 +443,33 @@ class VIEWS_EXPORT Label : public View,
 
   DISALLOW_COPY_AND_ASSIGN(Label);
 };
+
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Label, View)
+VIEW_BUILDER_PROPERTY(const gfx::FontList&, FontList)
+VIEW_BUILDER_PROPERTY(const base::string16&, Text)
+VIEW_BUILDER_PROPERTY(int, TextStyle)
+VIEW_BUILDER_PROPERTY(bool, AutoColorReadabilityEnabled)
+VIEW_BUILDER_PROPERTY(SkColor, EnabledColor)
+VIEW_BUILDER_PROPERTY(SkColor, BackgroundColor)
+VIEW_BUILDER_PROPERTY(SkColor, SelectionTextColor)
+VIEW_BUILDER_PROPERTY(SkColor, SelectionBackgroundColor)
+VIEW_BUILDER_PROPERTY(const gfx::ShadowValues&, Shadows)
+VIEW_BUILDER_PROPERTY(bool, SubpixelRenderingEnabled)
+VIEW_BUILDER_PROPERTY(gfx::HorizontalAlignment, HorizontalAlignment)
+VIEW_BUILDER_PROPERTY(gfx::VerticalAlignment, VerticalAlignment)
+VIEW_BUILDER_PROPERTY(int, LineHeight)
+VIEW_BUILDER_PROPERTY(bool, MultiLine)
+VIEW_BUILDER_PROPERTY(int, MaxLines)
+VIEW_BUILDER_PROPERTY(bool, Obscured)
+VIEW_BUILDER_PROPERTY(bool, AllowCharacterBreak)
+VIEW_BUILDER_PROPERTY(size_t, TruncateLength)
+VIEW_BUILDER_PROPERTY(gfx::ElideBehavior, ElideBehavior)
+VIEW_BUILDER_PROPERTY(const base::string16&, TooltipText)
+VIEW_BUILDER_PROPERTY(bool, HandlesTooltips)
+VIEW_BUILDER_PROPERTY(int, MaximumWidth)
+VIEW_BUILDER_PROPERTY(bool, CollapseWhenHidden)
+VIEW_BUILDER_PROPERTY(bool, Selectable)
+END_VIEW_BUILDER(VIEWS_EXPORT, Label)
 
 }  // namespace views
 

@@ -2,13 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
+// #import 'chrome://resources/mojo/services/network/public/mojom/ip_address.mojom-lite.js';
+// #import 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-lite.js';
+// #import 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-lite.js';
+// #import 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-lite.js';
+
+// #import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// cland-format on
+
 /**
  * @fileoverview Utilities supporting network_config.mojom types. The strings
  * returned in the getFooTypeString methods are used for looking up localized
  * strings and for debugging. They are not intended to be drectly user facing.
  */
 
-class OncMojo {
+/* #export */ class OncMojo {
   /**
    * @param {number|undefined} value
    * @return {string}
@@ -1055,6 +1066,74 @@ class OncMojo {
     assertNotReached();
     return 'OncNotConnected';
   }
+
+  /**
+   * Returns true the IPAddress bytes match.
+   * @param {?network.mojom.IPAddress|undefined} a
+   * @param {?network.mojom.IPAddress|undefined} b
+   * @return {boolean}
+   */
+  static ipAddressMatch(a, b) {
+    if (!a || !b) {
+      return !!a === !!b;
+    }
+    const abytes = a.addressBytes;
+    const bbytes = b.addressBytes;
+    if (abytes.length !== bbytes.length) {
+      return false;
+    }
+    for (let i = 0; i < abytes.length; ++i) {
+      if (abytes[i] !== bbytes[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Returns true the SIMLockStatus properties match.
+   * @param {?chromeos.networkConfig.mojom.SIMLockStatus|undefined} a
+   * @param {?chromeos.networkConfig.mojom.SIMLockStatus|undefined} b
+   * @return {boolean}
+   */
+  static simLockStatusMatch(a, b) {
+    if (!a || !b) {
+      return !!a === !!b;
+    }
+    return a.lockType === b.lockType && a.lockEnabled === b.lockEnabled &&
+        a.retriesLeft === b.retriesLeft;
+  }
+
+  /**
+   * Returns true if the APN properties match.
+   * @param {chromeos.networkConfig.mojom.ApnProperties} a
+   * @param {chromeos.networkConfig.mojom.ApnProperties} b
+   * @return {boolean}
+   */
+  static apnMatch(a, b) {
+    if (!a || !b) {
+      return !!a === !!b;
+    }
+    return a.accessPointName === b.accessPointName &&
+           a.name === b.name && a.username === b.username &&
+           a.password === b.password;
+  }
+
+  /**
+   * Returns true if the APN List matches.
+   * @param {Array<!chromeos.networkConfig.mojom.ApnProperties>|undefined} a
+   * @param {Array<!chromeos.networkConfig.mojom.ApnProperties>|undefined} b
+   * @return {boolean}
+   */
+  static apnListMatch(a, b) {
+    if (!a || !b) {
+      return !!a === !!b;
+    }
+    if (a.length !== b.length) {
+      return false;
+    }
+    return a.every((apn, index) => OncMojo.apnMatch(apn, b[index]));
+  }
 }
 
 /** @typedef {chromeos.networkConfig.mojom.DeviceStateProperties} */
@@ -1073,13 +1152,14 @@ OncMojo.NetworkStateProperties;
 OncMojo.ManagedProperty;
 
 /**
- * Modified version of mojom.IPConfigProperties to store routingPrefix as a
- * human-readable string instead of as a number. Used in network_ip_config.js.
+ * Modified version of mojom.IPConfigProperties to store routingPrefix as
+ * a human-readable netmask string instead of as a number. Used in
+ * network_ip_config.js.
  * @typedef {{
  *   gateway: (string|undefined),
  *   ipAddress: (string|undefined),
- *   nameServers: (!Array<string>|undefined),
- *   routingPrefix: (string|undefined),
+ *   nameServers: (Array<string>|undefined),
+ *   netmask: (string|undefined),
  *   type: (string|undefined),
  *   webProxyAutoDiscoveryUrl: (string|undefined),
  * }}

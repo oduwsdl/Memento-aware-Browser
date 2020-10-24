@@ -17,6 +17,7 @@
 #include "third_party/skia/include/core/SkDeferredDisplayListRecorder.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "ui/display/types/display_snapshot.h"
@@ -80,7 +81,7 @@ class SurfacelessSkiaGlRenderer::BufferWrapper {
   gl::GLImage* image() const { return image_.get(); }
   SkSurface* sk_surface() const { return sk_surface_.get(); }
 
-  bool Initialize(GrContext* gr_context,
+  bool Initialize(GrDirectContext* gr_context,
                   gfx::AcceleratedWidget widget,
                   const gfx::Size& size);
   void BindFramebuffer();
@@ -106,7 +107,7 @@ SurfacelessSkiaGlRenderer::BufferWrapper::~BufferWrapper() {
 }
 
 bool SurfacelessSkiaGlRenderer::BufferWrapper::Initialize(
-    GrContext* gr_context,
+    GrDirectContext* gr_context,
     gfx::AcceleratedWidget widget,
     const gfx::Size& size) {
   glGenTextures(1, &gl_tex_);
@@ -239,8 +240,7 @@ void SurfacelessSkiaGlRenderer::RenderFrame() {
   SkSurface* sk_surface = buffers_[back_buffer_]->sk_surface();
   if (use_ddl_) {
     StartDDLRenderThreadIfNecessary(sk_surface);
-    auto ddl = GetDDL();
-    sk_surface->draw(ddl.get());
+    sk_surface->draw(GetDDL());
   } else {
     Draw(sk_surface->getCanvas(), NextFraction());
   }

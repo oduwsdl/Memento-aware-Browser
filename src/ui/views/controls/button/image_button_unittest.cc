@@ -39,8 +39,14 @@ namespace views {
 
 using ImageButtonTest = ViewsTestBase;
 
+TEST_F(ImageButtonTest, FocusBehavior) {
+  ImageButton button;
+
+  EXPECT_EQ(View::FocusBehavior::ACCESSIBLE_ONLY, button.GetFocusBehavior());
+}
+
 TEST_F(ImageButtonTest, Basics) {
-  ImageButton button(nullptr);
+  ImageButton button;
 
   // Our image to paint starts empty.
   EXPECT_TRUE(button.GetImageToPaint().isNull());
@@ -88,7 +94,7 @@ TEST_F(ImageButtonTest, Basics) {
 }
 
 TEST_F(ImageButtonTest, SetAndGetImage) {
-  ImageButton button(nullptr);
+  ImageButton button;
 
   // Images start as null.
   EXPECT_TRUE(button.GetImage(Button::STATE_NORMAL).isNull());
@@ -114,7 +120,7 @@ TEST_F(ImageButtonTest, SetAndGetImage) {
 }
 
 TEST_F(ImageButtonTest, ImagePositionWithBorder) {
-  ImageButton button(nullptr);
+  ImageButton button;
   gfx::ImageSkia image = CreateTestImage(20, 30);
   button.SetImage(Button::STATE_NORMAL, &image);
 
@@ -143,7 +149,7 @@ TEST_F(ImageButtonTest, ImagePositionWithBorder) {
 }
 
 TEST_F(ImageButtonTest, LeftAlignedMirrored) {
-  ImageButton button(nullptr);
+  ImageButton button;
   gfx::ImageSkia image = CreateTestImage(20, 30);
   button.SetImage(Button::STATE_NORMAL, &image);
   button.SetBounds(0, 0, 50, 30);
@@ -156,7 +162,7 @@ TEST_F(ImageButtonTest, LeftAlignedMirrored) {
 }
 
 TEST_F(ImageButtonTest, RightAlignedMirrored) {
-  ImageButton button(nullptr);
+  ImageButton button;
   gfx::ImageSkia image = CreateTestImage(20, 30);
   button.SetImage(Button::STATE_NORMAL, &image);
   button.SetBounds(0, 0, 50, 30);
@@ -171,7 +177,7 @@ TEST_F(ImageButtonTest, RightAlignedMirrored) {
 
 TEST_F(ImageButtonTest, PreferredSizeInvalidation) {
   Parent parent;
-  ImageButton button(nullptr);
+  ImageButton button;
   gfx::ImageSkia first_image = CreateTestImage(20, 30);
   gfx::ImageSkia second_image = CreateTestImage(50, 50);
   button.SetImage(Button::STATE_NORMAL, &first_image);

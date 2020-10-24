@@ -5,11 +5,11 @@
 #ifndef UI_VIEWS_CONTROLS_MENU_MENU_ITEM_VIEW_H_
 #define UI_VIEWS_CONTROLS_MENU_MENU_ITEM_VIEW_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -117,7 +117,7 @@ class VIEWS_EXPORT MenuItemView : public View {
 
   // Constructor for use with the top level menu item. This menu is never
   // shown to the user, rather its use as the parent for all menu items.
-  explicit MenuItemView(MenuDelegate* delegate);
+  explicit MenuItemView(MenuDelegate* delegate = nullptr);
 
   // Overridden from View:
   base::string16 GetTooltipText(const gfx::Point& p) const override;
@@ -138,7 +138,8 @@ class VIEWS_EXPORT MenuItemView : public View {
   // removed and the menu item accelerator text is appended.
   static base::string16 GetAccessibleNameForMenuItem(
       const base::string16& item_text,
-      const base::string16& accelerator_text);
+      const base::string16& accelerator_text,
+      bool is_new_feature);
 
   // Hides and cancels the menu. This does nothing if the menu is not open.
   void Cancel();
@@ -236,6 +237,11 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Returns true if the item is selected.
   bool IsSelected() const { return selected_; }
 
+  // Adds a callback subscription associated with the above selected property.
+  // The callback will be invoked whenever the selected property changes.
+  PropertyChangedSubscription AddSelectedChangedCallback(
+      PropertyChangedCallback callback) WARN_UNUSED_RESULT;
+
   // Sets whether the submenu area of an ACTIONABLE_SUBMENU is selected.
   void SetSelectionOfActionableSubmenu(
       bool submenu_area_of_actionable_submenu_selected);
@@ -258,8 +264,9 @@ class VIEWS_EXPORT MenuItemView : public View {
   // the included color.
   void SetIcon(const ui::ThemedVectorIcon& icon);
 
-  // Sets the visibility of the view used to render the icon.
-  void SetIconViewVisibilityAndInvalidate(bool is_visible);
+  // Sets the view used to render the icon. This clobbers any icon set via
+  // SetIcon(). MenuItemView takes ownership of |icon_view|.
+  void SetIconView(std::unique_ptr<ImageView> icon_view);
 
   void UpdateIconViewFromVectorIconAndTheme();
 
@@ -268,6 +275,9 @@ class VIEWS_EXPORT MenuItemView : public View {
 
   // Returns the command id of this item.
   int GetCommand() const { return command_; }
+
+  void set_is_new(bool is_new) { is_new_ = is_new; }
+  bool is_new() const { return is_new_; }
 
   // Paints the menu item.
   void OnPaint(gfx::Canvas* canvas) override;
@@ -348,6 +358,10 @@ class VIEWS_EXPORT MenuItemView : public View {
   // run.
   void SetAlerted();
   bool is_alerted() const { return is_alerted_; }
+
+  // Returns whether or not a "new" badge should be shown on this menu item.
+  // Takes into account whether the badging feature is enabled.
+  bool ShouldShowNewBadge() const;
 
  protected:
   // Creates a MenuItemView. This is used by the various AddXXX methods.
@@ -480,14 +494,6 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Returns true if the menu has items with a checkbox or a radio button.
   bool HasChecksOrRadioButtons() const;
 
-  // Returns null if all children are hidden. For example, where there is only a
-  // hidden |icon_view_|.
-  const View* GetFirstVisibleChild() const;
-  View* GetFirstVisibleChild() {
-    return const_cast<View*>(
-        static_cast<const MenuItemView*>(this)->GetFirstVisibleChild());
-  }
-
   void invalidate_dimensions() { dimensions_.height = 0; }
   bool is_dimensions_valid() const { return dimensions_.height > 0; }
 
@@ -518,6 +524,10 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Command id.
   int command_ = 0;
 
+  // Whether the menu item should be badged as "New" (if badging is enabled) as
+  // a way to highlight a new feature for users.
+  bool is_new_ = false;
+
   // Submenu, created via CreateSubmenu.
   SubmenuView* submenu_ = nullptr;
 
@@ -540,9 +550,8 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Set if menu has icons or icon_views (applies to root menu item only).
   bool has_icons_ = false;
 
-  // Pointer to a view with a menu icon. Visible only when the menu item
-  // contains an icon.
-  ImageView* icon_view_;
+  // Pointer to a view with a menu icon.
+  ImageView* icon_view_ = nullptr;
 
   // The tooltip to show on hover for this menu item.
   base::string16 tooltip_;

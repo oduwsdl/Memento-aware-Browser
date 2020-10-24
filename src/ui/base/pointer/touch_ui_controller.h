@@ -23,7 +23,7 @@ namespace ui {
 // Central controller to handle touch UI modes.
 class COMPONENT_EXPORT(UI_BASE) TouchUiController {
  public:
-  using CallbackList = base::CallbackList<void()>;
+  using CallbackList = base::RepeatingClosureList;
   using Subscription = CallbackList::Subscription;
 
   enum class TouchUiState {
@@ -39,6 +39,11 @@ class COMPONENT_EXPORT(UI_BASE) TouchUiController {
     TouchUiScoperForTesting(const TouchUiScoperForTesting&) = delete;
     TouchUiScoperForTesting& operator=(const TouchUiScoperForTesting&) = delete;
     ~TouchUiScoperForTesting();
+
+    // Update the current touch mode state but still roll back to the
+    // original state at destruction. Allows a test to change the mode
+    // multiple times without creating multiple instances.
+    void UpdateState(bool enabled);
 
    private:
     TouchUiController* const controller_;

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -18,14 +19,22 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
+#include "ui/gfx/x/shape.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_path.h"
+#include "ui/gfx/x/xproto.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 
 namespace views {
 
@@ -88,6 +97,12 @@ class StackingClientListWaiter : public ui::X11PropertyChangeWaiter {
   DISALLOW_COPY_AND_ASSIGN(StackingClientListWaiter);
 };
 
+void IconifyWindow(x11::Connection* connection, x11::Window window) {
+  ui::SendClientMessage(window, ui::GetX11RootWindow(),
+                        gfx::GetAtom("WM_CHANGE_STATE"),
+                        {ui::WM_STATE_ICONIC, 0, 0, 0, 0});
+}
+
 }  // namespace
 
 class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
@@ -97,14 +112,26 @@ class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
 
   // DesktopWidgetTestInteractive
   void SetUp() override {
+#if defined(USE_OZONE)
+    // Run tests only for X11 (ozone or not Ozone).
+    if (features::IsUsingOzonePlatform() &&
+        std::strcmp(ui::OzonePlatform::GetInstance()->GetPlatformName(),
+                    "x11") != 0) {
+      // SetUp still is required to be run. Otherwise, ViewsTestBase CHECKs in
+      // the dtor.
+      DesktopWidgetTestInteractive::SetUp();
+      GTEST_SKIP();
+    }
+#endif
     // Make X11 synchronous for our display connection. This does not force the
     // window manager to behave synchronously.
-    XSynchronize(xdisplay(), x11::True);
+    XSynchronize(xdisplay(), true);
     DesktopWidgetTestInteractive::SetUp();
   }
 
   void TearDown() override {
-    XSynchronize(xdisplay(), x11::False);
+    if (!IsSkipped())
+      XSynchronize(xdisplay(), false);
     DesktopWidgetTestInteractive::TearDown();
   }
 
@@ -125,11 +152,13 @@ class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
   // Creates and shows an X window with |bounds|.
   x11::Window CreateAndShowXWindow(const gfx::Rect& bounds) {
     x11::Window root = ui::GetX11RootWindow();
-    x11::Window window = static_cast<x11::Window>(
-        XCreateSimpleWindow(xdisplay(), static_cast<uint32_t>(root), 0, 0, 1, 1,
-                            0,    // border_width
-                            0,    // border
-                            0));  // background
+    auto window = connection()->GenerateId<x11::Window>();
+    connection()->CreateWindow({
+        .wid = window,
+        .parent = root,
+        .width = 1,
+        .height = 1,
+    });
 
     ui::SetUseOSWindowFrame(window, false);
     ShowAndSetXWindowBounds(window, bounds);
@@ -138,17 +167,18 @@ class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
 
   // Shows |window| and sets its bounds.
   void ShowAndSetXWindowBounds(x11::Window window, const gfx::Rect& bounds) {
-    XMapWindow(xdisplay(), static_cast<uint32_t>(window));
+    connection()->MapWindow({window});
 
-    XWindowChanges changes = {0};
-    changes.x = bounds.x();
-    changes.y = bounds.y();
-    changes.width = bounds.width();
-    changes.height = bounds.height();
-    XConfigureWindow(xdisplay(), static_cast<uint32_t>(window),
-                     CWX | CWY | CWWidth | CWHeight, &changes);
+    connection()->ConfigureWindow({
+        .window = window,
+        .x = bounds.x(),
+        .y = bounds.y(),
+        .width = bounds.width(),
+        .height = bounds.height(),
+    });
   }
 
+  x11::Connection* connection() { return x11::Connection::Get(); }
   Display* xdisplay() { return gfx::GetXDisplay(); }
 
   // Returns the topmost X window at the passed in screen position.
@@ -161,11 +191,11 @@ class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
   // NULL if the topmost window does not have an associated aura::Window.
   aura::Window* FindTopmostLocalProcessWindowAt(int screen_x, int screen_y) {
     ui::X11TopmostWindowFinder finder;
-    auto widget =
-        finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y), {});
+    auto widget = static_cast<gfx::AcceleratedWidget>(
+        finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y), {}));
     return widget != gfx::kNullAcceleratedWidget
                ? DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
-                     static_cast<gfx::AcceleratedWidget>(widget))
+                     widget)
                : nullptr;
   }
 
@@ -180,10 +210,11 @@ class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
     ignore.insert(ignore_window->GetHost()->GetAcceleratedWidget());
     ui::X11TopmostWindowFinder finder;
     auto widget =
-        finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y), ignore);
+        static_cast<gfx::AcceleratedWidget>(finder.FindLocalProcessWindowAt(
+            gfx::Point(screen_x, screen_y), ignore));
     return widget != gfx::kNullAcceleratedWidget
                ? DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
-                     static_cast<gfx::AcceleratedWidget>(widget))
+                     widget)
                : nullptr;
   }
 
@@ -198,14 +229,16 @@ TEST_F(X11TopmostWindowFinderTest, Basic) {
   std::unique_ptr<Widget> widget1(
       CreateAndShowWidget(gfx::Rect(100, 100, 200, 100)));
   aura::Window* window1 = widget1->GetNativeWindow();
-  x11::Window x11_window1 = window1->GetHost()->GetAcceleratedWidget();
+  x11::Window x11_window1 =
+      static_cast<x11::Window>(window1->GetHost()->GetAcceleratedWidget());
 
   x11::Window x11_window2 = CreateAndShowXWindow(gfx::Rect(200, 100, 100, 200));
 
   std::unique_ptr<Widget> widget3(
       CreateAndShowWidget(gfx::Rect(100, 190, 200, 110)));
   aura::Window* window3 = widget3->GetNativeWindow();
-  x11::Window x11_window3 = window3->GetHost()->GetAcceleratedWidget();
+  x11::Window x11_window3 =
+      static_cast<x11::Window>(window3->GetHost()->GetAcceleratedWidget());
 
   x11::Window windows[] = {x11_window1, x11_window2, x11_window3};
   StackingClientListWaiter waiter(windows, base::size(windows));
@@ -239,7 +272,7 @@ TEST_F(X11TopmostWindowFinderTest, Basic) {
   EXPECT_EQ(window1,
             FindTopmostLocalProcessWindowWithIgnore(150, 195, window3));
 
-  XDestroyWindow(xdisplay(), static_cast<uint32_t>(x11_window2));
+  connection()->DestroyWindow({x11_window2});
 }
 
 // Test that the minimized state is properly handled.
@@ -247,7 +280,8 @@ TEST_F(X11TopmostWindowFinderTest, Minimized) {
   std::unique_ptr<Widget> widget1(
       CreateAndShowWidget(gfx::Rect(100, 100, 100, 100)));
   aura::Window* window1 = widget1->GetNativeWindow();
-  x11::Window x11_window1 = window1->GetHost()->GetAcceleratedWidget();
+  x11::Window x11_window1 =
+      static_cast<x11::Window>(window1->GetHost()->GetAcceleratedWidget());
   x11::Window x11_window2 = CreateAndShowXWindow(gfx::Rect(300, 100, 100, 100));
 
   x11::Window windows[] = {x11_window1, x11_window2};
@@ -258,7 +292,7 @@ TEST_F(X11TopmostWindowFinderTest, Minimized) {
   EXPECT_EQ(x11_window1, FindTopmostXWindowAt(150, 150));
   {
     MinimizeWaiter minimize_waiter(x11_window1);
-    XIconifyWindow(xdisplay(), static_cast<uint32_t>(x11_window1), 0);
+    IconifyWindow(connection(), x11_window1);
     minimize_waiter.Wait();
   }
   EXPECT_NE(x11_window1, FindTopmostXWindowAt(150, 150));
@@ -269,13 +303,13 @@ TEST_F(X11TopmostWindowFinderTest, Minimized) {
   EXPECT_EQ(x11_window2, FindTopmostXWindowAt(350, 150));
   {
     MinimizeWaiter minimize_waiter(x11_window2);
-    XIconifyWindow(xdisplay(), static_cast<uint32_t>(x11_window2), 0);
+    IconifyWindow(connection(), x11_window2);
     minimize_waiter.Wait();
   }
   EXPECT_NE(x11_window1, FindTopmostXWindowAt(350, 150));
   EXPECT_NE(x11_window2, FindTopmostXWindowAt(350, 150));
 
-  XDestroyWindow(xdisplay(), static_cast<uint32_t>(x11_window2));
+  connection()->DestroyWindow({x11_window2});
 }
 
 // Test that non-rectangular windows are properly handled.
@@ -285,8 +319,8 @@ TEST_F(X11TopmostWindowFinderTest, NonRectangular) {
 
   std::unique_ptr<Widget> widget1(
       CreateAndShowWidget(gfx::Rect(100, 100, 100, 100)));
-  x11::Window window1 =
-      widget1->GetNativeWindow()->GetHost()->GetAcceleratedWidget();
+  x11::Window window1 = static_cast<x11::Window>(
+      widget1->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
   auto shape1 = std::make_unique<Widget::ShapeRects>();
   shape1->emplace_back(0, 10, 10, 90);
   shape1->emplace_back(10, 0, 90, 100);
@@ -296,10 +330,14 @@ TEST_F(X11TopmostWindowFinderTest, NonRectangular) {
   skregion2.op(SkIRect::MakeXYWH(0, 10, 10, 90), SkRegion::kUnion_Op);
   skregion2.op(SkIRect::MakeXYWH(10, 0, 90, 100), SkRegion::kUnion_Op);
   x11::Window window2 = CreateAndShowXWindow(gfx::Rect(300, 100, 100, 100));
-  gfx::XScopedPtr<REGION, gfx::XObjectDeleter<REGION, int, XDestroyRegion>>
-      region2(gfx::CreateRegionFromSkRegion(skregion2));
-  XShapeCombineRegion(xdisplay(), static_cast<uint32_t>(window2), ShapeBounding,
-                      0, 0, region2.get(), false);
+  auto region2 = gfx::CreateRegionFromSkRegion(skregion2);
+  x11::Connection::Get()->shape().Rectangles({
+      .operation = x11::Shape::So::Set,
+      .destination_kind = x11::Shape::Sk::Bounding,
+      .ordering = x11::ClipOrdering::YXBanded,
+      .destination_window = window2,
+      .rectangles = *region2,
+  });
   x11::Window windows[] = {window1, window2};
   StackingClientListWaiter stack_waiter(windows, base::size(windows));
   stack_waiter.Wait();
@@ -315,7 +353,7 @@ TEST_F(X11TopmostWindowFinderTest, NonRectangular) {
   EXPECT_NE(window1, FindTopmostXWindowAt(305, 105));
   EXPECT_NE(window2, FindTopmostXWindowAt(305, 105));
 
-  XDestroyWindow(xdisplay(), static_cast<uint32_t>(window2));
+  connection()->DestroyWindow({window2});
 }
 
 // Test that a window with an empty shape are properly handled.
@@ -325,8 +363,8 @@ TEST_F(X11TopmostWindowFinderTest, NonRectangularEmptyShape) {
 
   std::unique_ptr<Widget> widget1(
       CreateAndShowWidget(gfx::Rect(100, 100, 100, 100)));
-  x11::Window window1 =
-      widget1->GetNativeWindow()->GetHost()->GetAcceleratedWidget();
+  x11::Window window1 = static_cast<x11::Window>(
+      widget1->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
   auto shape1 = std::make_unique<Widget::ShapeRects>();
   shape1->emplace_back();
   // Widget takes ownership of |shape1|.
@@ -341,14 +379,20 @@ TEST_F(X11TopmostWindowFinderTest, NonRectangularEmptyShape) {
 }
 
 // Test that setting a Null shape removes the shape.
-TEST_F(X11TopmostWindowFinderTest, NonRectangularNullShape) {
+// crbug.com/955316: flaky on Linux
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_NonRectangularNullShape DISABLED_NonRectangularNullShape
+#else
+#define MAYBE_NonRectangularNullShape NonRectangularNullShape
+#endif
+TEST_F(X11TopmostWindowFinderTest, MAYBE_NonRectangularNullShape) {
   if (!ui::IsShapeExtensionAvailable())
     return;
 
   std::unique_ptr<Widget> widget1(
       CreateAndShowWidget(gfx::Rect(100, 100, 100, 100)));
-  x11::Window window1 =
-      widget1->GetNativeWindow()->GetHost()->GetAcceleratedWidget();
+  x11::Window window1 = static_cast<x11::Window>(
+      widget1->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
   auto shape1 = std::make_unique<Widget::ShapeRects>();
   shape1->emplace_back();
   widget1->SetShape(std::move(shape1));
@@ -366,23 +410,25 @@ TEST_F(X11TopmostWindowFinderTest, NonRectangularNullShape) {
 
 // Test that the TopmostWindowFinder finds windows which belong to menus
 // (which may or may not belong to Chrome).
-TEST_F(X11TopmostWindowFinderTest, Menu) {
+//
+// Flakes (https://crbug.com/955316)
+TEST_F(X11TopmostWindowFinderTest, DISABLED_Menu) {
   x11::Window window = CreateAndShowXWindow(gfx::Rect(100, 100, 100, 100));
 
   x11::Window root = ui::GetX11RootWindow();
-  XSetWindowAttributes swa;
-  swa.override_redirect = x11::True;
-  x11::Window menu_window = static_cast<x11::Window>(XCreateWindow(
-      xdisplay(), static_cast<uint32_t>(root), 0, 0, 1, 1,
-      0,                                                   // border width
-      static_cast<int>(x11::WindowClass::CopyFromParent),  // depth
-      static_cast<int>(x11::WindowClass::InputOutput),
-      nullptr,  // visual
-      CWOverrideRedirect, &swa));
-  {
-    ui::SetAtomProperty(menu_window, "_NET_WM_WINDOW_TYPE", "ATOM",
-                        gfx::GetAtom("_NET_WM_WINDOW_TYPE_MENU"));
-  }
+  auto menu_window = connection()->GenerateId<x11::Window>();
+  connection()->CreateWindow({
+      .wid = menu_window,
+      .parent = root,
+      .width = 1,
+      .height = 1,
+      .c_class = x11::WindowClass::CopyFromParent,
+      .override_redirect = x11::Bool32(true),
+  });
+
+  ui::SetAtomProperty(menu_window, "_NET_WM_WINDOW_TYPE", "ATOM",
+                      gfx::GetAtom("_NET_WM_WINDOW_TYPE_MENU"));
+
   ui::SetUseOSWindowFrame(menu_window, false);
   ShowAndSetXWindowBounds(menu_window, gfx::Rect(140, 110, 100, 100));
   ui::X11EventSource::GetInstance()->DispatchXEvents();
@@ -396,8 +442,8 @@ TEST_F(X11TopmostWindowFinderTest, Menu) {
   EXPECT_EQ(menu_window, FindTopmostXWindowAt(150, 120));
   EXPECT_EQ(menu_window, FindTopmostXWindowAt(210, 120));
 
-  XDestroyWindow(xdisplay(), static_cast<uint32_t>(window));
-  XDestroyWindow(xdisplay(), static_cast<uint32_t>(menu_window));
+  connection()->DestroyWindow({window});
+  connection()->DestroyWindow({menu_window});
 }
 
 }  // namespace views

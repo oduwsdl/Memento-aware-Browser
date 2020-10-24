@@ -106,6 +106,12 @@ class MESSAGE_CENTER_PUBLIC_EXPORT RichNotificationData {
   // notification. Optional.
   gfx::Image small_image;
 
+#if defined(OS_CHROMEOS)
+  // If true, we simply use the raw |small_image| icon, ignoring accent color
+  // styling. For example, this is used with raw icons received from Android.
+  bool ignore_accent_color_for_small_image = false;
+#endif  // defined(OS_CHROMEOS)
+
   // Vector version of |small_image|.
   // Used by Notification::GenerateMaskedSmallIcon.
   // If not available, |small_image| will be used by the method. Optional.
@@ -168,7 +174,7 @@ class MESSAGE_CENTER_PUBLIC_EXPORT RichNotificationData {
   // Usually, it should not be set directly.
   // For system notification, ash::CreateSystemNotification with
   // SystemNotificationWarningLevel should be used.
-  SkColor accent_color = SK_ColorTRANSPARENT;
+  base::Optional<SkColor> accent_color;
 
   // Controls whether a settings button should appear on the notification. See
   // enum definition. TODO(estade): turn this into a boolean. See
@@ -393,7 +399,9 @@ class MESSAGE_CENTER_PUBLIC_EXPORT Notification {
     return optional_fields_.accessible_name;
   }
 
-  SkColor accent_color() const { return optional_fields_.accent_color; }
+  base::Optional<SkColor> accent_color() const {
+    return optional_fields_.accent_color;
+  }
   void set_accent_color(SkColor accent_color) {
     optional_fields_.accent_color = accent_color;
   }

@@ -29,7 +29,7 @@
 #include "ui/wm/core/default_activation_client.h"
 #include "ui/wm/core/default_screen_position_client.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "ui/platform_window/common/platform_window_defaults.h"  // nogncheck
 #endif
 
@@ -40,6 +40,14 @@
 
 #if defined(USE_X11)
 #include "ui/base/x/x11_util.h"  // nogncheck
+#endif
+
+#if defined(USE_OZONE)
+#include "ui/events/ozone/events_ozone.h"
+#endif
+
+#if defined(OS_FUCHSIA)
+#include "ui/platform_window/platform_window_init_properties.h"
 #endif
 
 namespace aura {
@@ -55,8 +63,16 @@ AuraTestHelper::AuraTestHelper(ui::ContextFactory* context_factory,
   DCHECK(!g_instance);
   g_instance = this;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   ui::test::EnableTestConfigForPlatformWindows();
+#endif
+
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+  ui::DisableNativeUiEventDispatchForTest();
+#endif
+
+#if defined(OS_FUCHSIA)
+  ui::PlatformWindowInitProperties::allow_null_view_token_for_test = true;
 #endif
 
   ui::InitializeInputMethodForTesting();

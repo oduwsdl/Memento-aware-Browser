@@ -143,6 +143,8 @@ void ViewAndroid::AddChild(ViewAndroid* child) {
   if (!physical_size_.IsEmpty())
     child->OnPhysicalBackingSizeChanged(physical_size_);
 
+  child->OnControlsResizeViewChanged(controls_resize_view_);
+
   // Empty view size also need not propagating down in order to prevent
   // spurious events with empty size from being sent down.
   if (child->match_parent() && !bounds_.IsEmpty() &&
@@ -464,6 +466,16 @@ void ViewAndroid::OnBrowserControlsHeightChanged() {
   }
 }
 
+void ViewAndroid::OnVerticalScrollDirectionChanged(bool direction_up,
+                                                   float current_scroll_ratio) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ViewAndroidDelegate_onVerticalScrollDirectionChanged(
+      env, delegate, direction_up, current_scroll_ratio);
+}
+
 void ViewAndroid::OnSizeChanged(int width, int height) {
   // Match-parent view must not receive size events.
   DCHECK(!match_parent());
@@ -499,15 +511,32 @@ void ViewAndroid::DispatchOnSizeChanged() {
   }
 }
 
-void ViewAndroid::OnPhysicalBackingSizeChanged(const gfx::Size& size) {
+void ViewAndroid::OnPhysicalBackingSizeChanged(
+    const gfx::Size& size,
+    base::Optional<base::TimeDelta> deadline_override) {
   if (physical_size_ == size)
     return;
   physical_size_ = size;
   if (event_handler_)
-    event_handler_->OnPhysicalBackingSizeChanged();
+    event_handler_->OnPhysicalBackingSizeChanged(deadline_override);
 
   for (auto* child : children_)
-    child->OnPhysicalBackingSizeChanged(size);
+    child->OnPhysicalBackingSizeChanged(size, deadline_override);
+}
+
+void ViewAndroid::OnControlsResizeViewChanged(bool controls_resize_view) {
+  if (controls_resize_view == controls_resize_view_)
+    return;
+  controls_resize_view_ = controls_resize_view;
+  if (event_handler_)
+    event_handler_->OnControlsResizeViewChanged();
+
+  for (auto* child : children_)
+    child->OnControlsResizeViewChanged(controls_resize_view);
+}
+
+bool ViewAndroid::ControlsResizeView() {
+  return controls_resize_view_;
 }
 
 gfx::Size ViewAndroid::GetPhysicalBackingSize() const {

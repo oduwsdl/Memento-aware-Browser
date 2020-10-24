@@ -432,78 +432,6 @@ TEST_F(FocusManagerTest, SuspendAccelerators) {
   EXPECT_EQ(1, target.accelerator_count());
 }
 
-class FocusManagerDtorTest : public FocusManagerTest {
- protected:
-  using DtorTrackVector = std::vector<std::string>;
-
-  class FocusManagerDtorTracked : public FocusManager {
-   public:
-    FocusManagerDtorTracked(Widget* widget, DtorTrackVector* dtor_tracker)
-        : FocusManager(widget, nullptr /* delegate */),
-          dtor_tracker_(dtor_tracker) {}
-
-    FocusManagerDtorTracked(const FocusManagerDtorTracked&) = delete;
-    FocusManagerDtorTracked& operator=(const FocusManagerDtorTracked&) = delete;
-
-    ~FocusManagerDtorTracked() override {
-      dtor_tracker_->push_back("FocusManagerDtorTracked");
-    }
-
-    DtorTrackVector* dtor_tracker_;
-  };
-
-  class TestFocusManagerFactory : public FocusManagerFactory {
-   public:
-    explicit TestFocusManagerFactory(DtorTrackVector* dtor_tracker)
-        : dtor_tracker_(dtor_tracker) {}
-    TestFocusManagerFactory(const TestFocusManagerFactory&) = delete;
-    TestFocusManagerFactory& operator=(const TestFocusManagerFactory&) = delete;
-    ~TestFocusManagerFactory() override = default;
-
-    std::unique_ptr<FocusManager> CreateFocusManager(Widget* widget) override {
-      return std::make_unique<FocusManagerDtorTracked>(widget, dtor_tracker_);
-    }
-
-   private:
-    DtorTrackVector* dtor_tracker_;
-  };
-
-  class WindowDtorTracked : public Widget {
-   public:
-    explicit WindowDtorTracked(DtorTrackVector* dtor_tracker)
-        : dtor_tracker_(dtor_tracker) {}
-
-    ~WindowDtorTracked() override {
-      dtor_tracker_->push_back("WindowDtorTracked");
-    }
-
-    DtorTrackVector* dtor_tracker_;
-  };
-
-  void SetUp() override {
-    ViewsTestBase::SetUp();
-    FocusManagerFactory::Install(new TestFocusManagerFactory(&dtor_tracker_));
-    // Create WindowDtorTracked that uses FocusManagerDtorTracked.
-    Widget* widget = new WindowDtorTracked(&dtor_tracker_);
-    Widget::InitParams params;
-    params.delegate = this;
-    params.bounds = gfx::Rect(0, 0, 100, 100);
-    widget->Init(std::move(params));
-
-    tracked_focus_manager_ =
-        static_cast<FocusManagerDtorTracked*>(GetFocusManager());
-    widget->Show();
-  }
-
-  void TearDown() override {
-    FocusManagerFactory::Install(nullptr);
-    ViewsTestBase::TearDown();
-  }
-
-  FocusManager* tracked_focus_manager_;
-  DtorTrackVector dtor_tracker_;
-};
-
 namespace {
 
 class FocusInAboutToRequestFocusFromTabTraversalView : public View {
@@ -781,7 +709,7 @@ TEST_F(FocusManagerTest, StoreFocusedView) {
   GetFocusManager()->ClearFocus();
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Test that the correct view is restored if full keyboard access is changed.
 TEST_F(FocusManagerTest, StoreFocusedViewFullKeyboardAccess) {
   View* view1 = new View;
@@ -1192,40 +1120,6 @@ TEST_F(DesktopWidgetFocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
 }
 #endif
 
-// Ensures graceful failure if there is a focus cycle.
-TEST_F(FocusManagerTest, HandlesFocusCycles) {
-  // Create two side-by-side views.
-  View* root_view = GetWidget()->GetRootView();
-  View* left = root_view->AddChildView(std::make_unique<View>());
-  View* right = root_view->AddChildView(std::make_unique<View>());
-
-  // Create a cycle where the left view is focusable and the right isn't.
-  left->SetFocusBehavior(View::FocusBehavior::ALWAYS);
-  right->SetFocusBehavior(View::FocusBehavior::NEVER);
-  left->SetNextFocusableView(right);
-  right->SetNextFocusableView(left);
-
-  // Set focus on the left view then make it unfocusable, which both advances
-  // focus and ensures there's no candidate for focusing.
-  left->RequestFocus();
-  EXPECT_TRUE(left->HasFocus());
-  left->SetFocusBehavior(View::FocusBehavior::NEVER);
-
-  // At this point, we didn't crash. Just as a sanity check, ensure neither of
-  // our views were incorrectly focused.
-  EXPECT_FALSE(left->HasFocus());
-  EXPECT_FALSE(right->HasFocus());
-
-  // Now test focusing in reverse.
-  GetFocusManager()->SetFocusedView(right);
-  EXPECT_TRUE(right->HasFocus());
-  GetFocusManager()->AdvanceFocus(true);
-
-  // We don't check whether |right| has focus since if no focusable view is
-  // found, AdvanceFocus() doesn't clear focus.
-  EXPECT_FALSE(left->HasFocus());
-}
-
 #if defined(USE_AURA)
 class RedirectToParentFocusManagerTest : public FocusManagerTest {
  public:
@@ -1244,9 +1138,8 @@ class RedirectToParentFocusManagerTest : public FocusManagerTest {
         GetWidget()->GetRootView()->AddChildView(std::make_unique<View>());
     anchor->SetFocusBehavior(View::FocusBehavior::ALWAYS);
 
-    BubbleDialogDelegateView* bubble_delegate =
-        TestBubbleDialogDelegateView::CreateAndShowBubble(anchor);
-    Widget* bubble_widget = bubble_delegate->GetWidget();
+    bubble_ = TestBubbleDialogDelegateView::CreateAndShowBubble(anchor);
+    Widget* bubble_widget = bubble_->GetWidget();
 
     parent_focus_manager_ = anchor->GetFocusManager();
     bubble_focus_manager_ = bubble_widget->GetFocusManager();
@@ -1258,8 +1151,10 @@ class RedirectToParentFocusManagerTest : public FocusManagerTest {
   }
 
  protected:
-  FocusManager* parent_focus_manager_;
-  FocusManager* bubble_focus_manager_;
+  FocusManager* parent_focus_manager_ = nullptr;
+  FocusManager* bubble_focus_manager_ = nullptr;
+
+  BubbleDialogDelegateView* bubble_ = nullptr;
 };
 
 // Test that when an accelerator is sent to a bubble that isn't registered,
@@ -1267,6 +1162,7 @@ class RedirectToParentFocusManagerTest : public FocusManagerTest {
 TEST_F(RedirectToParentFocusManagerTest, ParentHandlesAcceleratorFromBubble) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
   ui::TestAcceleratorTarget parent_return_target(true);
+  Widget* bubble_widget = bubble_->GetWidget();
 
   EXPECT_EQ(0, parent_return_target.accelerator_count());
   parent_focus_manager_->RegisterAccelerator(
@@ -1275,9 +1171,23 @@ TEST_F(RedirectToParentFocusManagerTest, ParentHandlesAcceleratorFromBubble) {
 
   EXPECT_TRUE(
       !bubble_focus_manager_->IsAcceleratorRegistered(return_accelerator));
-  // Accelerator was proccesed by the parent.
+
+  // The bubble should be closed after parent processed accelerator only if
+  // close_on_deactivate is true.
+  bubble_->set_close_on_deactivate(false);
+  // Accelerator was processed by the parent.
   EXPECT_TRUE(bubble_focus_manager_->ProcessAccelerator(return_accelerator));
   EXPECT_EQ(parent_return_target.accelerator_count(), 1);
+  EXPECT_FALSE(bubble_widget->IsClosed());
+
+  // Reset focus to the bubble widget. Focus was set to the the main widget
+  // to process accelerator.
+  bubble_focus_manager_->SetFocusedView(bubble_widget->GetRootView());
+
+  bubble_->set_close_on_deactivate(true);
+  EXPECT_TRUE(bubble_focus_manager_->ProcessAccelerator(return_accelerator));
+  EXPECT_EQ(parent_return_target.accelerator_count(), 2);
+  EXPECT_TRUE(bubble_widget->IsClosed());
 }
 
 // Test that when an accelerator is sent to a bubble that is registered on both
@@ -1286,6 +1196,7 @@ TEST_F(RedirectToParentFocusManagerTest, BubbleHandlesRegisteredAccelerators) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
   ui::TestAcceleratorTarget parent_return_target(true);
   ui::TestAcceleratorTarget bubble_return_target(true);
+  Widget* bubble_widget = bubble_->GetWidget();
 
   EXPECT_EQ(0, bubble_return_target.accelerator_count());
   EXPECT_EQ(0, parent_return_target.accelerator_count());
@@ -1297,10 +1208,32 @@ TEST_F(RedirectToParentFocusManagerTest, BubbleHandlesRegisteredAccelerators) {
       return_accelerator, ui::AcceleratorManager::kNormalPriority,
       &parent_return_target);
 
-  // Accelerator was proccesed by the bubble and not by the parent.
+  // The bubble shouldn't be closed after it processed accelerator without
+  // passing it to the parent.
+  bubble_->set_close_on_deactivate(true);
+  // Accelerator was processed by the bubble and not by the parent.
   EXPECT_TRUE(bubble_focus_manager_->ProcessAccelerator(return_accelerator));
   EXPECT_EQ(1, bubble_return_target.accelerator_count());
   EXPECT_EQ(0, parent_return_target.accelerator_count());
+  EXPECT_FALSE(bubble_widget->IsClosed());
+}
+
+// Test that when an accelerator is sent to a bubble that isn't registered
+// for either the bubble or the bubble's parent, the bubble isn't closed.
+TEST_F(RedirectToParentFocusManagerTest, NotProcessedAccelerator) {
+  ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
+  Widget* bubble_widget = bubble_->GetWidget();
+
+  EXPECT_TRUE(
+      !bubble_focus_manager_->IsAcceleratorRegistered(return_accelerator));
+  EXPECT_TRUE(
+      !parent_focus_manager_->IsAcceleratorRegistered(return_accelerator));
+
+  // The bubble shouldn't be closed if the accelerator was passed to the parent
+  // but the parent didn't process it.
+  bubble_->set_close_on_deactivate(true);
+  EXPECT_FALSE(bubble_focus_manager_->ProcessAccelerator(return_accelerator));
+  EXPECT_FALSE(bubble_widget->IsClosed());
 }
 
 #endif

@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Japansk indtastning (på amerikansk tastatur)</translation>
 <translation id="1047956942837015229">Sletter <ph name="COUNT" /> elementer...</translation>
 <translation id="1049926623896334335">Word-dokument</translation>
+<translation id="1060368002126861100">Hvis du vil åbne filer med <ph name="APP_NAME" />, skal du først flytte dem til mappen med Windows-filer.</translation>
 <translation id="1062407476771304334">Erstat</translation>
 <translation id="1065449928621190041">Canadisk (fransk) tastatur</translation>
 <translation id="1119069657431255176">Bzip2-komprimeret tar-arkiv</translation>
@@ -20,6 +21,7 @@
 <translation id="1150565364351027703">Solbriller</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalansk</translation>
+<translation id="1172970565351728681">Cirka <ph name="REMAINING_TIME" /> tilbage</translation>
 <translation id="1173894706177603556">Omdøb</translation>
 <translation id="117624967391683467">Kopierer <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Pause</translation>
@@ -28,6 +30,7 @@
 <translation id="1208421848177517699">Translitteration (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">Upload</translation>
 <translation id="1249250836236328755">Genre</translation>
+<translation id="1276362640455948667">Portugisisk med amerikansk internationalt tastatur</translation>
 <translation id="1278813325885878377">Ungarsk QWERTY-tastatur</translation>
 <translation id="1293556467332435079">Filer</translation>
 <translation id="1297922636971898492">Google Drev er ikke tilgængeligt lige nu. Uploadet genstarter automatisk, når Google Drev er tilgængeligt igen.</translation>
@@ -45,6 +48,7 @@
 <translation id="1395262318152388157">Søgeskyder</translation>
 <translation id="1399648040768741453">Telugu-tastarur (fonetisk)</translation>
 <translation id="1430915738399379752">Udskriv</translation>
+<translation id="1435838927755162558">Del mappe med Parallels Desktop</translation>
 <translation id="1439494416798956626">Flyttet til <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Vietnamesisk tastatur (Telex)</translation>
 <translation id="1455548678241328678">Norsk tastatur</translation>
@@ -56,9 +60,11 @@
 <translation id="1538729222189715449">Åbner Linux-filer...</translation>
 <translation id="1547964879613821194">Canadisk (engelsk)</translation>
 <translation id="1556189134700913550">Anvend på alle</translation>
+<translation id="1561842594491319104">Chrome-enheder</translation>
 <translation id="1572585716423026576">Angiv som baggrund</translation>
 <translation id="158809615184981282">Færøsk tastatur</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">Kamera</translation>
 <translation id="1646136617204068573">Ungarsk tastatur</translation>
 <translation id="164729547906544836">Tamilsk tastatur (itrans)</translation>
 <translation id="164969095109328410">Chrome-enhed</translation>
@@ -66,6 +72,7 @@
 <translation id="1673103856845176271">Der kunne ikke opnås adgang til filen af sikkerhedsmæssige årsager.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434">Komprimerer <ph name="NUMBER_OF_ITEMS" /> elementer...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> elementer blev kopieret.</translation>
 <translation id="174173592514158117">Vis alle Play-mapper</translation>
 <translation id="174937106936716857">Samlet antal filer</translation>
 <translation id="1775381402323441512">Videooplysninger</translation>
@@ -79,6 +86,7 @@
 <translation id="1844692022597038441">Denne fil er ikke tilgængelig offline.</translation>
 <translation id="184633654410729720">Thailandsk tastatur (Kedmanee)</translation>
 <translation id="1847880352285315359">Gemt</translation>
+<translation id="1853795129690976061">Denne mappe deles med Linux</translation>
 <translation id="1864756863218646478">Filen blev ikke fundet.</translation>
 <translation id="1921986354447415460">Tyrkisk F-tastatur</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> er formateret</translation>
@@ -102,7 +110,6 @@
 <translation id="2085470240340828803">Der findes allerede en fil med navnet "<ph name="FILENAME" />". Hvad vil du foretage dig?</translation>
 <translation id="2121825465123208577">Tilpas størrelse</translation>
 <translation id="2136953289241069843">Translitteration (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" kan ikke åbnes: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Ugyldigt tegn: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnamesisk tastatur (TCVN)</translation>
 <translation id="2168214441502403371">Persisk tastatur</translation>
@@ -110,7 +117,9 @@
 <translation id="2208158072373999562">Zip-arkiv</translation>
 <translation id="2225536596944493418">Er du sikker på, at du vil slette <ph name="NUMBER_OF_ITEMS" /> elementer?</translation>
 <translation id="2230062665678605299">Mappen "<ph name="FOLDER_NAME" />" kunne ikke oprettes. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">Blev flyttet.</translation>
 <translation id="2278988676849463018">Kannada-tastatur (fonetisk)</translation>
+<translation id="2287742181953707290">Portugisisk med amerikansk internationalt computertastatur</translation>
 <translation id="2288278176040912387">Pladespiller</translation>
 <translation id="2291538123825441971">Åbner <ph name="NUMBER_OF_FILES" /> filer.</translation>
 <translation id="2303301624314357662">Åbner filen <ph name="FILE_NAME" />.</translation>
@@ -133,6 +142,7 @@
 <translation id="2494837236724268445">Gujarati-tastatur (fonetisk)</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2529133382850673012">Amerikansk tastatur</translation>
+<translation id="2534155362429831547"><ph name="NUMBER_OF_ITEMS" /> elementer blev slettet</translation>
 <translation id="2542049655219295786">Google-tabel</translation>
 <translation id="2547921442987553570">Føj til <ph name="EXTENSION_NAME" /></translation>
 <translation id="255937426064304553">Amerikansk (internationalt)</translation>
@@ -165,7 +175,6 @@
 <translation id="2924296707677495905">Translitteration (namaskaram → ನಮಸ್ಕಾರ)</translation>
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">Mongolsk</translation>
-<translation id="2939410873710774399">Hvis du vil åbne filer med <ph name="APP_NAME" /> (<ph name="VM_SOFTWARE_NAME" />), skal du først flytte dem til mappen <ph name="FOLDER_NAME" />.</translation>
 <translation id="2942290791863759244">Tysk NEO 2-tastatur</translation>
 <translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">Brug et kortere navn</translation>
@@ -180,8 +189,9 @@
 <translation id="303198083543495566">Geografi</translation>
 <translation id="3057861065630527966">Sikkerhedskopiér dine billeder og videoer</translation>
 <translation id="3064388234319122767">Translitteration (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows-filer</translation>
 <translation id="3078461028045006476">Del med <ph name="EXTENSION_NAME" /></translation>
-<translation id="3088034400796962477">Translitteration (salam ← سلام)</translation>
+<translation id="3083975830683400843">Chromebits</translation>
 <translation id="3116361045094675131">Britisk tastatur</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">UDFØR</translation>
@@ -194,9 +204,11 @@
 <translation id="3236289833370040187">Ejerskabet overføres til <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">Irsk</translation>
 <translation id="3245321423178950146">Ukendt kunstner</translation>
+<translation id="3248185426436836442">Afventer</translation>
 <translation id="3252266817569339921">Fransk</translation>
 <translation id="3254434849914415189">Vælg standardappen for <ph name="FILE_TYPE" />-filer:</translation>
 <translation id="3264582393905923483">Kontekst</translation>
+<translation id="3272909651715601089">"<ph name="PATH" />" kunne ikke åbnes</translation>
 <translation id="3280431534455935878">Forbereder</translation>
 <translation id="3280987981688031357">Vinylplade</translation>
 <translation id="3296763833017966289">Georgisk</translation>
@@ -204,6 +216,7 @@
 <translation id="3335337277364016868">År, det blev optaget</translation>
 <translation id="3338239663705455570">Slovensk tastatur</translation>
 <translation id="3353984535370177728">Vælg en mappe, der skal uploades</translation>
+<translation id="3356580349448036450">Fuldført</translation>
 <translation id="3399597614303179694">Makedonsk tastatur</translation>
 <translation id="3414856743105198592">Formatering af de flytbare medier kommer til at slette alle data. Vil du fortsætte?</translation>
 <translation id="3437801641691368414">Oprettelsestidspunkt</translation>
@@ -213,11 +226,13 @@
 <translation id="3473378059788601120">Kopieret til <ph name="FOLDER_NAME" />.</translation>
 <translation id="3475447146579922140">Google-regneark</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> fejl.</translation>
+<translation id="349603508045926994">Persisk translitteration</translation>
 <translation id="3519867315646775981">Translitteration (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugisisk</translation>
 <translation id="3524311639100184459">Advarsel! Disse filer er midlertidige og kan slettes automatisk for at frigøre diskplads.  <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Mappe</translation>
 <translation id="3549797760399244642">Gå til drive.google.com...</translation>
+<translation id="3553048479571901246">Hvis du vil åbne filer med <ph name="APP_NAME" />, skal du først kopiere dem til mappen med Windows-filer.</translation>
 <translation id="357479282490346887">Litauisk</translation>
 <translation id="3583509704582854624">Alfanumerisk indtastning (på japansk tastatur)</translation>
 <translation id="3603385196401704894">Fransk (Canada)</translation>
@@ -228,6 +243,7 @@
 <translation id="3620292326130836921">Alt er sikkerhedskopieret.</translation>
 <translation id="3626281679859535460">Lysstyrke</translation>
 <translation id="3644896802912593514">Bredde</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> elementer blev flyttet.</translation>
 <translation id="3645531960514756307">Frigør mappe</translation>
 <translation id="3678559383040232393">Maltesisk tastatur</translation>
 <translation id="3685122418104378273">Synkronisering af Google Drev er som standard deaktiveret, når du bruger mobildata.</translation>
@@ -238,6 +254,7 @@
 <translation id="3780536599611287598">Du har ikke tilladelse til at flytte filer til "<ph name="FOLDER_NAME" />".</translation>
 <translation id="3786301125658655746">Du er offline</translation>
 <translation id="3789841737615482174">Installer</translation>
+<translation id="3793469551756281394">Cirka <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> tilbage</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3801082500826908679">Færøsk</translation>
 <translation id="3809272675881623365">Kanin</translation>
@@ -251,7 +268,6 @@
 <translation id="383652340667548381">Serbisk</translation>
 <translation id="385051799172605136">Tilbage</translation>
 <translation id="3855472144336161447">Tysk (Neo 2)</translation>
-<translation id="3856075812838139784">Skrivebeskyttet</translation>
 <translation id="3858678421048828670">Italiensk tastatur</translation>
 <translation id="386548886866354912">Pak sammen med <ph name="EXTENSION_NAME" /></translation>
 <translation id="3866249974567520381">Beskrivelse</translation>
@@ -262,11 +278,13 @@
 <translation id="3943857333388298514">Indsæt</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Audio Player</translation>
+<translation id="3984317463833596033">Giv Parallels Desktop tilladelse til at ændre filer i mappen <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4070370845051020638">Kantonesisk indtastningsmetode</translation>
 <translation id="4072248638558688893">Tamilsk tastatur (fonetisk)</translation>
 <translation id="4124935795427217608">Enhjørning</translation>
 <translation id="4158739975813877944">Åbn playlisten</translation>
+<translation id="4159731583141908892"><ph name="FILE_NAME" /> blev flyttet.</translation>
 <translation id="418179967336296930">Russisk fonetisk (YaZHert) tastatur</translation>
 <translation id="4193154014135846272">Google-dokument</translation>
 <translation id="4195249722193633765">Installer appen med Linux (beta)</translation>
@@ -280,6 +298,7 @@
 <translation id="4298972503445160211">Dansk tastatur</translation>
 <translation id="4299729908419173967">Brasiliansk</translation>
 <translation id="4309915981827077375">Generelle oplysninger</translation>
+<translation id="4315949787858895817">Hollandsk (Belgien)</translation>
 <translation id="4326192123064055915">Kaffe</translation>
 <translation id="4336032328163998280">Kopieringen mislykkedes. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Melon</translation>
@@ -290,8 +309,8 @@
 <translation id="4470564870223067757">Hangul 2-sæt</translation>
 <translation id="4477219268485577442">Bulgarsk (fonetisk)</translation>
 <translation id="4479812471636796472">Amerikansk (Dvorak) tastatur</translation>
-<translation id="4487088045714738411">Belgisk tastatur</translation>
 <translation id="4522570452068850558">Detaljer</translation>
+<translation id="4527800702232535228">Denne mappe er delt med Parallels Desktop</translation>
 <translation id="4552678318981539154">Køb mere lagerplads</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" />-fil</translation>
@@ -300,6 +319,7 @@
 <translation id="4582497162516204941">Installer med Linux (beta)</translation>
 <translation id="4594543368593301662">Viser resultater for <ph name="SEARCH_TERM" />.</translation>
 <translation id="4603392156942865207">Kopierer <ph name="FILE_NAME" /> til <ph name="FOLDER_NAME" /></translation>
+<translation id="4627439232948440198">Sanskrit</translation>
 <translation id="4631887759990505102">Kunstner</translation>
 <translation id="4656293982926141856">Denne computer</translation>
 <translation id="4669606053856530811">Medlemmer af "<ph name="SOURCE_NAME" />" mister adgang, medmindre disse elementer deles med dem.</translation>
@@ -308,6 +328,7 @@
 <translation id="4694604912444486114">Abe</translation>
 <translation id="4697043402264950621">Listen med filer er sorteret efter <ph name="COLUMN_NAME" /> i stigende rækkefølge.</translation>
 <translation id="4711094779914110278">Tyrkisk</translation>
+<translation id="4712283082407695269">Åbner "<ph name="PATH" />"</translation>
 <translation id="4713544552769165154">Denne fil er designet til en computer, der bruger Macintosh-software. Den er ikke kompatibel med din enhed, som kører Chrome OS. Find en tilsvarende app i <ph name="BEGIN_LINK" />Chrome Webshop<ph name="END_LINK" /> i stedet.<ph name="BEGIN_LINK_HELP" />Få flere oplysninger<ph name="END_LINK_HELP" /></translation>
 <translation id="4724850507808590449"><ph name="FILE_COUNT" /> billeder blev sikkerhedskopieret</translation>
 <translation id="4725511304875193254">Corgi</translation>
@@ -325,20 +346,22 @@
 <translation id="4804827417948292437">Avocado</translation>
 <translation id="4823651846660089135">Enheden er skrivebeskyttet</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> elementer valgt</translation>
+<translation id="4843566743023903107">Chromebases</translation>
+<translation id="4849981557599196363">Tysk (Belgien)</translation>
 <translation id="4850886885716139402">Vis</translation>
 <translation id="485316830061041779">Tysk</translation>
-<translation id="4859297381873413734">Hvis du vil åbne filer med <ph name="APP_NAME" /> (<ph name="VM_SOFTWARE_NAME" />), skal du først flytte dem til mappen <ph name="FOLDER_NAME" />.</translation>
 <translation id="4867079195717347957">Klik for at sortere kolonnen i faldende rækkefølge.</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> bytes</translation>
 <translation id="4880214202172289027">Skydeknap til lydstyrke</translation>
 <translation id="4880520557730313061">Automatisk justering</translation>
 <translation id="4881695831933465202">Åbn</translation>
 <translation id="4886021172213954916">Tamilsk tastatur (skrivemaskine)</translation>
-<translation id="4892969127351273348">Det er ikke muligt at åbne filen med <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Del med Parallels Desktop</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> er klar til at blive sikkerhedskopieret</translation>
 <translation id="4924638091161556692">Justeret</translation>
 <translation id="4935975195727477204">Blomst</translation>
 <translation id="4943368462779413526">Amerikansk fodbold</translation>
+<translation id="4961158930123534723">1 mappe blev delt med Parallels Desktop</translation>
 <translation id="4969785127455456148">Album</translation>
 <translation id="497244430928947428">Malayalam-tastatur (fonetisk)</translation>
 <translation id="4973523518332075481">Brug et navn med højst <ph name="MAX_LENGTH" /> tegn</translation>
@@ -350,6 +373,8 @@
 <translation id="5010406651457630570">Computere</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">En handling tager længere tid end forventet. Vil du afbryde den?</translation>
+<translation id="5026887030745057099">Hindi</translation>
+<translation id="5036159836254554629">Administrer deling med Parallels Desktop</translation>
 <translation id="5038625366300922036">Få flere oplysninger...</translation>
 <translation id="5061708541166515394">Kontrast</translation>
 <translation id="5068919226082848014">Pizza</translation>
@@ -359,6 +384,7 @@
 <translation id="5098629044894065541">Hebræisk</translation>
 <translation id="5123433949759960244">Basketball</translation>
 <translation id="5129662217315786329">Polsk</translation>
+<translation id="5132435854979302863">Filippinsk</translation>
 <translation id="5144820558584035333">Hangul 3-sæt (390)</translation>
 <translation id="5145331109270917438">Dato for ændring</translation>
 <translation id="515594325917491223">Skak</translation>
@@ -383,7 +409,9 @@
         Uanset hvad der sker på din enhed, er dine filer gemt sikkert i Google Drev.<ph name="MARKUP_6" />
         <ph name="MARKUP_7" />Del, opret og samarbejd<ph name="MARKUP_8" />
         om filer med andre på ét sted.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">Blev kopieret.</translation>
 <translation id="5275973617553375938">Gendannede filer fra Google Drev</translation>
+<translation id="5283140566205748520">Fransk (Belgien)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">Gem</translation>
 <translation id="5318819489018851358">Del med Linux</translation>
@@ -400,16 +428,17 @@
 <translation id="5418923334382419584">Myanmarsk tastatur</translation>
 <translation id="5428105026674456456">Spansk</translation>
 <translation id="5438282218546237410">Der er ingen resultater for <ph name="SEARCH_TERM" />.</translation>
+<translation id="5449551289610225147">Ugyldig adgangskode</translation>
 <translation id="5464696796438641524">Polsk tastatur</translation>
 <translation id="5465122519792752163">Nepalesisk tastatur (InScript)</translation>
 <translation id="5469868506864199649">Italiensk</translation>
+<translation id="5484429245813572665">Indonesisk</translation>
 <translation id="5494920125229734069">Vælg alle</translation>
 <translation id="5500122897333236901">Islandsk</translation>
 <translation id="5508696409934741614">Prikker</translation>
 <translation id="5522908512596376669">Der blev skiftet til listevisning for listen med filer.</translation>
 <translation id="5524517123096967210">Filen kunne ikke læses.</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" />-billede</translation>
-<translation id="5533555070048896610">Translitteration (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">Beregner størrelse</translation>
 <translation id="5583640892426849032">Returtast</translation>
 <translation id="5605830556594064952">Amerikansk (Dvorak)</translation>
@@ -447,6 +476,7 @@
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5949281959820712067">Giv Linux-apps tilladelse til at ændre filer i Google Drev. Ændringer synkroniseres med dine andre enheder.</translation>
 <translation id="5955954492236143329"><ph name="NUMBER_OF_ITEMS" /> elementer</translation>
+<translation id="5957366693331451795">Chromeboxes</translation>
 <translation id="5982621672636444458">Sorteringsmuligheder</translation>
 <translation id="6005282720244019462">Latinamerikansk tastatur</translation>
 <translation id="6007237601604674381">Flytningen mislykkedes. <ph name="ERROR_MESSAGE" /></translation>
@@ -498,10 +528,13 @@
 <translation id="6558280019477628686">Der opstod en fejl. Nogle elementer blev muligvis ikke slettet.</translation>
 <translation id="656398493051028875">Slettter "<ph name="FILENAME" />"...</translation>
 <translation id="6581162200855843583">Link til Google Drev</translation>
+<translation id="6594855146910089723">Denne mappe er delt med Linux og Parallels Desktop</translation>
 <translation id="6607272825297743757">Filoplysninger</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> mapper blev delt med Parallels Desktop</translation>
 <translation id="6629841649550503054">Alt er sikkerhedskopieret til <ph name="BEGIN_LINK" />Google Drev<ph name="END_LINK" />.</translation>
 <translation id="6643016212128521049">Ryd</translation>
 <translation id="6650726141019353908">Lyserød sommerfugl</translation>
+<translation id="6657585470893396449">Adgangskode</translation>
 <translation id="6710213216561001401">Forrige</translation>
 <translation id="6718273304615422081">Komprimerer...</translation>
 <translation id="6751256176799620176">1 mappe er valgt</translation>
@@ -542,7 +575,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installationen mislykkedes.</translation>
 <translation id="7040138676081995583">Åbn med...</translation>
-<translation id="7059566040011178088">Mindre end <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elementer er markeret</translation>
 <translation id="7106346894903675391">Køb mere lagerplads...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" – &lt;em&gt;søg i Drev&lt;/em&gt;</translation>
@@ -569,7 +601,6 @@
 <translation id="7417705661718309329">Google-kort</translation>
 <translation id="7419631653042041064">Catalansk tastatur</translation>
 <translation id="7434823369735508263">Britisk (Dvorak) tastatur</translation>
-<translation id="7447678886297481665">Filer i denne mappe er skrivebeskyttet. Det er ikke alle aktiviteter, der understøttes.</translation>
 <translation id="7460898608667578234">ukrainsk</translation>
 <translation id="7474889694310679759">Canadisk (engelsk) tastatur</translation>
 <translation id="7489215562877293245">Der blev fundet <ph name="FILE_COUNT" />
@@ -580,6 +611,7 @@
 <translation id="751507702149411736">Hviderussisk</translation>
 <translation id="7544853251252956727">Bland</translation>
 <translation id="7547811415869834682">Hollandsk</translation>
+<translation id="7551643184018910560">Fastgør til hylde</translation>
 <translation id="7576032389798113292">6 x 4</translation>
 <translation id="7589661784326793847">Vent et øjeblik</translation>
 <translation id="7603724359189955920">Gitre</translation>
@@ -588,8 +620,10 @@
 <translation id="7649070708921625228">Hjælp</translation>
 <translation id="7654209398114106148">Flytter <ph name="NUMBER_OF_ITEMS" /> elementer...</translation>
 <translation id="7658239707568436148">Annuller</translation>
+<translation id="7693909743393669729">Formatering af et drev sletter alle de data, der er gemt på drevet, og fjerner alle eksisterende partitioner, herunder partitioner, der muligvis ikke er synlige. Denne handling kan ikke fortrydes.</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" /> kunne ikke formateres</translation>
 <translation id="770015031906360009">Græsk</translation>
+<translation id="7705251383879779343"><ph name="FILE_NAME" /> blev kopieret.</translation>
 <translation id="7706319470528945664">Portugisisk tastatur</translation>
 <translation id="7711920809702896782">Billedoplysninger</translation>
 <translation id="7724603315864178912">Klip</translation>
@@ -602,6 +636,7 @@
     <ph name="MARKUP_4" />slet filer fra mappen Downloads<ph name="MARKUP_5" /></translation>
 <translation id="7794058097940213561">Formater enhed</translation>
 <translation id="7799329977874311193">HTML-dokument</translation>
+<translation id="7801354353640549019">Chromebooks</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7821462174190887129">Der blev fundet <ph name="FILE_COUNT" />.
     <ph name="LINE_BREAK1" />
@@ -619,6 +654,7 @@
 <translation id="78946041517601018">Fællesdrev</translation>
 <translation id="7896906914454843592">Udvidet amerikansk tastatur</translation>
 <translation id="7898607018410277265">Gujarati-tastatur (nyt fonetisk)</translation>
+<translation id="7908793776359722643">Formatering af en partition sletter alle de data, der er gemt på den. Denne handling kan ikke fortrydes.</translation>
 <translation id="7917972308273378936">Litauisk tastatur</translation>
 <translation id="7925686952655276919">Brug ikke mobildata til synkronisering</translation>
 <translation id="7928710562641958568">Skub enheden ud</translation>
@@ -653,7 +689,6 @@
 <translation id="8193175696669055101">Enhedsmodel</translation>
 <translation id="8208580316430297579">Kunst</translation>
 <translation id="8223479393428528563">Hvis du vil gemme disse filer til offlinebrug, skal du gå online igen, højreklikke på filerne og vælge indstillingen <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Om <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Annuller</translation>
 <translation id="8261506727792406068">Slet</translation>
 <translation id="8269755669432358899">Skjul paneler med feedback til filer</translation>
@@ -664,7 +699,9 @@
 <translation id="8299269255470343364">Japansk</translation>
 <translation id="8312871300878166382">Indsæt i mappe</translation>
 <translation id="8329978297633540474">Almindelig tekst</translation>
+<translation id="8335587457941836791">Frigør fra hylden</translation>
 <translation id="8336153091935557858">I går <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">Nepalesisk translitteration</translation>
 <translation id="8336579025507394412">Islandsk tastatur</translation>
 <translation id="8342318071240498787">Der findes allerede en fil eller en mappe med samme navn.</translation>
 <translation id="8382450452152102026">I <ph name="FOLDER_NAME" /></translation>
@@ -680,6 +717,7 @@
 <translation id="8475647382427415476">Google Drev kunne ikke synkronisere "<ph name="FILENAME" />" på nuværende tidspunkt. Google Drev prøver igen senere.</translation>
 <translation id="8477649328507734757">Spin</translation>
 <translation id="8487700953926739672">Tilgængelig offline</translation>
+<translation id="8490342535582768689">Giv Parallels Desktop tilladelse til at ændre filer i Google Drev. Ændringer synkroniseres med dine andre enheder.</translation>
 <translation id="8521441079177373948">Britisk</translation>
 <translation id="8525306231823319788">Fuld skærm</translation>
 <translation id="8551494947769799688">Lettisk</translation>
@@ -689,12 +727,14 @@
 <translation id="8600173386174225982">Der blev skiftet til miniaturevisning for listen med filer.</translation>
 <translation id="8601932370724196034">Crostini-billedfil</translation>
 <translation id="8669949407341943408">Flytter…</translation>
+<translation id="8694836330346852143">Urdu</translation>
 <translation id="8698464937041809063">Google-tegning</translation>
 <translation id="8714406895390098252">Cykel</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> er valgt.</translation>
 <translation id="8722421161699219904">Internationalt amerikansk tastatur</translation>
 <translation id="872537912056138402">Kroatisk</translation>
 <translation id="874420130893181774">Traditionel Pinyin-indtastningsmetode</translation>
+<translation id="8770002329960263418">Hollandsk (Holland) med amerikansk internationalt computertastatur</translation>
 <translation id="8775404590947523323">Din ændringer gemmes automatisk.<ph name="BREAKS" />Hvis du gemmer en kopi af det oprindelige billede, skal du fjerne markeringen for "Overskriv originalen"</translation>
 <translation id="8803496343472038847">Russisk tastatur (fonetisk)</translation>
 <translation id="8808686172382650546">Kat</translation>
@@ -705,6 +745,7 @@
 <translation id="8900820606136623064">Ungarsk</translation>
 <translation id="8901822611024316615">Tjekkisk QWERTY-tastatur</translation>
 <translation id="8919081441417203123">Dansk</translation>
+<translation id="8941776146379310519">Malajisk</translation>
 <translation id="8960999352790021682">Bengali tastatur (fonetisk)</translation>
 <translation id="8965697826696209160">Der er ikke nok plads.</translation>
 <translation id="9017798300203431059">Russisk (fonetisk)</translation>
@@ -715,6 +756,7 @@
 <translation id="9065203028668620118">Rediger</translation>
 <translation id="9099674669267916096">Sideantal</translation>
 <translation id="9110990317705400362">Vi leder hele tiden efter nye metoder til at gøre din browsing mere sikker. Før kunne ethvert website anmode dig om at tilføje en udvidelse i din browser. I de nyeste versioner af Google Chrome skal du udtrykkeligt give Chrome besked om, at du vil installere udvidelser, ved at tilføje dem via siden Udvidelser. <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Lås op</translation>
 <translation id="912419004897138677">Codec</translation>
 <translation id="9129931661813833980">Fastgør mappe</translation>
 <translation id="9130775360844693113">Medlemmer af "<ph name="DESTINATION_NAME" />" får adgang til disse elementer.</translation>

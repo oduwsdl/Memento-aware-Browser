@@ -34,6 +34,10 @@
 #include "base/win/windows_version.h"
 #endif
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "ui/base/ui_base_features.h"
+#endif
+
 namespace webui {
 namespace {
 std::string GetWebUiCssTextDefaults(const std::string& css_template) {
@@ -183,10 +187,6 @@ void ParsePathAndScale(const GURL& url,
   ParsePathAndImageSpec(url, path, scale_factor, nullptr);
 }
 
-void ParsePathAndFrame(const GURL& url, std::string* path, int* frame_index) {
-  ParsePathAndImageSpec(url, path, nullptr, frame_index);
-}
-
 void SetLoadTimeDataDefaults(const std::string& app_locale,
                              base::DictionaryValue* localized_strings) {
   localized_strings->SetString("fontfamily", GetFontFamily());
@@ -207,14 +207,14 @@ std::string GetWebUiCssTextDefaults() {
   const ui::ResourceBundle& resource_bundle =
       ui::ResourceBundle::GetSharedInstance();
   return GetWebUiCssTextDefaults(
-      resource_bundle.LoadDataResourceString(IDR_WEBUI_CSS_TEXT_DEFAULTS));
+      resource_bundle.LoadDataResourceString(IDR_WEBUI_CSS_TEXT_DEFAULTS_CSS));
 }
 
 std::string GetWebUiCssTextDefaultsMd() {
   const ui::ResourceBundle& resource_bundle =
       ui::ResourceBundle::GetSharedInstance();
-  return GetWebUiCssTextDefaults(
-      resource_bundle.LoadDataResourceString(IDR_WEBUI_CSS_TEXT_DEFAULTS_MD));
+  return GetWebUiCssTextDefaults(resource_bundle.LoadDataResourceString(
+      IDR_WEBUI_CSS_TEXT_DEFAULTS_MD_CSS));
 }
 
 void AppendWebUiCssTextDefaults(std::string* html) {
@@ -228,9 +228,15 @@ std::string GetFontFamily() {
 
 // TODO(dnicoara) Remove Ozone check when PlatformFont support is introduced
 // into Ozone: crbug.com/320050
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)
-  font_family = ui::ResourceBundle::GetSharedInstance().GetFont(
-      ui::ResourceBundle::BaseFont).GetFontName() + ", " + font_family;
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  if (!features::IsUsingOzonePlatform()) {
+    std::string font_name = ui::ResourceBundle::GetSharedInstance()
+                                .GetFont(ui::ResourceBundle::BaseFont)
+                                .GetFontName();
+    // Wrap |font_name| with quotes to ensure it will always be parsed correctly
+    // in CSS.
+    font_family = "\"" + font_name + "\", " + font_family;
+  }
 #endif
 
   return font_family;

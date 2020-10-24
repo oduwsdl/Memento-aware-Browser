@@ -9,18 +9,20 @@
 #include <set>
 
 #include "base/compiler_specific.h"
+#include "base/numerics/safe_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_host.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 
@@ -201,7 +203,7 @@ void SubmenuView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // the orientation.
   if (parent_menu_item_)
     parent_menu_item_->GetAccessibleNodeData(node_data);
-  node_data->role = ax::mojom::Role::kMenuListPopup;
+  node_data->role = ax::mojom::Role::kMenu;
   // Menus in Chrome are always traversed in a vertical direction.
   node_data->AddState(ax::mojom::State::kVertical);
 }
@@ -372,8 +374,9 @@ void SubmenuView::SetSelectedRow(int row) {
 }
 
 base::string16 SubmenuView::GetTextForRow(int row) {
-  return MenuItemView::GetAccessibleNameForMenuItem(GetMenuItemAt(row)->title(),
-                                                    base::string16());
+  return MenuItemView::GetAccessibleNameForMenuItem(
+      GetMenuItemAt(row)->title(), base::string16(),
+      GetMenuItemAt(row)->ShouldShowNewBadge());
 }
 
 bool SubmenuView::IsShowing() const {
@@ -428,6 +431,7 @@ void SubmenuView::Hide() {
     if (!GetMenuItem()->GetParentMenuItem()) {
       GetScrollViewContainer()->NotifyAccessibilityEvent(
           ax::mojom::Event::kMenuEnd, true);
+      GetViewAccessibility().EndPopupFocusOverride();
     }
     // Fire these kMenuPopupEnd for each menu/submenu that closes/hides.
     if (host_->IsVisible())
@@ -538,7 +542,7 @@ bool SubmenuView::OnScroll(float dx, float dy) {
   const gfx::Rect& full_bounds = bounds();
   int x = vis_bounds.x();
   float y_f = vis_bounds.y() - dy - roundoff_error_;
-  int y = gfx::ToRoundedInt(y_f);
+  int y = base::ClampRound(y_f);
   roundoff_error_ = y - y_f;
   // clamp y to [0, full_height - vis_height)
   y = std::min(y, full_bounds.height() - vis_bounds.height() - 1);
@@ -551,8 +555,7 @@ bool SubmenuView::OnScroll(float dx, float dy) {
   return false;
 }
 
-BEGIN_METADATA(SubmenuView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(SubmenuView, View)
+END_METADATA
 
 }  // namespace views

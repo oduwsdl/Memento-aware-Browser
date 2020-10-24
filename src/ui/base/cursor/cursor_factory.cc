@@ -4,6 +4,8 @@
 
 #include "ui/base/cursor/cursor_factory.h"
 
+#include <ostream>
+
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
@@ -31,14 +33,14 @@ CursorFactory* CursorFactory::GetInstance() {
   return g_instance;
 }
 
-PlatformCursor CursorFactory::GetDefaultCursor(mojom::CursorType type) {
+base::Optional<PlatformCursor> CursorFactory::GetDefaultCursor(
+    mojom::CursorType type) {
   NOTIMPLEMENTED();
-  return 0;
+  return base::nullopt;
 }
 
 PlatformCursor CursorFactory::CreateImageCursor(const SkBitmap& bitmap,
-                                                const gfx::Point& hotspot,
-                                                float bitmap_dpi) {
+                                                const gfx::Point& hotspot) {
   NOTIMPLEMENTED();
   return 0;
 }
@@ -46,8 +48,7 @@ PlatformCursor CursorFactory::CreateImageCursor(const SkBitmap& bitmap,
 PlatformCursor CursorFactory::CreateAnimatedCursor(
     const std::vector<SkBitmap>& bitmaps,
     const gfx::Point& hotspot,
-    int frame_delay_ms,
-    float bitmap_dpi) {
+    int frame_delay_ms) {
   NOTIMPLEMENTED();
   return 0;
 }
@@ -57,6 +58,10 @@ void CursorFactory::RefImageCursor(PlatformCursor cursor) {
 }
 
 void CursorFactory::UnrefImageCursor(PlatformCursor cursor) {
+  NOTIMPLEMENTED();
+}
+
+void CursorFactory::ObserveThemeChanges() {
   NOTIMPLEMENTED();
 }
 

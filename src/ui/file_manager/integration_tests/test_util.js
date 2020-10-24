@@ -431,6 +431,7 @@ class TestEntryInfo {
   constructor(options) {
     this.type = options.type;
     this.sourceFileName = options.sourceFileName || '';
+    this.thumbnailFileName = options.thumbnailFileName || '';
     this.targetPath = options.targetPath;
     this.teamDriveName = options.teamDriveName || '';
     this.computerName = options.computerName || '';
@@ -484,6 +485,7 @@ const ENTRIES = {
   world: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'video.ogv',
+    thumbnailFileName: 'image.png',
     targetPath: 'world.ogv',
     mimeType: 'video/ogg',
     lastModifiedTime: 'Jul 4, 2012, 10:35 AM',
@@ -539,6 +541,7 @@ const ENTRIES = {
   desktop: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'image.png',
+    thumbnailFileName: 'image.png',
     targetPath: 'My Desktop Background.png',
     mimeType: 'image/png',
     lastModifiedTime: 'Jan 18, 2038, 1:02 AM',
@@ -721,6 +724,17 @@ const ENTRIES = {
     lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
     nameText: 'plaintext',
     sizeText: '32 bytes',
+    typeText: 'Plain text',
+  }),
+
+  utf8Text: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'utf8.txt',
+    targetPath: 'utf8.txt',
+    mimeType: 'text/plain',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'utf8.txt',
+    sizeText: '191 bytes',
     typeText: 'Plain text',
   }),
 
@@ -1349,7 +1363,7 @@ const ENTRIES = {
     type: EntryType.DIRECTORY,
     targetPath: 'PvmDefault',
     lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
-    nameText: 'Plugin VM',
+    nameText: 'Windows Files',
     sizeText: '--',
     typeText: 'Folder'
   }),

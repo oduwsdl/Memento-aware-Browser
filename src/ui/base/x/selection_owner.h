@@ -34,7 +34,7 @@ COMPONENT_EXPORT(UI_BASE_X) extern const char kTargets[];
 // processes.
 class COMPONENT_EXPORT(UI_BASE_X) SelectionOwner {
  public:
-  SelectionOwner(XDisplay* xdisplay,
+  SelectionOwner(x11::Connection* connection,
                  x11::Window xwindow,
                  x11::Atom selection_name);
   ~SelectionOwner();
@@ -126,14 +126,13 @@ class COMPONENT_EXPORT(UI_BASE_X) SelectionOwner {
       const x11::Event& event);
 
   // Our X11 state.
-  XDisplay* x_display_;
   x11::Window x_window_;
 
   // The X11 selection that this instance communicates on.
   x11::Atom selection_name_;
 
   // The time that this instance took ownership of its selection.
-  uint32_t acquired_selection_timestamp_;
+  x11::Time acquired_selection_timestamp_;
 
   // The maximum size of data we can put in XChangeProperty().
   size_t max_request_size_;

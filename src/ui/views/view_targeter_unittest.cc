@@ -4,6 +4,7 @@
 
 #include "ui/views/view_targeter.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
@@ -26,26 +27,14 @@ class TestingView : public View, public ViewTargeterDelegate {
   ~TestingView() override = default;
 
   // Reset all test state.
-  void Reset() { can_process_events_within_subtree_ = true; }
-
-  void set_can_process_events_within_subtree(bool can_process) {
-    can_process_events_within_subtree_ = can_process;
-  }
+  void Reset() { SetCanProcessEventsWithinSubtree(true); }
 
   // A call-through function to ViewTargeterDelegate::DoesIntersectRect().
   bool TestDoesIntersectRect(const View* target, const gfx::Rect& rect) const {
     return DoesIntersectRect(target, rect);
   }
 
-  // View:
-  bool CanProcessEventsWithinSubtree() const override {
-    return can_process_events_within_subtree_;
-  }
-
  private:
-  // Value to return from CanProcessEventsWithinSubtree().
-  bool can_process_events_within_subtree_ = true;
-
   DISALLOW_COPY_AND_ASSIGN(TestingView);
 };
 
@@ -649,6 +638,30 @@ TEST_F(ViewTargeterTest, HitTestCallsOnView) {
   EXPECT_FALSE(v1->GetTooltipHandlerForPoint(v2_origin));
 
   widget->CloseNow();
+}
+
+TEST_F(ViewTargeterTest, FavorChildContainingHitBounds) {
+  Widget widget;
+  Widget::InitParams init_params = CreateParams(Widget::InitParams::TYPE_POPUP);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  init_params.bounds = gfx::Rect(0, 0, 200, 200);
+  widget.Init(std::move(init_params));
+
+  View* content = widget.SetContentsView(std::make_unique<View>());
+  content->SetBounds(0, 0, 50, 50);
+  View* child = content->AddChildView(std::make_unique<View>());
+  child->SetBounds(2, 2, 50, 50);
+
+  internal::RootView* root_view =
+      static_cast<internal::RootView*>(widget.GetRootView());
+  ui::EventTargeter* targeter = root_view->targeter();
+
+  gfx::RectF bounding_box(gfx::PointF(4.f, 4.f), gfx::SizeF(42.f, 42.f));
+  ui::GestureEventDetails details(ui::ET_GESTURE_TAP);
+  details.set_bounding_box(bounding_box);
+  GestureEventForTest tap(details);
+
+  EXPECT_EQ(child, targeter->FindTargetForEvent(root_view, &tap));
 }
 
 }  // namespace test

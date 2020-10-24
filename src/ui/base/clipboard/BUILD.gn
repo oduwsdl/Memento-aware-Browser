@@ -2,17 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("///ui/ozone/ozone.gni")
-import("//build/config/jumbo.gni")
+import("///build/config/ozone.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/ui.gni")
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
-jumbo_component("clipboard_types") {
+component("clipboard_types") {
   output_name = "ui_base_clipboard_types"
   sources = [
     "clipboard_buffer.h",
@@ -32,7 +26,7 @@ jumbo_component("clipboard_types") {
     sources += [ "clipboard_format_type_mac.mm" ]
   }
 
-  if (is_mac || is_ios) {
+  if (is_apple) {
     sources += [ "clipboard_constants_mac.mm" ]
   }
 
@@ -41,7 +35,7 @@ jumbo_component("clipboard_types") {
   }
 
   if (use_aura) {
-    if ((use_x11 && is_desktop_linux) || !is_win) {
+    if ((use_x11 && is_linux) || !is_win) {
       sources += [ "clipboard_format_type_aura.cc" ]
     }
   }
@@ -50,23 +44,30 @@ jumbo_component("clipboard_types") {
 
   deps = [ "//base" ]
 
-  libs = []
-  if (is_mac || is_ios) {
-    libs += [ "Foundation.framework" ]
+  frameworks = []
+  if (is_apple) {
+    frameworks += [ "Foundation.framework" ]
   }
   if (is_mac) {
-    libs += [ "AppKit.framework" ]
+    frameworks += [ "AppKit.framework" ]
   }
 }
 
-jumbo_component("clipboard") {
+component("clipboard") {
   output_name = "ui_base_clipboard"
 
   sources = [
     "clipboard.cc",
     "clipboard.h",
+    "clipboard_data_endpoint.cc",
+    "clipboard_data_endpoint.h",
+    "clipboard_dlp_controller.cc",
+    "clipboard_dlp_controller.h",
+    "clipboard_metrics.cc",
+    "clipboard_metrics.h",
     "clipboard_monitor.cc",
     "clipboard_monitor.h",
+    "clipboard_observer.cc",
     "clipboard_observer.h",
     "custom_data_helper.cc",
     "custom_data_helper.h",
@@ -106,6 +107,7 @@ jumbo_component("clipboard") {
     "//mojo/public/cpp/base",
     "//net",
     "//skia",
+    "//ui/base:features",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -114,7 +116,7 @@ jumbo_component("clipboard") {
 
   if (use_aura) {
     # Linux clipboard implementations.
-    if (is_desktop_linux && !is_chromecast) {
+    if (is_linux && !is_chromecast) {
       sources += [ "clipboard_linux.cc" ]
       if (use_ozone) {
         sources += [
@@ -141,6 +143,8 @@ jumbo_component("clipboard") {
       # linux-chromeos uses non-backed clipboard by default, but supports ozone
       # x11 with flag --use-system-clipbboard.
       sources += [
+        "clipboard_data.cc",
+        "clipboard_data.h",
         "clipboard_non_backed.cc",
         "clipboard_non_backed.h",
         "clipboard_ozone.cc",
@@ -150,6 +154,8 @@ jumbo_component("clipboard") {
     } else if (!is_win) {
       # This file is used for all builds not backed by an underlying platform.
       sources += [
+        "clipboard_data.cc",
+        "clipboard_data.h",
         "clipboard_non_backed.cc",
         "clipboard_non_backed.h",
       ]
@@ -162,7 +168,7 @@ jumbo_component("clipboard") {
 
   if (is_mac) {
     deps += [ "//third_party/mozilla" ]
-    libs = [
+    frameworks = [
       "AppKit.framework",
       "CoreFoundation.framework",
     ]
@@ -173,7 +179,7 @@ jumbo_component("clipboard") {
   }
 }
 
-jumbo_source_set("clipboard_test_support") {
+source_set("clipboard_test_support") {
   testonly = true
 
   if (!is_ios) {
@@ -222,6 +228,14 @@ source_set("clipboard_test") {
     ]
   }
 
+  if (use_aura && !chromeos_is_browser_only && !use_x11 && !is_win &&
+      !use_ozone) {
+    sources += [
+      "clipboard_data_unittest.cc",
+      "clipboard_non_backed_unittest.cc",
+    ]
+  }
+
   deps = [
     ":clipboard_test_support",
     "//base/test:test_support",
@@ -229,6 +243,7 @@ source_set("clipboard_test") {
     "//testing/gtest",
     "//ui/events/platform",
     "//ui/gfx:test_support",
+    "//url:url",
   ]
 
   if (is_mac) {

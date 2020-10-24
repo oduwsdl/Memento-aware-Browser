@@ -178,6 +178,7 @@ struct AX_BASE_EXPORT AXNodeData {
   // Please keep in alphabetic order.
   ax::mojom::CheckedState GetCheckedState() const;
   void SetCheckedState(ax::mojom::CheckedState checked_state);
+  bool HasCheckedState() const;
   ax::mojom::DefaultActionVerb GetDefaultActionVerb() const;
   void SetDefaultActionVerb(ax::mojom::DefaultActionVerb default_action_verb);
   ax::mojom::HasPopup GetHasPopup() const;
@@ -194,8 +195,10 @@ struct AX_BASE_EXPORT AXNodeData {
   void SetRestriction(ax::mojom::Restriction restriction);
   ax::mojom::ListStyle GetListStyle() const;
   void SetListStyle(ax::mojom::ListStyle list_style);
-  ax::mojom::TextDirection GetTextDirection() const;
-  void SetTextDirection(ax::mojom::TextDirection text_direction);
+  ax::mojom::TextAlign GetTextAlign() const;
+  void SetTextAlign(ax::mojom::TextAlign text_align);
+  ax::mojom::WritingDirection GetTextDirection() const;
+  void SetTextDirection(ax::mojom::WritingDirection text_direction);
   ax::mojom::ImageAnnotationStatus GetImageAnnotationStatus() const;
   void SetImageAnnotationStatus(ax::mojom::ImageAnnotationStatus status);
 
@@ -211,8 +214,14 @@ struct AX_BASE_EXPORT AXNodeData {
   // clicks.
   bool IsClickable() const;
 
+  // Helper to determine if the object is selectable.
+  bool IsSelectable() const;
+
   // Helper to determine if the data has the ignored state or ignored role.
   bool IsIgnored() const;
+
+  // Helper to determine if the data has the invisible state.
+  bool IsInvisible() const;
 
   // Helper to determine if the data has the ignored state, the invisible state
   // or the ignored role.

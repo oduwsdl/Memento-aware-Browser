@@ -24,18 +24,24 @@ component("cursor_base") {
   ]
   deps = [ "//ui/gfx:geometry_skia" ]
 
-  if (use_x11) {
-    sources += [ "cursor_x11.cc" ]
-    deps += [ "//ui/base/x" ]
-  }
-
-  if (use_ozone) {
-    sources += [ "cursor_ozone.cc" ]
-  }
-
   if (is_win) {
     sources += [ "cursor_win.cc" ]
   }
+
+  if (use_x11 || use_ozone) {
+    sources += [ "cursor_ozone.cc" ]
+  }
+}
+
+component("theme_manager") {
+  output_name = "ui_base_cursor_theme_manager"
+  sources = [
+    "cursor_theme_manager.cc",
+    "cursor_theme_manager.h",
+    "cursor_theme_manager_observer.h",
+  ]
+  defines = [ "IS_UI_BASE_CURSOR_THEME_MANAGER_IMPL" ]
+  deps = [ "//base" ]
 }
 
 if (use_aura) {
@@ -49,8 +55,6 @@ if (use_aura) {
       "cursor_util.h",
       "cursors_aura.cc",
       "cursors_aura.h",
-      "image_cursors.cc",
-      "image_cursors.h",
     ]
     defines = [ "IS_UI_BASE_CURSOR_IMPL" ]
     public_deps = [
@@ -69,14 +73,6 @@ if (use_aura) {
       "//ui/resources:ui_resources_grd",
     ]
 
-    if (is_desktop_linux) {
-      sources += [
-        "cursor_theme_manager_linux.cc",
-        "cursor_theme_manager_linux.h",
-        "cursor_theme_manager_linux_observer.h",
-      ]
-    }
-
     if (is_win) {
       sources += [
         "cursor_loader_win.cc",
@@ -85,27 +81,21 @@ if (use_aura) {
       deps += [ "//ui/resources:ui_unscaled_resources_grd" ]
     }
 
-    if (use_x11) {
-      sources += [
-        "cursor_loader_x11.cc",
-        "cursor_loader_x11.h",
-      ]
-      public_deps += [
-        "//ui/base/x",
-        "//ui/gfx/x",
-      ]
-    }
-
     if (use_ozone) {
       sources += [
-        "cursor_loader_ozone.cc",
-        "cursor_loader_ozone.h",
         "ozone/bitmap_cursor_factory_ozone.cc",
         "ozone/bitmap_cursor_factory_ozone.h",
       ]
       public_deps += [
         "//skia",
         "//ui/gfx/geometry",
+      ]
+    }
+
+    if (use_x11 || use_ozone) {
+      sources += [
+        "cursor_loader_ozone.cc",
+        "cursor_loader_ozone.h",
       ]
     }
   }
@@ -115,22 +105,45 @@ source_set("unittests") {
   testonly = true
   sources = []
   deps = [
-    "//skia",
+    ":cursor_base",
     "//testing/gtest",
-    "//ui/gfx/geometry",
+    "//ui/base/cursor/mojom:cursor_type",
   ]
 
   if (!is_ios) {
     sources += [ "cursor_unittest.cc" ]
     deps += [
-      ":cursor_base",
-      "//ui/base/cursor/mojom:cursor_type",
+      "//skia",
       "//ui/gfx:geometry_skia",
+      "//ui/gfx/geometry",
     ]
   }
 
   if (use_aura) {
-    sources += [ "cursor_util_unittest.cc" ]
-    deps += [ ":cursor" ]
+    sources += [
+      "cursor_loader_unittest.cc",
+      "cursor_util_unittest.cc",
+    ]
+    deps += [
+      ":cursor",
+      "//skia",
+      "//ui/gfx/geometry",
+    ]
+
+    if (use_x11) {
+      deps += [
+        "//skia",
+        "//ui/base/x",
+        "//ui/gfx/geometry",
+      ]
+    }
+  }
+
+  if (use_ozone) {
+    sources += [ "ozone/bitmap_cursor_factory_ozone_unittest.cc" ]
+    deps += [
+      ":cursor",
+      "//base",
+    ]
   }
 }

@@ -15,6 +15,7 @@
 #include "ui/base/x/x11_topmost_window_finder.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/x/x11.h"
+#include "ui/gfx/x/xproto.h"
 
 namespace ui {
 
@@ -24,10 +25,14 @@ class XOSExchangeDataProvider;
 // Converts the current set of X masks into the set of ui::EventFlags.
 COMPONENT_EXPORT(UI_BASE_X) int XGetMaskAsEventFlags();
 
-// Handles XDND (X11 drag and drop protocol) for the given window.
+// Works for both incoming and outgoing drags.  For the incoming drags, receives
+// XDND events via HandleXdndEvent() and routes them to OnXdnd...() handlers;
+// outgoing drags are handled via Handle...() methods.  Both ways end up in
+// SendXdnd...() calls that target the window that is currently at the drag
+// location.  If the target is another Chrome window, the event is delivered
+// directly to its XdndHandler, bypassing the X server.
 //
-// Doesn't fetch XDND events from the event source; those should be taken by
-// the client and fed to |OnXdnd...| and |OnSelectionNotify| methods.
+// The owner is notified about the ongoing drag through the Delegate interface.
 class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
  public:
   // Handlers and callbacks that should be implemented at the consumer side.
@@ -48,10 +53,11 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
     virtual void UpdateCursor(
         DragDropTypes::DragOperation negotiated_operation) = 0;
 
-    // Called when data from another application enters the window.
+    // Called when data from another application (not Chrome) enters the window.
     virtual void OnBeginForeignDrag(x11::Window window) = 0;
 
-    // Called when data from another application is about to leave the window.
+    // Called when data from another application (not Chrome) is about to leave
+    // the window.
     virtual void OnEndForeignDrag() = 0;
 
     // Called just before the drag leaves the window.
@@ -67,7 +73,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
     virtual ~Delegate() = default;
   };
 
-  XDragDropClient(Delegate* delegate, Display* xdisplay, x11::Window xwindow);
+  XDragDropClient(Delegate* delegate, x11::Window xwindow);
   virtual ~XDragDropClient();
   XDragDropClient(const XDragDropClient&) = delete;
   XDragDropClient& operator=(const XDragDropClient&) = delete;
@@ -82,8 +88,8 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
   int current_modifier_state() const { return current_modifier_state_; }
 
   // Handling XdndPosition can be paused while waiting for more data; this is
-  // called either synchronously from OnXdndPosition, or asynchronously after
-  // we've received data requested from the other window.
+  // called by XDragContext either synchronously or asynchronously, depending on
+  // whether the context has data requested from the other window.
   void CompleteXdndPosition(x11::Window source_window,
                             const gfx::Point& screen_point);
 
@@ -98,7 +104,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
   // Tries to handle the XDND event.  Returns true for all known event types:
   // XdndEnter, XdndLeave, XdndPosition, XdndStatus, XdndDrop, and XdndFinished;
   // returns false if an event of an unexpected type has been passed.
-  bool HandleXdndEvent(const XClientMessageEvent& event);
+  bool HandleXdndEvent(const x11::ClientMessageEvent& event);
 
   // These |Handle...| methods essentially implement the
   // views::X11MoveLoopDelegate interface.
@@ -109,7 +115,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
   void HandleMoveLoopEnded();
 
   // Called when XSelection data has been copied to our process.
-  void OnSelectionNotify(const XSelectionEvent& xselection);
+  void OnSelectionNotify(const x11::SelectionNotifyEvent& xselection);
 
   // Resets the drag state so the object is ready to handle the drag.  Sets
   // X window properties so that the desktop environment is aware of available
@@ -157,19 +163,19 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
 
  private:
   // These methods handle the various X11 client messages from the platform.
-  void OnXdndEnter(const XClientMessageEvent& event);
-  void OnXdndPosition(const XClientMessageEvent& event);
-  void OnXdndStatus(const XClientMessageEvent& event);
-  void OnXdndLeave(const XClientMessageEvent& event);
-  void OnXdndDrop(const XClientMessageEvent& event);
-  void OnXdndFinished(const XClientMessageEvent& event);
+  void OnXdndEnter(const x11::ClientMessageEvent& event);
+  void OnXdndPosition(const x11::ClientMessageEvent& event);
+  void OnXdndStatus(const x11::ClientMessageEvent& event);
+  void OnXdndLeave(const x11::ClientMessageEvent& event);
+  void OnXdndDrop(const x11::ClientMessageEvent& event);
+  void OnXdndFinished(const x11::ClientMessageEvent& event);
 
   // Creates an XEvent and fills it in with values typical for XDND messages:
   // the type of event is set to ClientMessage, the format is set to 32 (longs),
   // and the zero member of data payload is set to |xwindow_|.  All other data
   // members are zeroed, as per XDND specification.
-  XEvent PrepareXdndClientMessage(const char* message,
-                                  x11::Window recipient) const;
+  x11::ClientMessageEvent PrepareXdndClientMessage(const char* message,
+                                                   x11::Window recipient) const;
 
   // Finds the topmost X11 window at |screen_point| and returns it if it is
   // Xdnd aware.  Returns x11::None otherwise.
@@ -178,7 +184,8 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
 
   // Sends |xev| to |window|, optionally short circuiting the round trip to the
   // X server. Virtual for testing.
-  virtual void SendXClientEvent(x11::Window window, XEvent* xev);
+  virtual void SendXClientEvent(x11::Window window,
+                                const x11::ClientMessageEvent& xev);
 
   void SendXdndEnter(x11::Window dest_window,
                      const std::vector<x11::Atom>& targets);
@@ -197,7 +204,6 @@ class COMPONENT_EXPORT(UI_BASE_X) XDragDropClient {
 
   Delegate* const delegate_;
 
-  Display* const xdisplay_;
   const x11::Window xwindow_;
 
   // Target side information.

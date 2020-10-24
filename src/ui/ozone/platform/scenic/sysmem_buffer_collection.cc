@@ -9,73 +9,12 @@
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "ui/gfx/buffer_format_util.h"
-#include "ui/gfx/native_pixmap.h"
+#include "ui/ozone/platform/scenic/scenic_surface_factory.h"
+#include "ui/ozone/platform/scenic/sysmem_native_pixmap.h"
 
 namespace ui {
 
 namespace {
-
-class SysmemNativePixmap : public gfx::NativePixmap {
- public:
-  SysmemNativePixmap(scoped_refptr<SysmemBufferCollection> collection,
-                     gfx::NativePixmapHandle handle)
-      : collection_(collection), handle_(std::move(handle)) {}
-
-  bool AreDmaBufFdsValid() const override { return false; }
-  int GetDmaBufFd(size_t plane) const override {
-    NOTREACHED();
-    return -1;
-  }
-  uint32_t GetDmaBufPitch(size_t plane) const override {
-    NOTREACHED();
-    return 0u;
-  }
-  size_t GetDmaBufOffset(size_t plane) const override {
-    NOTREACHED();
-    return 0u;
-  }
-  size_t GetDmaBufPlaneSize(size_t plane) const override {
-    NOTREACHED();
-    return 0;
-  }
-  size_t GetNumberOfPlanes() const override {
-    NOTREACHED();
-    return 0;
-  }
-  uint64_t GetBufferFormatModifier() const override {
-    NOTREACHED();
-    return 0;
-  }
-
-  gfx::BufferFormat GetBufferFormat() const override {
-    return collection_->format();
-  }
-  gfx::Size GetBufferSize() const override { return collection_->size(); }
-  uint32_t GetUniqueId() const override { return 0; }
-  bool ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
-                            int plane_z_order,
-                            gfx::OverlayTransform plane_transform,
-                            const gfx::Rect& display_bounds,
-                            const gfx::RectF& crop_rect,
-                            bool enable_blend,
-                            std::unique_ptr<gfx::GpuFence> gpu_fence) override {
-    NOTIMPLEMENTED();
-
-    return false;
-  }
-  gfx::NativePixmapHandle ExportHandle() override {
-    return gfx::CloneHandleForIPC(handle_);
-  }
-
- private:
-  ~SysmemNativePixmap() override = default;
-
-  // Keep reference to the collection to make sure it outlives the pixmap.
-  scoped_refptr<SysmemBufferCollection> collection_;
-  gfx::NativePixmapHandle handle_;
-
-  DISALLOW_COPY_AND_ASSIGN(SysmemNativePixmap);
-};
 
 size_t RoundUp(size_t value, size_t alignment) {
   return ((value + alignment - 1) / alignment) * alignment;
@@ -116,7 +55,8 @@ bool SysmemBufferCollection::IsNativePixmapConfigSupported(
                           format == gfx::BufferFormat::BGRX_8888;
   bool usage_supported = usage == gfx::BufferUsage::SCANOUT ||
                          usage == gfx::BufferUsage::SCANOUT_CPU_READ_WRITE ||
-                         usage == gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
+                         usage == gfx::BufferUsage::GPU_READ_CPU_READ_WRITE ||
+                         usage == gfx::BufferUsage::GPU_READ;
   return format_supported && usage_supported;
 }
 
@@ -128,11 +68,15 @@ SysmemBufferCollection::SysmemBufferCollection(gfx::SysmemBufferCollectionId id)
 
 bool SysmemBufferCollection::Initialize(
     fuchsia::sysmem::Allocator_Sync* allocator,
+    ScenicSurfaceFactory* scenic_surface_factory,
+    zx::channel token_handle,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     VkDevice vk_device,
-    size_t num_buffers) {
+    size_t min_buffer_count,
+    bool force_protected,
+    bool register_with_image_pipe) {
   DCHECK(IsNativePixmapConfigSupported(format, usage));
   DCHECK(!collection_);
   DCHECK(!vk_buffer_collection_);
@@ -142,42 +86,46 @@ bool SysmemBufferCollection::Initialize(
   if (vk_device == VK_NULL_HANDLE)
     return false;
 
-  size_ = size;
+  if (size.IsEmpty()) {
+    // Buffer collection that doesn't have explicit size is expected to be
+    // shared with other participants, who will determine the actual image size.
+    DCHECK(token_handle);
+
+    // Set nominal size of 1x1, which will be used only for
+    // vkSetBufferCollectionConstraintsFUCHSIA(). The actual size of the
+    // allocated buffers is determined by constraints set by other sysmem
+    // clients for the same collection. Size of the Vulkan image is determined
+    // by the values passed to CreateVkImage().
+    min_size_ = gfx::Size(1, 1);
+  } else {
+    min_size_ = size;
+  }
+
   format_ = format;
   usage_ = usage;
   vk_device_ = vk_device;
+  is_protected_ = force_protected;
+
+  if (register_with_image_pipe) {
+    scenic_overlay_view_.emplace(scenic_surface_factory->CreateScenicSession());
+    surface_factory_ = scenic_surface_factory;
+  }
 
   fuchsia::sysmem::BufferCollectionTokenSyncPtr collection_token;
-  zx_status_t status =
-      allocator->AllocateSharedCollection(collection_token.NewRequest());
-  if (status != ZX_OK) {
-    ZX_DLOG(ERROR, status)
-        << "fuchsia.sysmem.Allocator.AllocateSharedCollection()";
-    return false;
+  if (token_handle) {
+    collection_token.Bind(std::move(token_handle));
+  } else {
+    zx_status_t status =
+        allocator->AllocateSharedCollection(collection_token.NewRequest());
+    if (status != ZX_OK) {
+      ZX_DLOG(ERROR, status)
+          << "fuchsia.sysmem.Allocator.AllocateSharedCollection()";
+      return false;
+    }
   }
 
   return InitializeInternal(allocator, std::move(collection_token),
-                            num_buffers);
-}
-
-bool SysmemBufferCollection::Initialize(
-    fuchsia::sysmem::Allocator_Sync* allocator,
-    VkDevice vk_device,
-    zx::channel token_handle,
-    gfx::BufferFormat format,
-    gfx::BufferUsage usage) {
-  DCHECK(!collection_);
-  DCHECK(!vk_buffer_collection_);
-
-  format_ = format;
-  usage_ = usage;
-  vk_device_ = vk_device;
-
-  fuchsia::sysmem::BufferCollectionTokenSyncPtr token;
-  token.Bind(std::move(token_handle));
-
-  return InitializeInternal(allocator, std::move(token),
-                            /*buffers_for_camping=*/0);
+                            min_buffer_count);
 }
 
 scoped_refptr<gfx::NativePixmap> SysmemBufferCollection::CreateNativePixmap(
@@ -206,18 +154,12 @@ scoped_refptr<gfx::NativePixmap> SysmemBufferCollection::CreateNativePixmap(
       buffers_info_.settings.image_format_constraints;
 
   // The logic should match LogicalBufferCollection::Allocate().
-  size_t width =
-      RoundUp(std::max(format.min_coded_width, format.required_max_coded_width),
-              format.coded_width_divisor);
-  size_t stride =
-      RoundUp(std::max(static_cast<size_t>(format.min_bytes_per_row),
-                       gfx::RowSizeForBufferFormat(width, format_, 0)),
-              format.bytes_per_row_divisor);
-  size_t height = RoundUp(
-      std::max(format.min_coded_height, format.required_max_coded_height),
-      format.coded_height_divisor);
+  size_t stride = RoundUp(
+      std::max(static_cast<size_t>(format.min_bytes_per_row),
+               gfx::RowSizeForBufferFormat(image_size_.width(), format_, 0)),
+      format.bytes_per_row_divisor);
   size_t plane_offset = buffers_info_.buffers[buffer_index].vmo_usable_start;
-  size_t plane_size = stride * height;
+  size_t plane_size = stride * image_size_.height();
   handle.planes.emplace_back(stride, plane_offset, plane_size,
                              std::move(main_plane_vmo));
 
@@ -369,10 +311,24 @@ bool SysmemBufferCollection::InitializeInternal(
       collection_token_for_vulkan;
   collection_token->Duplicate(ZX_RIGHT_SAME_RIGHTS,
                               collection_token_for_vulkan.NewRequest());
+
+  // Duplicate one more token for Scenic if this collection can be used as an
+  // overlay.
+  fidl::InterfaceHandle<fuchsia::sysmem::BufferCollectionToken>
+      collection_token_for_scenic;
+  if (scenic_overlay_view_.has_value()) {
+    collection_token->Duplicate(ZX_RIGHT_SAME_RIGHTS,
+                                collection_token_for_scenic.NewRequest());
+  }
+
   zx_status_t status = collection_token->Sync();
   if (status != ZX_OK) {
     ZX_DLOG(ERROR, status) << "fuchsia.sysmem.BufferCollectionToken.Sync()";
     return false;
+  }
+
+  if (scenic_overlay_view_.has_value()) {
+    scenic_overlay_view_->Initialize(std::move(collection_token_for_scenic));
   }
 
   status = allocator->BindSharedCollection(std::move(collection_token),
@@ -421,7 +377,7 @@ bool SysmemBufferCollection::InitializeInternal(
   ignore_result(token_channel.release());
 
   VkImageCreateInfo image_create_info;
-  InitializeImageCreateInfo(&image_create_info, size_);
+  InitializeImageCreateInfo(&image_create_info, min_size_);
 
   if (vkSetBufferCollectionConstraintsFUCHSIA(vk_device_, vk_buffer_collection_,
                                               &image_create_info) !=
@@ -446,8 +402,23 @@ bool SysmemBufferCollection::InitializeInternal(
   DCHECK_GE(buffers_info_.buffer_count, buffers_for_camping);
   DCHECK(buffers_info_.settings.has_image_format_constraints);
 
+  // The logic should match LogicalBufferCollection::Allocate().
+  const fuchsia::sysmem::ImageFormatConstraints& format =
+      buffers_info_.settings.image_format_constraints;
+  size_t width =
+      RoundUp(std::max(format.min_coded_width, format.required_max_coded_width),
+              format.coded_width_divisor);
+  size_t height = RoundUp(
+      std::max(format.min_coded_height, format.required_max_coded_height),
+      format.coded_height_divisor);
+  image_size_ = gfx::Size(width, height);
   buffer_size_ = buffers_info_.settings.buffer_settings.size_bytes;
   is_protected_ = buffers_info_.settings.buffer_settings.is_secure;
+
+  // Add all images to Image pipe for presentation later.
+  if (scenic_overlay_view_.has_value()) {
+    scenic_overlay_view_->AddImages(buffers_info_.buffer_count, image_size_);
+  }
 
   // CreateVkImage() should always be called on the same thread, but it may be
   // different from the thread that called Initialize().
@@ -469,7 +440,15 @@ void SysmemBufferCollection::InitializeImageCreateInfo(
   vk_image_info->samples = VK_SAMPLE_COUNT_1_BIT;
   vk_image_info->tiling =
       is_mappable() ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
-  vk_image_info->usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+
+  vk_image_info->usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                         VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  if (usage_ == gfx::BufferUsage::SCANOUT ||
+      usage_ == gfx::BufferUsage::SCANOUT_CPU_READ_WRITE) {
+    vk_image_info->usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  }
+
   vk_image_info->sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   vk_image_info->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 }

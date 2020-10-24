@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">জাপানীজ ইনপুট (ইউএছ কীব’ৰ্ডৰ বাবে)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" />টা বস্তু মচি থকা হৈছে…</translation>
 <translation id="1049926623896334335">Word দস্তাবেজ</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" />ৰ জৰিয়তে ফাইলসমূহ খুলিবলৈ প্ৰথমে সেইসমূহ Windowsৰ ফাইলসমূহৰ ফ’ল্ডাৰটোলৈ স্থানান্তৰ কৰক।</translation>
 <translation id="1062407476771304334">সাল সলনি কৰক</translation>
 <translation id="1065449928621190041">কানাডিয়ান ফ্ৰেন্স কীব’ৰ্ড</translation>
 <translation id="1119069657431255176">Bzip2 সংকুচিত কৰা টাৰ আর্কাইভ</translation>
@@ -20,6 +21,7 @@
 <translation id="1150565364351027703">ছানগ্লাছ</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">কেটালান</translation>
+<translation id="1172970565351728681">প্ৰায় <ph name="REMAINING_TIME" /> বাকী আছে</translation>
 <translation id="1173894706177603556">নতুন নাম দিয়ক</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> প্ৰতিলিপি কৰি থকা হৈছে...</translation>
 <translation id="1178581264944972037">পজ কৰক</translation>
@@ -28,6 +30,7 @@
 <translation id="1208421848177517699">লিপ্যন্তৰণ (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">আপল’ড কৰক</translation>
 <translation id="1249250836236328755">শৈলী</translation>
+<translation id="1276362640455948667">আমেৰিকা যুক্তৰাষ্ট্ৰৰ আন্তঃৰাষ্ট্ৰীয় কীব’ৰ্ডৰ সৈতে পৰ্টুগীজ</translation>
 <translation id="1278813325885878377">হাংগেৰীয়ান QWERTY কীব’র্ড</translation>
 <translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">এই মুহূৰ্তত Google Drive উপলব্ধ নহয় Google Drive উপলব্ধ হোৱাৰ লগে লগে আপল‘ড পুনৰ আৰম্ভ হ‘ব।</translation>
@@ -41,10 +44,11 @@
 <translation id="1358735829858566124">ফাইলটো বা ডাইৰেক্ট’ৰীটো ব্যৱহাৰযোগ্য নহয়।</translation>
 <translation id="1363028406613469049">ট্ৰেক</translation>
 <translation id="1378727793141957596">Google Driveলৈ স্বাগতম!</translation>
-<translation id="1383876407941801731">সন্ধান</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1395262318152388157">ছীক স্লাইডাৰ</translation>
 <translation id="1399648040768741453">তেলেগু কীব’ৰ্ড (উচ্চাৰণগত)</translation>
 <translation id="1430915738399379752">প্ৰিণ্ট কৰক</translation>
+<translation id="1435838927755162558">Parallels Desktopৰ জৰিয়তে ফ’ল্ডাৰটো শ্বেয়াৰ কৰক</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" />লৈ স্থানান্তৰ কৰা হ’ল।</translation>
 <translation id="1441841714100794440">ভিয়েটনামীজ কীব’ৰ্ড (টেলেক্স)</translation>
 <translation id="1455548678241328678">নৰৱে‘জিয়ান কীব’ৰ্ড</translation>
@@ -56,9 +60,11 @@
 <translation id="1538729222189715449">Linux ফাইল খুলি থকা হৈছে...</translation>
 <translation id="1547964879613821194">কানাডিয়ান ইংৰাজী</translation>
 <translation id="1556189134700913550">সকলোতে প্ৰয়োগ কৰক</translation>
+<translation id="1561842594491319104">Chrome ডিভাইচ</translation>
 <translation id="1572585716423026576">ৱালপেপাৰ হিচাপে ছেট কৰক</translation>
 <translation id="158809615184981282">ফা’ৰছ কীব’র্ড</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> পি.বি.</translation>
+<translation id="1620510694547887537">কেমেৰা</translation>
 <translation id="1646136617204068573">হাংগেৰীয়ান কীব’ৰ্ড</translation>
 <translation id="164729547906544836">তামিল কীব’ৰ্ড (itrans)</translation>
 <translation id="164969095109328410">Chrome ডিভাইচ</translation>
@@ -66,6 +72,7 @@
 <translation id="1673103856845176271">নিৰপত্তাজনিত কাৰণত ফাইলটো এক্সেছ কৰিব পৰা নগ'ল।</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" />টা বস্তু জিপ কৰি থকা হৈছে...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> টা বস্তুৰ প্ৰতিলিপি কৰা হ'ল।</translation>
 <translation id="174173592514158117">Playৰ সকলো ফ’ল্ডাৰ দেখুৱাওক</translation>
 <translation id="174937106936716857">ফাইলৰ মুঠ সংখ্যা</translation>
 <translation id="1775381402323441512">ভিডিঅ’ সম্পৰ্কীয় তথ্য</translation>
@@ -79,6 +86,7 @@
 <translation id="1844692022597038441">এই ফাইলটো অফলাইনত নাই।</translation>
 <translation id="184633654410729720">থাই কীব’ৰ্ড (Kedmanee)</translation>
 <translation id="1847880352285315359">ছেভ কৰা হ’ল</translation>
+<translation id="1853795129690976061">এই ফ’ল্ডাৰটো Linuxৰ সৈতে শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="1864756863218646478">ফাইলটো বিচাৰি পোৱা নগ’ল।</translation>
 <translation id="1921986354447415460">তাৰ্কীশ্ব-এফ কীব’র্ড</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ফৰ্মেট কৰা হ’ল</translation>
@@ -102,7 +110,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" নামৰ এটা ফাইল ইতিমধ্যে আছেই। আপুনি কি কৰিব বিচাৰে?</translation>
 <translation id="2121825465123208577">আকাৰ সলনি কৰক</translation>
 <translation id="2136953289241069843">লিপ্যন্তৰণ (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" খুলিবলৈ সক্ষম নহ’ল: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">অমান্য বৰ্ণ: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">ভিয়েটনামীজ কীব’ৰ্ড (TCVN)</translation>
 <translation id="2168214441502403371">পার্চীয়ান কীব’র্ড</translation>
@@ -110,7 +117,9 @@
 <translation id="2208158072373999562">জিপ আৰ্কাইভ</translation>
 <translation id="2225536596944493418">আপুনি <ph name="NUMBER_OF_ITEMS" />টা বস্তু মচি পেলাবলৈ নিশ্চিতনে?</translation>
 <translation id="2230062665678605299">"<ph name="FOLDER_NAME" />" ফল্ডাৰ সৃষ্টি কৰিব পৰা নগ’ল। <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">স্থানান্তৰ কৰা হ'ল।</translation>
 <translation id="2278988676849463018">কানাডা কীব’র্ড (উচ্চাৰণগত)</translation>
+<translation id="2287742181953707290">আমেৰিকা যুক্তৰাষ্ট্ৰৰ আন্তঃৰাষ্ট্ৰীয় PC কীব’ৰ্ডৰ সৈতে পৰ্টুগীজ</translation>
 <translation id="2288278176040912387">ৰেকৰ্ড প্লেয়াৰ</translation>
 <translation id="2291538123825441971"><ph name="NUMBER_OF_FILES" />টা ফাইল খুলি থকা হৈছে</translation>
 <translation id="2303301624314357662"><ph name="FILE_NAME" /> ফাইলটো খুলি থকা হৈছে।</translation>
@@ -133,6 +142,7 @@
 <translation id="2494837236724268445">গুজৰাটী কীব’ৰ্ড (উচ্চাৰণগত)</translation>
 <translation id="2515586267016047495">Alt</translation>
 <translation id="2529133382850673012">ইউএছ কীব'র্ড</translation>
+<translation id="2534155362429831547"><ph name="NUMBER_OF_ITEMS" /> টা সমল মচা হ’ল</translation>
 <translation id="2542049655219295786">Google তালিকা</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" />ত যোগ কৰক</translation>
 <translation id="255937426064304553">US আন্তৰ্জাতিক</translation>
@@ -165,9 +175,8 @@
 <translation id="2924296707677495905">লিপ্যন্তৰণ (namaskaram → ನಮಸ್ಕಾರ)</translation>
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">Mongolian</translation>
-<translation id="2939410873710774399"><ph name="APP_NAME" /> (<ph name="VM_SOFTWARE_NAME" />)ৰ জৰিয়তে ফাইলসমূহ খুলিবলৈ প্ৰথমে সেইসমূহ <ph name="FOLDER_NAME" /> ফ’ল্ডাৰটোলৈ নিয়ক।</translation>
 <translation id="2942290791863759244">জার্মান NEO 2 কীব'র্ড</translation>
-<translation id="2943400156390503548">শ্লাইডসমূহ</translation>
+<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">কোনো চুটি নাম ব্যৱহাৰ কৰক</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ফৰ্মেট কৰি থকা হৈছে...</translation>
 <translation id="2951236788251446349">জেলীফিশ্ব</translation>
@@ -180,8 +189,9 @@
 <translation id="303198083543495566">ভূগোল</translation>
 <translation id="3057861065630527966">আপোনাৰ ফট’ আৰু ভিডিঅ’সমূহ বেক আপ কৰক</translation>
 <translation id="3064388234319122767">লিপ্যন্তৰণ (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows ফাইলসমূহ</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" />ৰ জৰিয়তে শ্বেয়াৰ কৰক</translation>
-<translation id="3088034400796962477">লিপ্যন্তৰণ (ছালাম ← سلام)</translation>
+<translation id="3083975830683400843">Chromebits</translation>
 <translation id="3116361045094675131">UK কীব’ৰ্ড</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">কৰা হ’ল</translation>
@@ -194,9 +204,11 @@
 <translation id="3236289833370040187"><ph name="DESTINATION_DOMAIN" />লৈ গৰাকীস্বত্ব স্থানান্তৰ কৰা হ’ব।</translation>
 <translation id="3241720467332021590">আইৰিশ্ব</translation>
 <translation id="3245321423178950146">অজ্ঞাত শিল্পী</translation>
+<translation id="3248185426436836442">বিবেচনাধীন</translation>
 <translation id="3252266817569339921">ফৰাচী</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> ফাইলৰ বাবে ডিফ'ল্ট এপ্ বাছনি কৰক:</translation>
 <translation id="3264582393905923483">প্ৰসংগ</translation>
+<translation id="3272909651715601089">"<ph name="PATH" />" খুলিব পৰা নগ’ল</translation>
 <translation id="3280431534455935878">সাজু কৰি থকা হৈছে</translation>
 <translation id="3280987981688031357">ভিনাইল ৰেকৰ্ড</translation>
 <translation id="3296763833017966289">জর্জিয়ান</translation>
@@ -204,6 +216,7 @@
 <translation id="3335337277364016868">বছৰ ৰেকর্ড কৰা হৈছে</translation>
 <translation id="3338239663705455570">শ্ল’ভেনিয়ান কীব’র্ড</translation>
 <translation id="3353984535370177728">আপল’ড কৰিবলৈ এটা ফ’ল্ডাৰ বাছনি কৰক</translation>
+<translation id="3356580349448036450">সম্পূৰ্ণ হ’ল</translation>
 <translation id="3399597614303179694">মেচেড’নিয়ান কীব’র্ড</translation>
 <translation id="3437801641691368414">সৃষ্টি কৰাৰ সময়</translation>
 <translation id="3466147780910026086">আপোনাৰ মিডিয়া ডিভাইচ স্কেন কৰি থকা হৈছে...</translation>
@@ -212,11 +225,13 @@
 <translation id="3473378059788601120"><ph name="FOLDER_NAME" />লৈ প্ৰতিলিপি কৰা হ’ল।</translation>
 <translation id="3475447146579922140">Google স্প্ৰেডশ্বীট</translation>
 <translation id="3495304270784461826"><ph name="COUNT" />টা আসোঁৱাহ।</translation>
+<translation id="349603508045926994">পাৰ্ছিয়ান লিপ্যন্তৰণ</translation>
 <translation id="3519867315646775981">লিপ্যন্তৰণ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">পর্তুগীজ</translation>
 <translation id="3524311639100184459">সাৱধান: এই ফাইলসমূহ অস্থায়ী আৰু ডিস্কত খালী ঠাই উলিয়াবলৈ এইবোৰ স্বয়ংক্ৰিয়ভাৱে মচা যাব পাৰে।  <ph name="BEGIN_LINK" />অধিক জানক<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ফ’ল্ডাৰ</translation>
 <translation id="3549797760399244642">drive.google.comলৈ যাওক...</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" />ৰ জৰিয়তে ফাইলসমূহ খুলিবলৈ প্ৰথমে সেইসমূহ Windowsৰ ফাইলসমূহৰ ফ’ল্ডাৰটোলৈ প্ৰতিলিপি কৰক।</translation>
 <translation id="357479282490346887">লিথুৱানিয়ান</translation>
 <translation id="3583509704582854624">আলফানিউমেৰিক ইনপুট (জাপানীজ কীব’ৰ্ডৰ বাবে)</translation>
 <translation id="3603385196401704894">কানাডিয়ান ফ্রেন্স</translation>
@@ -227,6 +242,7 @@
 <translation id="3620292326130836921">সকলো বেক আপ সম্পূর্ণ হৈ আছে!</translation>
 <translation id="3626281679859535460">উজ্জ্বলতা</translation>
 <translation id="3644896802912593514">প্ৰস্থ</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> টা বস্তু স্থানান্তৰ কৰা হ'ল।</translation>
 <translation id="3645531960514756307">ফ’ল্ডাৰ আনপিন কৰক</translation>
 <translation id="3678559383040232393">মাল্টিজ কীব’ৰ্ড</translation>
 <translation id="3685122418104378273">ডিফ’ল্ট অনুসৰি ম’বাইল ডেটা ব্যৱহাৰ কৰাৰ সময়ত Google Drive ছিংক অক্ষম কৰা হৈছে।</translation>
@@ -237,6 +253,7 @@
 <translation id="3780536599611287598">আপোনাৰ ’<ph name="FOLDER_NAME" />’লৈ ফাইল স্থানান্তৰ কৰাৰ অনুমতি নাই।</translation>
 <translation id="3786301125658655746">আপুনি অফলাইন হৈ আছে</translation>
 <translation id="3789841737615482174">ইনষ্টল কৰক</translation>
+<translation id="3793469551756281394">প্ৰায় <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> বাকী আছে</translation>
 <translation id="3798449238516105146">সংস্কৰণ</translation>
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">শহা</translation>
@@ -250,7 +267,6 @@
 <translation id="383652340667548381">ছার্বিয়ান</translation>
 <translation id="385051799172605136">উভতি যাওক</translation>
 <translation id="3855472144336161447">জার্মান NEO 2 কীব’র্ড</translation>
-<translation id="3856075812838139784">কেৱল পঢ়িব পৰা</translation>
 <translation id="3858678421048828670">ইটালীয়ান কীব’র্ড</translation>
 <translation id="386548886866354912"><ph name="EXTENSION_NAME" /> জৰিয়তে পেক কৰক</translation>
 <translation id="3866249974567520381">বিৱৰণ</translation>
@@ -260,11 +276,13 @@
 <translation id="3930521966936686665">ইয়াত প্লে‘ কৰক</translation>
 <translation id="3958548648197196644">কিৱি</translation>
 <translation id="3966388904776714213">অডিঅ’ প্লেয়াৰ</translation>
+<translation id="3984317463833596033">Parallels Desktopক <ph name="FOLDER_NAME" /> ফ’ল্ডাৰটোত থকা ফাইলসমূহৰ সংশোধন কৰিবলৈ অনুমতি দিয়ক</translation>
 <translation id="4002066346123236978">শিৰোনাম</translation>
 <translation id="4070370845051020638">কেণ্ট’নিজ ইনপুট পদ্ধতি</translation>
 <translation id="4072248638558688893">তামিল কীব'র্ড (উচ্চাৰণগত)</translation>
 <translation id="4124935795427217608">এশিঙিয়া ঘোঁৰা</translation>
 <translation id="4158739975813877944">প্লে’লিষ্ট খোলক</translation>
+<translation id="4159731583141908892"><ph name="FILE_NAME" /> স্থানান্তৰ কৰা হ’ল।</translation>
 <translation id="418179967336296930">ৰাছিয়ান ফ’নেটিক (YaZHert) কীব’র্ড</translation>
 <translation id="4193154014135846272">Google নথি</translation>
 <translation id="4195249722193633765">Linux (Beta)ৰ জৰিয়তে এপ্ ইনষ্টল কৰক</translation>
@@ -278,6 +296,7 @@
 <translation id="4298972503445160211">ডেনিশ্ব কীব’ৰ্ড</translation>
 <translation id="4299729908419173967">ব্ৰাজিলিয়ান</translation>
 <translation id="4309915981827077375">সাধাৰণ তথ্য</translation>
+<translation id="4315949787858895817">ডাচ্চ (বেলজিয়াম)</translation>
 <translation id="4326192123064055915">কফি</translation>
 <translation id="4336032328163998280">প্ৰতিলিপি কৰিব পৰা নগ'ল। <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">মেল’ন</translation>
@@ -288,8 +307,8 @@
 <translation id="4470564870223067757">হাংগুল ২ ছেট</translation>
 <translation id="4477219268485577442">বুলগেৰিয়ান ফ’নেটিক</translation>
 <translation id="4479812471636796472">ইউ. এছ. ডভ’ৰাক কীব’র্ড</translation>
-<translation id="4487088045714738411">বেলজিয়ান কীব’ৰ্ড</translation>
 <translation id="4522570452068850558">সবিশেষ</translation>
+<translation id="4527800702232535228">এই ফ’ল্ডাৰটো Parallels Desktopৰ সৈতে শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="4552678318981539154">অধিক ষ্ট’ৰেজ কিনক</translation>
 <translation id="4559767610552730302">ব’কে’</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> ফাইল</translation>
@@ -297,7 +316,8 @@
 <translation id="4579744207439506346">বাছনিত <ph name="ENTRY_NAME" /> যোগ কৰা হৈছে।</translation>
 <translation id="4582497162516204941">Linux (Beta)ৰ জৰিয়তে ইনষ্টল কৰক</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" />ৰ ফলাফল দেখুওৱা হৈছে।</translation>
-<translation id="4603392156942865207"><ph name="FILE_NAME" /> ফাইলটো <ph name="FOLDER_NAME" />লৈ  প্ৰতিলিপি কৰি থকা হৈছে</translation>
+<translation id="4603392156942865207"><ph name="FILE_NAME" /> ফাইলটো <ph name="FOLDER_NAME" />লৈ প্ৰতিলিপি কৰি থকা হৈছে</translation>
+<translation id="4627439232948440198">সংস্কৃত</translation>
 <translation id="4631887759990505102">শিল্পী</translation>
 <translation id="4656293982926141856">এই কম্পিউটাৰত</translation>
 <translation id="4669606053856530811">’<ph name="SOURCE_NAME" />’ৰ সদস্যসকলে তেতিয়ালৈকে এক্সেছ নাপাব যেতিয়ালৈকে তেওঁলোকৰ সৈতে এই বস্তুবোৰ শ্বেয়াৰ কৰা নহয়।</translation>
@@ -306,6 +326,7 @@
 <translation id="4694604912444486114">বান্দৰ</translation>
 <translation id="4697043402264950621">ফাইলৰ সূচী <ph name="COLUMN_NAME" /> অনুসৰি ঊৰ্ধ্বক্ৰমিক ভাৱে সজোৱা হৈছে।</translation>
 <translation id="4711094779914110278">তুৰ্কী</translation>
+<translation id="4712283082407695269">"<ph name="PATH" />" খুলি থকা হৈছে</translation>
 <translation id="4713544552769165154">এই ফাইলটো Macintosh ছফ্টৱেৰ ব্যৱহাৰ কৰা কম্পিউটাৰৰ বাবেহে সাজি উলিওৱা হৈছে। আপোনাৰ Chrome OSৰ দ্বাৰা চালিত ডিভাইচটোত এই ফাইলটো খুলিব নোৱাৰি। অনুগ্ৰহ কৰি <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" />ত এটা উপযোগী বিকল্প এপৰ সন্ধান কৰক।<ph name="BEGIN_LINK_HELP" />অধিক জানক<ph name="END_LINK_HELP" /></translation>
 <translation id="4724850507808590449"><ph name="FILE_COUNT" /> খন ফট‘ৰ বেক আপ লোৱা হ‘ল</translation>
 <translation id="4725511304875193254">কৰ্গি</translation>
@@ -323,19 +344,21 @@
 <translation id="4804827417948292437">এভ‘কাড‘</translation>
 <translation id="4823651846660089135">ডিভাইচটো কেৱল পঢ়িব পৰা</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" />টা বস্তু বাছনি কৰা হ’ল</translation>
+<translation id="4843566743023903107">Chromebases</translation>
+<translation id="4849981557599196363">জাৰ্মান (বেলজিয়াম)</translation>
 <translation id="4850886885716139402">চাওক</translation>
 <translation id="485316830061041779">জাৰ্মান</translation>
-<translation id="4859297381873413734"><ph name="APP_NAME" /> (<ph name="VM_SOFTWARE_NAME" />)ৰ জৰিয়তে ফাইলসমূহ খুলিবলৈ প্ৰথমে সেইসমূহ <ph name="FOLDER_NAME" /> ফ’ল্ডাৰটোলৈ প্ৰতিলিপি কৰক।</translation>
 <translation id="4867079195717347957">স্তম্ভটো অধোগামী ভাৱে সজাবলৈ ক্লিক কৰক।</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> বাইট</translation>
 <translation id="4880214202172289027">ভলিউম শ্লাইডাৰ</translation>
 <translation id="4880520557730313061">স্বয়ংক্রিয়ভাৱে ফিক্স কৰা সুবিধা</translation>
 <translation id="4881695831933465202">খোলক</translation>
 <translation id="4886021172213954916">তামিল কীব’ৰ্ড (টাইপৰাইটাৰ)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" />ৰ জৰিয়তে খুলিব পৰা নগ’ল</translation>
+<translation id="4900532980794411603">Parallels Desktopৰ জৰিয়তে শ্বেয়াৰ কৰক</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" />ৰ বেক আপ ল‘বলৈ সাজু</translation>
 <translation id="4924638091161556692">স্থিৰ কৰা হৈছে</translation>
 <translation id="4943368462779413526">ফুটবল</translation>
+<translation id="4961158930123534723">Parallels Desktopৰ জৰিয়তে ১ টা ফ’ল্ডাৰ শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="4969785127455456148">এলবাম</translation>
 <translation id="497244430928947428">মালায়ালম কীব’ৰ্ড (উচ্চাৰণগত)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" />টা বা তাতকৈ কম বৰ্ণ থকা এটা নাম ব্যৱহাৰ কৰক</translation>
@@ -347,6 +370,8 @@
 <translation id="5010406651457630570">কম্পিউটাৰ</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">এই কার্যৰ বাবে প্ৰত্যাশা কৰাত কৈ অধিক সময়ৰ প্ৰয়োজন হৈছে। আপুনি কার্য বন্ধ কৰিব খোজে নেকি?</translation>
+<translation id="5026887030745057099">হিন্দী</translation>
+<translation id="5036159836254554629">Parallels Desktopৰ শ্বেয়াৰ কৰাৰ সুবিধাটো পৰিচালনা কৰক</translation>
 <translation id="5038625366300922036">অধিক চাওক...</translation>
 <translation id="5061708541166515394">কনট্ৰাষ্ট</translation>
 <translation id="5068919226082848014">পিজ্জা</translation>
@@ -356,6 +381,7 @@
 <translation id="5098629044894065541">হিব্ৰু</translation>
 <translation id="5123433949759960244">বাস্কেটবল</translation>
 <translation id="5129662217315786329">প’লিশ্ব</translation>
+<translation id="5132435854979302863">ফিলিপিন'</translation>
 <translation id="5144820558584035333">হাংগুল ৩ ছেট (৩৯০)</translation>
 <translation id="5145331109270917438">তাৰিখ সংশোধন কৰা হৈছে</translation>
 <translation id="515594325917491223">দবাখেল</translation>
@@ -380,7 +406,9 @@
     আপোনাৰ ডিভাইচৰ যিয়েই নহওক কিয়, আপোনাৰ ফাইলসমূহ Google Driveত সুৰক্ষিতভাৱে ষ্ট'ৰ হৈ থাকে।<ph name="MARKUP_6" />
     একেটা ঠাইতে অন্য লোকৰ সৈতে ফাইল <ph name="MARKUP_7" />শ্বেয়াৰ কৰক, সৃষ্টি কৰক আৰু সহযোগিতা কৰক<ph name="MARKUP_8" />।
     <ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">প্ৰতিলিপি কৰা হ'ল।</translation>
 <translation id="5275973617553375938">Google Driveৰ পৰা পুনৰুদ্ধাৰ কৰা ফাইল</translation>
+<translation id="5283140566205748520">ফৰাচী (বেলজিয়াম)</translation>
 <translation id="5317780077021120954">ছেভ কৰক</translation>
 <translation id="5318819489018851358">Linuxৰ জৰিয়তে শ্বেয়াৰ কৰক</translation>
 <translation id="5319782540886810524">লাটভিয়ান কীব’র্ড</translation>
@@ -396,16 +424,17 @@
 <translation id="5418923334382419584">ম্যানমাৰ কীব’ৰ্ড</translation>
 <translation id="5428105026674456456">স্পেনিশ্ব</translation>
 <translation id="5438282218546237410"><ph name="SEARCH_TERM" />ৰ কোনো ফলাফল নাই।</translation>
+<translation id="5449551289610225147">অমান্য পাছৱৰ্ড</translation>
 <translation id="5464696796438641524">প'লিশ্ব কীব'র্ড</translation>
 <translation id="5465122519792752163">নেপালী কীব'ৰ্ড (InScript)</translation>
 <translation id="5469868506864199649">ইটালিয়ান</translation>
+<translation id="5484429245813572665">ইণ্ডোনেছিয়ান</translation>
 <translation id="5494920125229734069">সকলো বাছনি কৰক</translation>
 <translation id="5500122897333236901">আইচলেণ্ডীয়</translation>
 <translation id="5508696409934741614">ডট্‌</translation>
 <translation id="5522908512596376669">ফাইলৰ সূচীখন সূচী ভিউ ম'ডলৈ সলনি কৰা হৈছে।</translation>
 <translation id="5524517123096967210">ফাইলটো পঢ়িব নোৱাৰি।</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> প্ৰতিচ্ছবি</translation>
-<translation id="5533555070048896610">লিপ্যন্তৰণ (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">আকাৰ গণনা কৰি থকা হৈছে</translation>
 <translation id="5583640892426849032">বেকস্পেচ</translation>
 <translation id="5605830556594064952">ইউ.এছ. ডভ’ৰাক</translation>
@@ -443,6 +472,7 @@
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5949281959820712067">আপোনাৰ Google Driveত ফাইল সংশোধন কৰিবলৈ Linux এপক অনুমতি দিয়ক। আপোনাৰ অন্য ডিভাইচৰ সৈতে সলনি কার্য ছিংক কৰা হ'ব।</translation>
 <translation id="5955954492236143329"><ph name="NUMBER_OF_ITEMS" />টা বস্তু</translation>
+<translation id="5957366693331451795">Chromeboxes</translation>
 <translation id="5982621672636444458">মিলোৱাৰ বিকল্পসমূহ</translation>
 <translation id="6005282720244019462">লেটিন আমেৰিকান কীব’র্ড</translation>
 <translation id="6007237601604674381">স্থানান্তৰ কৰিবপৰা নগ’ল। <ph name="ERROR_MESSAGE" /></translation>
@@ -494,10 +524,13 @@
 <translation id="6558280019477628686">কোনো আসোঁৱাহ হৈছে। কিছুমান বস্তু মচা নহ’ব পাৰে।</translation>
 <translation id="656398493051028875">"<ph name="FILENAME" />" মচি থকা হৈছে...</translation>
 <translation id="6581162200855843583">Google Driveৰ লিংক</translation>
+<translation id="6594855146910089723">এই ফ’ল্ডাৰটো Linux আৰু Parallels Desktopৰ সৈতে শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="6607272825297743757">ফাইলৰ তথ্য</translation>
+<translation id="6609332149380188670">Parallels Desktopৰ জৰিয়তে <ph name="NUMBER_OF_ITEMS" /> টা ফ’ল্ডাৰ শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="6629841649550503054">সকলো ফাইল <ph name="BEGIN_LINK" />Google Drive<ph name="END_LINK" />ত বেক আপ কৰা হ’ল!</translation>
 <translation id="6643016212128521049">মচক</translation>
 <translation id="6650726141019353908">গুলপীয়া পখিলা</translation>
+<translation id="6657585470893396449">পাছৱৰ্ড</translation>
 <translation id="6710213216561001401">পূৰ্বৱৰ্তী</translation>
 <translation id="6718273304615422081">জিপ কৰি থকা হৈছে...</translation>
 <translation id="6751256176799620176">১টা ফ’ল্ডাৰ বাছনি কৰা হ’ল</translation>
@@ -537,7 +570,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ইনষ্টল কৰিব পৰা নগ’ল।</translation>
 <translation id="7040138676081995583">ইয়াৰ জৰিয়তে খোলক...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" />তকৈ কম</translation>
 <translation id="7100897339030255923"><ph name="COUNT" />টা বস্তু বাছনি কৰা হৈছে</translation>
 <translation id="7106346894903675391">ষ্ট’ৰ কৰাৰ অধিক ঠাই কিনক...</translation>
 <translation id="7126604456862387217">’&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;’ - &lt;em&gt;সন্ধানৰ ড্ৰাইভ&lt;/em&gt;</translation>
@@ -563,7 +595,6 @@
 <translation id="7417705661718309329">Google মেপ</translation>
 <translation id="7419631653042041064">কেটালান কীব’ৰ্ড</translation>
 <translation id="7434823369735508263">গ্ৰে‘ট ব্ৰিটেইন ড‘ভৰাক কীব’ৰ্ড</translation>
-<translation id="7447678886297481665">এই ফ’ল্ডাৰটোৰ ফাইলসমূহ কেৱল পঢ়িব পৰা। কিছুমান কার্যকলাপ সমৰ্থিত নহয়।</translation>
 <translation id="7460898608667578234">ইউক্ৰেনিয়ান</translation>
 <translation id="7474889694310679759">কানাডিয়ান ইংৰাজী কীব'ৰ্ড</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> বিচাৰি পোৱা গৈছে
@@ -574,6 +605,7 @@
 <translation id="751507702149411736">বেলাৰ’ছিয়ান</translation>
 <translation id="7544853251252956727">সানমিহলি কৰক</translation>
 <translation id="7547811415869834682">ডাচ্চ</translation>
+<translation id="7551643184018910560">শ্বেল্‌ফত পিন কৰক</translation>
 <translation id="7576032389798113292">৬x৪</translation>
 <translation id="7589661784326793847">কেইছেকেণ্ডমান অপেক্ষা কৰক</translation>
 <translation id="7603724359189955920">গ্ৰীড</translation>
@@ -582,8 +614,10 @@
 <translation id="7649070708921625228">সহায়</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" />টা বস্তু লৈ গৈ থকা হৈছে...</translation>
 <translation id="7658239707568436148">বাতিল কৰক</translation>
+<translation id="7693909743393669729">এটা ড্ৰাইভ ফৰ্মেট কৰা কাৰ্যই ড্ৰাইভটোত ষ্ট'ৰ কৰি ৰখা সকলো ডেটা মচিব আৰু দৃশ্যমান নহ'ব পৰা বিভাজনসমূহকে ধৰি পূৰ্বৰে পৰা থকা সকলো বিভাজন আঁতৰাব। এই কাৰ্যটো আনডু কৰিব নোৱাৰি।</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" /> ফৰ্মেট কৰিব পৰা নগ’ল</translation>
 <translation id="770015031906360009">গ্ৰীক</translation>
+<translation id="7705251383879779343"><ph name="FILE_NAME" />ৰ প্ৰতিলিপি কৰা হ’ল।</translation>
 <translation id="7706319470528945664">পৰ্তুগীজ কীব’ৰ্ড</translation>
 <translation id="7711920809702896782">প্ৰতিচ্ছবিৰ তথ্য</translation>
 <translation id="7724603315864178912">কাট কৰক</translation>
@@ -596,6 +630,7 @@
     <ph name="MARKUP_4" />ডাউনল’ড ফ‘ল্ডাৰত থকা ফাইল মচক<ph name="MARKUP_5" /></translation>
 <translation id="7794058097940213561">ডিভাইচটো ফর্মেট কৰক</translation>
 <translation id="7799329977874311193">HTML নথি</translation>
+<translation id="7801354353640549019">Chromebooks</translation>
 <translation id="7805768142964895445">স্থিতি</translation>
 <translation id="7821462174190887129"><ph name="FILE_COUNT" />টা ফাইল পোৱা গ’ল।
     <ph name="LINE_BREAK1" />
@@ -613,6 +648,7 @@
 <translation id="78946041517601018">শ্বেয়াৰ কৰা ড্ৰাইভসমূহ</translation>
 <translation id="7896906914454843592">ইউ.এছ.ৰ বিস্তাৰিত কীব'র্ড</translation>
 <translation id="7898607018410277265">গুজৰাটী কীব’র্ড (নতুন উচ্চাৰণগত)</translation>
+<translation id="7908793776359722643">এটা বিভাজন ফৰ্মেট কৰা কাৰ্যই তাত ষ্ট'ৰ কৰি ৰখা সকলো ডেটা মচিব। এই কাৰ্যটো আনডু কৰিব নোৱাৰি।</translation>
 <translation id="7917972308273378936">লিথুয়ানিয়ান কীবর্ড</translation>
 <translation id="7925686952655276919">ছিংক কৰিবলৈ ম'বাইল ডেটা ব্যৱহাৰ নকৰিব</translation>
 <translation id="7928710562641958568">ডিভাইচ এৰুৱাওক</translation>
@@ -646,7 +682,6 @@
 <translation id="8193175696669055101">ডিভাইচৰ মডেল</translation>
 <translation id="8208580316430297579">শিল্পকৰ্ম</translation>
 <translation id="8223479393428528563">এই ফাইলবোৰ অফলাইন অৱস্থাত ব্যৱহাৰ কৰাৰ বাবে ছেভ কৰিবলৈ অনলাইন হওক আৰু তাৰপিছত ফাইলত সোঁফালে ক্লিক কৰি <ph name="OFFLINE_CHECKBOX_NAME" /> বিকল্পটো বাছনি কৰক।</translation>
-<translation id="8231972167769262174"><ph name="REMAINING_TIME" />ৰ বিষয়ে</translation>
 <translation id="8249296373107784235">নিষ্ফল কৰক</translation>
 <translation id="8261506727792406068">মচক</translation>
 <translation id="8269755669432358899">ফাইলসমূহৰ প্ৰতিক্ৰিয়াৰ পেনেলটো সংকোচন কৰক</translation>
@@ -657,7 +692,9 @@
 <translation id="8299269255470343364">জাপানী</translation>
 <translation id="8312871300878166382">ফ’ল্ডাৰত পে’ষ্ট কৰক</translation>
 <translation id="8329978297633540474">সাধাৰণ পাঠ</translation>
+<translation id="8335587457941836791">শ্বেল্‌ফৰ পৰা আনপিন কৰক</translation>
 <translation id="8336153091935557858">কালি <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">নেপালী লিপ্যন্তৰ</translation>
 <translation id="8336579025507394412">আইচলেণ্ডিক কীব'ৰ্ড</translation>
 <translation id="8342318071240498787">একেটা নামৰ ফাইল বা ডাইৰেক্টৰী আগৰেপৰাই আছে৷</translation>
 <translation id="8382450452152102026"><ph name="FOLDER_NAME" /> লৈ</translation>
@@ -672,6 +709,7 @@
 <translation id="8475647382427415476">এই মুহূৰ্তত Google Driveএ "<ph name="FILENAME" />" ছিংক কৰিব পৰা নাই। Google Driveএ পাছত পুনৰ চেষ্টা কৰিব।</translation>
 <translation id="8477649328507734757">স্পিন</translation>
 <translation id="8487700953926739672">অফলাইনত উপলব্ধ</translation>
+<translation id="8490342535582768689">Parallels Desktopক আপোনাৰ Google Driveত থকা ফাইলসমূহৰ সংশোধন কৰিবলৈ অনুমতি দিয়ক। সালসলনিসমূহ আপোনাৰ অন্য ডিভাইচৰ সৈতে ছিংক হ’ব।</translation>
 <translation id="8521441079177373948">ইউ.কে.</translation>
 <translation id="8525306231823319788">সম্পূর্ণ স্ক্ৰীণ</translation>
 <translation id="8551494947769799688">লাটভিয়ান</translation>
@@ -681,12 +719,14 @@
 <translation id="8600173386174225982">ফাইলৰ সূচীখন থাম্বনেইল ভিউ ম'ডলৈ সলনি কৰা হৈছে।</translation>
 <translation id="8601932370724196034">Crostini প্ৰতিচ্ছবিৰ ফাইল</translation>
 <translation id="8669949407341943408">স্থানান্তৰ কৰি থকা হৈছে...</translation>
+<translation id="8694836330346852143">উৰ্দু</translation>
 <translation id="8698464937041809063">Google অংকন</translation>
 <translation id="8714406895390098252">বাইচাইকেল</translation>
 <translation id="8719721339511222681">বাছনি কৰা <ph name="ENTRY_NAME" />।</translation>
 <translation id="8722421161699219904">ইউএছ ইণ্টাৰনেশ্বনেল কীব’র্ড</translation>
 <translation id="872537912056138402">ক্ৰ’ৱেশ্বিয়ান</translation>
 <translation id="874420130893181774">Traditional Pinyin ইনপুট পদ্ধতি</translation>
+<translation id="8770002329960263418">আমেৰিকা যুক্তৰাষ্ট্ৰৰ আন্তঃৰাষ্ট্ৰীয় PC কীব’ৰ্ডৰ সৈতে ডাচ্চ (নেডাৰলেণ্ডছ)</translation>
 <translation id="8775404590947523323">আপুনি কৰা সম্পাদনাবোৰ স্বয়ংক্ৰিয়ভাৱে ছেভ কৰা হ’ল।<ph name="BREAKS" />মূল ছবিখনৰ এটা প্ৰতিলিপি ৰাখিবলৈ "মূল ছবি অ’ভাৰৰাইট কৰক"ৰ পৰা টিকচিহ্ন আঁতৰাওক</translation>
 <translation id="8808686172382650546">মেকুৰী</translation>
 <translation id="8810671769985673465">জিপ কৰিব পৰা নগ’ল, বাকী থকা বস্তু: "<ph name="FILE_NAME" />"</translation>
@@ -696,6 +736,7 @@
 <translation id="8900820606136623064">হাংগেৰিয়ান</translation>
 <translation id="8901822611024316615">চেক QWERTY কীব'র্ড</translation>
 <translation id="8919081441417203123">ডেনিশ্ব</translation>
+<translation id="8941776146379310519">মালয়</translation>
 <translation id="8960999352790021682">বেংগলী কীব’র্ড (উচ্চাৰণগত)</translation>
 <translation id="8965697826696209160">পৰ্যাপ্ত খালী ঠাই নাই।</translation>
 <translation id="9017798300203431059">ৰাছিয়ান ফ'নেটিক</translation>
@@ -706,6 +747,7 @@
 <translation id="9065203028668620118">সম্পাদনা কৰক</translation>
 <translation id="9099674669267916096">পৃষ্ঠাৰ সংখ্যা</translation>
 <translation id="9110990317705400362">আমি আপোনাৰ ব্ৰাউজিং সুৰক্ষিত কৰিবলৈ সদায়েই উপায় বিচাৰি আছোঁ। পূৰ্বতে, যিকোনো ৱেবছাইটে আপোনাৰ ব্ৰাউজাৰত এক্সটেনশ্বন যোগ কৰিবলৈ আপোনাক প্ৰ’ম্প্‌ট কৰিব পাৰিছিল। Google Chromeৰ শেহতীয়া সংস্কৰণত আপুনি Chromeক স্পষ্টভাৱে ক’ব লাগিব যে আপুনি এক্সটেনশ্বন পৃষ্ঠাটোৰ জৰিয়তে এই এক্সটেনশ্বনসমূহ ইনষ্টল কৰিবলৈ বিচাৰে। <ph name="BEGIN_LINK" />অধিক জানক<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">আনলক</translation>
 <translation id="912419004897138677">ক’ডেক</translation>
 <translation id="9129931661813833980">ফ’ল্ডাৰ পিন কৰক</translation>
 <translation id="9130775360844693113">‘<ph name="DESTINATION_NAME" />’ৰ সদস্যসকলে এই বস্তুবোৰলৈ এক্সেছ পাব।</translation>

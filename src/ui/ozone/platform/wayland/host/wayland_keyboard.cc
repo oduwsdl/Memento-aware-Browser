@@ -16,10 +16,10 @@
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
-#include "ui/events/ozone/evdev/keyboard_util_evdev.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/types/event_type.h"
+#include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
@@ -44,11 +44,7 @@ WaylandKeyboard::WaylandKeyboard(
       connection_(connection),
       delegate_(delegate),
       auto_repeat_handler_(this),
-#if BUILDFLAG(USE_XKBCOMMON)
-      layout_engine_(static_cast<XkbKeyboardLayoutEngine*>(layout_engine)) {
-#else
-      layout_engine_(layout_engine) {
-#endif
+      layout_engine_(static_cast<LayoutEngine*>(layout_engine)) {
   static const wl_keyboard_listener listener = {
       &WaylandKeyboard::Keymap,    &WaylandKeyboard::Enter,
       &WaylandKeyboard::Leave,     &WaylandKeyboard::Key,
@@ -101,7 +97,7 @@ void WaylandKeyboard::Enter(void* data,
                             wl_surface* surface,
                             wl_array* keys) {
   // wl_surface might have been destroyed by this time.
-  if (auto* window = WaylandWindow::FromSurface(surface)) {
+  if (auto* window = wl::RootWindowFromWlSurface(surface)) {
     auto* self = static_cast<WaylandKeyboard*>(data);
     self->delegate_->OnKeyboardFocusChanged(window, /*focused=*/true);
   }
@@ -113,7 +109,7 @@ void WaylandKeyboard::Leave(void* data,
                             wl_surface* surface) {
   // wl_surface might have been destroyed by this time.
   auto* self = static_cast<WaylandKeyboard*>(data);
-  if (auto* window = WaylandWindow::FromSurface(surface))
+  if (auto* window = wl::RootWindowFromWlSurface(surface))
     self->delegate_->OnKeyboardFocusChanged(window, /*focused=*/false);
 
   // Upon window focus lose, reset the key repeat timers.
@@ -129,9 +125,9 @@ void WaylandKeyboard::Key(void* data,
   WaylandKeyboard* keyboard = static_cast<WaylandKeyboard*>(data);
   DCHECK(keyboard);
 
-  keyboard->connection_->set_serial(serial);
-
   bool down = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+  if (down)
+    keyboard->connection_->set_serial(serial, ET_KEY_PRESSED);
   int device_id = keyboard->device_id();
 
   keyboard->auto_repeat_handler_.UpdateKeyRepeat(
@@ -192,16 +188,14 @@ void WaylandKeyboard::DispatchKey(uint32_t key,
                                   base::TimeTicks timestamp,
                                   int device_id,
                                   int flags) {
-  DomCode dom_code =
-      KeycodeConverter::NativeKeycodeToDomCode(EvdevCodeToNativeCode(key));
+  DomCode dom_code = KeycodeConverter::EvdevCodeToDomCode(key);
   if (dom_code == ui::DomCode::NONE)
     return;
 
   // Pass empty DomKey and KeyboardCode here so the delegate can pre-process
   // and decode it when needed.
   uint32_t result = delegate_->OnKeyboardKeyEvent(
-      down ? ET_KEY_PRESSED : ET_KEY_RELEASED, dom_code, DomKey::NONE,
-      KeyboardCode::VKEY_UNKNOWN, repeat, timestamp);
+      down ? ET_KEY_PRESSED : ET_KEY_RELEASED, dom_code, repeat, timestamp);
 
   if (extended_keyboard_v1_) {
     bool handled = result & POST_DISPATCH_STOP_PROPAGATION;

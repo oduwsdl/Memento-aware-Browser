@@ -33,9 +33,7 @@ class SelectionData;
 // implement per-component fast-paths.
 class COMPONENT_EXPORT(UI_BASE) SelectionRequestor {
  public:
-  SelectionRequestor(XDisplay* xdisplay,
-                     x11::Window xwindow,
-                     XEventDispatcher* dispatcher);
+  SelectionRequestor(x11::Window xwindow, XEventDispatcher* dispatcher);
   ~SelectionRequestor();
 
   // Does the work of requesting |target| from |selection|, spinning up the
@@ -61,7 +59,7 @@ class COMPONENT_EXPORT(UI_BASE) SelectionRequestor {
 
   // It is our owner's responsibility to plumb X11 SelectionNotify events on
   // |xwindow_| to us.
-  void OnSelectionNotify(const x11::Event& event);
+  void OnSelectionNotify(const x11::SelectionNotifyEvent& event);
 
   // Returns true if SelectionOwner can process the XChangeProperty event,
   // |event|.
@@ -87,7 +85,7 @@ class COMPONENT_EXPORT(UI_BASE) SelectionRequestor {
     bool data_sent_incrementally;
 
     // The result data for the XConvertSelection() request.
-    std::vector<std::vector<uint8_t>> out_data;
+    std::vector<scoped_refptr<base::RefCountedMemory>> out_data;
     x11::Atom out_type;
 
     // Whether the XConvertSelection() request was successful.
@@ -121,7 +119,6 @@ class COMPONENT_EXPORT(UI_BASE) SelectionRequestor {
   Request* GetCurrentRequest();
 
   // Our X11 state.
-  XDisplay* x_display_;
   x11::Window x_window_;
 
   // The property on |x_window_| set by the selection owner with the value of

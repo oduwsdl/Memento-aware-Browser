@@ -995,6 +995,7 @@ MOCK_METHOD4(
     void(GLenum identifier, GLuint name, GLsizei length, const char* label));
 MOCK_METHOD3(ObjectPtrLabel,
              void(void* ptr, GLsizei length, const char* label));
+MOCK_METHOD2(PatchParameteri, void(GLenum pname, GLint value));
 MOCK_METHOD6(PathCommandsNV,
              void(GLuint path,
                   GLsizei numCommands,
@@ -1402,6 +1403,16 @@ MOCK_METHOD7(TexStorageMem2DEXT,
                   GLsizei height,
                   GLuint memory,
                   GLuint64 offset));
+MOCK_METHOD9(TexStorageMemFlags2DANGLE,
+             void(GLenum target,
+                  GLsizei levels,
+                  GLenum internalFormat,
+                  GLsizei width,
+                  GLsizei height,
+                  GLuint memory,
+                  GLuint64 offset,
+                  GLbitfield createFlags,
+                  GLbitfield usageFlags));
 MOCK_METHOD9(TexSubImage2D,
              void(GLenum target,
                   GLint level,

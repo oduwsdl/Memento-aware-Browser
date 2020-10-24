@@ -37,12 +37,13 @@
 <translation id="1842960171412779397">pilih</translation>
 <translation id="1859234291848436338">Arah Penulisan</translation>
 <translation id="1860796786778352021">Tutup Pemberitahuan</translation>
+<translation id="186476001994626254">Kandungan Tampal Pintar Web</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">Pilih &amp;semua</translation>
+<translation id="19085484004813472">Ini ciri baharu</translation>
 <translation id="2006524834898217237">Pastikan peranti ini disambungkan ke Internet.</translation>
 <translation id="208586643495776849">Sila cuba lagi</translation>
-<translation id="2090963878406559571">Untuk menghantar nombor dari <ph name="ORIGIN" /> ke telefon Android anda, <ph name="TROUBLESHOOT_LINK" /> untuk kedua-dua peranti dalam tetapan.</translation>
 <translation id="2141853158323869627">{DAYS,plural, =1{1h}other{#h}}</translation>
 <translation id="2148716181193084225">Hari ini</translation>
 <translation id="2161656808144014275">Teks</translation>
@@ -64,14 +65,18 @@
 <translation id="2522350507219695259">Penentukuran telah selesai</translation>
 <translation id="252373100621549798">Paparan Tidak Diketahui</translation>
 <translation id="2545651323591713692">Tunda</translation>
+<translation id="2570734079541893434">Urus tetapan</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{dalam 1j}other{dalam #j}}</translation>
 <translation id="2583543531130364912">Tentukur skrin sentuh anda</translation>
+<translation id="2586657967955657006">Papan Keratan</translation>
 <translation id="2666092431469916601">Atas</translation>
 <translation id="2701330563083355633">Dikongsi daripada <ph name="DEVICE_NAME" /></translation>
+<translation id="271033894570825754">Baharu</translation>
 <translation id="2743387203779672305">Salin ke papan keratan</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Buka folder</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 tahun yang lalu}other{# tahun yang lalu}}</translation>
+<translation id="2878511608894704031">Padamkan Semua</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{dalam 1h}other{dalam #h}}</translation>
 <translation id="2931838996092594335">klik</translation>
 <translation id="2981684127883932071">Memaparkan cadangan</translation>
@@ -112,6 +117,7 @@
 <translation id="4289300219472526559">Mula Bercakap</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> dialihkan kepada folder <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">SEMUA APL</translation>
+<translation id="4491109536499578614">Imej</translation>
 <translation id="4588090240171750605">Tatal ke Kanan</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, Rating bintang <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, Pengesyoran apl</translation>
@@ -128,8 +134,8 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Segi tiga pendedahan</translation>
 <translation id="5278860589123563674">Gagal dihantar</translation>
+<translation id="5283099933536931082"><ph name="APP_ITEM_TITLE" /> meminta perhatian anda.</translation>
 <translation id="528468243742722775">End</translation>
-<translation id="5327567770033251652">hidupkan penyegerakan</translation>
 <translation id="5329858601952122676">&amp;Padam</translation>
 <translation id="5395308026110844773"><ph name="DRAGGED_APP_NAME" /> ke atas <ph name="IN_PLACE_APP" />, lepaskan untuk membuat folder.</translation>
 <translation id="5463830097259460683">Emoji &amp;&amp; Simbol</translation>
@@ -139,12 +145,14 @@
 <translation id="5574202486608032840">Sistem <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Undur ruang</translation>
 <translation id="5613020302032141669">Anak Panah Kiri</translation>
+<translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> meminta perhatian anda.</translation>
 <translation id="5675363643668471212">Item rak</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{1 min}other{# min}}</translation>
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktif hari ini}=1{Aktif 1 hari yang lalu}other{Aktif # hari yang lalu}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 hari dan }other{# hari dan }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{dalam 1t}other{dalam #t}}</translation>
+<translation id="588258955323874662">Skrin penuh</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 saat lagi}other{# saat lagi}}</translation>
 <translation id="5941711191222866238">Minimumkan</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 jam}other{# jam}}</translation>
@@ -168,16 +176,15 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">Sekat semua pemberitahuan daripada apl ini</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Sesaat yang lalu}other{# saat yang lalu}}</translation>
+<translation id="6503257047630241175">Kandungan RTF</translation>
 <translation id="6539092367496845964">Kesilapan telah berlaku. Cuba sebentar lagi.</translation>
 <translation id="654149438358937226">Sekat semua pemberitahuan</translation>
 <translation id="6567071839949112727">klik pewaris</translation>
 <translation id="6578407462441924264">Tidak bernama</translation>
 <translation id="6612467943526193239">Untuk keluar daripada penentukuran, tekan Esc.</translation>
 <translation id="6620110761915583480">Simpan Fail</translation>
-<translation id="6656912866303152668">Pastikan penyegerakan <ph name="TARGET_DEVICE_NAME" /> telah dihidupkan dalam Chrome, kemudian cuba hantar lagi.</translation>
 <translation id="6699343763173986273">Lagu Media Seterusnya</translation>
 <translation id="6710213216561001401">Sebelumnya</translation>
-<translation id="6779314412797872738">Untuk menghantar nombor dari sini ke telefon Android anda, <ph name="TROUBLESHOOT_LINK" /> untuk kedua-dua peranti dalam tetapan.</translation>
 <translation id="6786750046913594791">Tutup folder</translation>
 <translation id="6808150112686056157">Media Berhenti</translation>
 <translation id="6845383723252244143">Pilih Folder</translation>
@@ -207,6 +214,7 @@
 <translation id="7848989271541991537">Dialihkan kepada Halaman <ph name="PAGE_NUMBER" />, baris <ph name="ROW_NUMBER" />, lajur <ph name="COLUMN_NUMBER" />.</translation>
 <translation id="7879499977785298635">Jangan sekat</translation>
 <translation id="7907591526440419938">Buka Fail</translation>
+<translation id="7952747673138230804">OS Chrome menunjukkan cadangan kandungan baharu untuk diterokai. Menghantar statistik untuk meningkatkan kualiti hanya jika anda telah memilih untuk berkongsi data penggunaan. <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">Perintah</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Lebih daripada 1 pemberitahuan belum dibaca}other{Lebih daripada # pemberitahuan belum dibaca}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{dalam 1m}other{dalam #m}}</translation>

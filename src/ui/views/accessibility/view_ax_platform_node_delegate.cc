@@ -154,6 +154,13 @@ void ViewAXPlatformNodeDelegate::EndPopupFocusOverride() {
   ui::AXPlatformNode::SetPopupFocusOverride(nullptr);
 }
 
+bool ViewAXPlatformNodeDelegate::IsFocusedForTesting() {
+  if (ui::AXPlatformNode::GetPopupFocusOverride())
+    return ui::AXPlatformNode::GetPopupFocusOverride() == GetNativeObject();
+
+  return ViewAccessibility::IsFocusedForTesting();
+}
+
 void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
     ax::mojom::Event event_type) {
   DCHECK(ax_platform_node_);
@@ -166,13 +173,19 @@ void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
 
   // Some events have special handling.
   switch (event_type) {
+    case ax::mojom::Event::kFocusAfterMenuClose: {
+      DCHECK(!ui::AXPlatformNode::GetPopupFocusOverride())
+          << "Must call ViewAccessibility::EndPopupFocusOverride() as menu "
+             "closes.";
+      break;
+    }
     case ax::mojom::Event::kFocus: {
       if (ui::AXPlatformNode::GetPopupFocusOverride()) {
         DCHECK_EQ(ui::AXPlatformNode::GetPopupFocusOverride(),
                   GetNativeObject())
             << "If the popup focus override is on, then the kFocus event must "
                "match it. Most likely the popup has closed, but did not call "
-               "ViewAccessibility::FireFocusAfterMenuClose(), and focus has "
+               "ViewAccessibility::EndPopupFocusOverride(), and focus has "
                "now moved on.";
       }
       break;
@@ -200,7 +213,7 @@ void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
   ax_platform_node_->NotifyAccessibilityEvent(event_type);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 void ViewAXPlatformNodeDelegate::AnnounceText(const base::string16& text) {
   ax_platform_node_->AnnounceText(text);
 }
@@ -332,6 +345,10 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::ChildAtIndex(int index) {
   return nullptr;
 }
 
+bool ViewAXPlatformNodeDelegate::HasModalDialog() const {
+  return GetChildWidgets().is_tab_modal_showing;
+}
+
 gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetNSWindow() {
   NOTREACHED();
   return nullptr;
@@ -355,8 +372,24 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetParent() {
   return nullptr;
 }
 
+bool ViewAXPlatformNodeDelegate::IsChildOfLeaf() const {
+  // Needed to prevent endless loops, see: http://crbug.com/1100047
+  return false;
+}
+
 bool ViewAXPlatformNodeDelegate::IsLeaf() const {
   return ViewAccessibility::IsLeaf() || AXPlatformNodeDelegateBase::IsLeaf();
+}
+
+bool ViewAXPlatformNodeDelegate::IsToplevelBrowserWindow() {
+  // Note: only used on Desktop Linux. Other platforms don't have an application
+  // node so this would never return true.
+  ui::AXNodeData data = GetData();
+  if (data.role != ax::mojom::Role::kWindow)
+    return false;
+
+  AXPlatformNodeDelegate* parent = GetParentDelegate();
+  return parent && parent->GetData().role == ax::mojom::Role::kApplication;
 }
 
 gfx::Rect ViewAXPlatformNodeDelegate::GetBoundsRect(
@@ -505,6 +538,46 @@ bool ViewAXPlatformNodeDelegate::IsMinimized() const {
 
 const ui::AXUniqueId& ViewAXPlatformNodeDelegate::GetUniqueId() const {
   return ViewAccessibility::GetUniqueId();
+}
+
+base::Optional<bool>
+ViewAXPlatformNodeDelegate::GetTableHasColumnOrRowHeaderNode() const {
+  if (!GetAncestorTableView())
+    return false;
+  return !GetAncestorTableView()->visible_columns().empty();
+}
+
+std::vector<int32_t> ViewAXPlatformNodeDelegate::GetColHeaderNodeIds() const {
+  std::vector<int32_t> col_header_ids;
+  if (!virtual_children().empty()) {
+    for (const std::unique_ptr<AXVirtualView>& header_cell :
+         virtual_children().front()->children()) {
+      const ui::AXNodeData& header_data = header_cell->GetData();
+      if (header_data.role == ax::mojom::Role::kColumnHeader) {
+        col_header_ids.push_back(header_data.id);
+      }
+    }
+  }
+  return col_header_ids;
+}
+
+std::vector<int32_t> ViewAXPlatformNodeDelegate::GetColHeaderNodeIds(
+    int col_index) const {
+  std::vector<int32_t> columns = GetColHeaderNodeIds();
+  if (columns.size() <= size_t{col_index}) {
+    return {};
+  }
+  return {columns[col_index]};
+}
+
+TableView* ViewAXPlatformNodeDelegate::GetAncestorTableView() const {
+  ui::AXNodeData data;
+  view()->GetViewAccessibility().GetAccessibleNodeData(&data);
+
+  if (!ui::IsTableLike(data.role))
+    return nullptr;
+
+  return static_cast<TableView*>(view());
 }
 
 bool ViewAXPlatformNodeDelegate::IsOrderedSetItem() const {

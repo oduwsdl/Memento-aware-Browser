@@ -36,7 +36,7 @@ const char* kSkiaGoldInstance = "chrome";
 
 #if defined(OS_WIN)
 const wchar_t* kSkiaGoldCtl = L"tools/skia_goldctl/win/goldctl.exe";
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
 const char* kSkiaGoldCtl = "tools/skia_goldctl/mac/goldctl";
 #else
 const char* kSkiaGoldCtl = "tools/skia_goldctl/linux/goldctl";
@@ -48,6 +48,7 @@ const char* kBuildRevisionKey = "git-revision";
 const char* kIssueKey = "gerrit-issue";
 const char* kPatchSetKey = "gerrit-patchset";
 const char* kJobIdKey = "buildbucket-id";
+const char* kCodeReviewSystemKey = "code-review-system";
 
 const char* kNoLuciAuth = "no-luci-auth";
 const char* kBypassSkiaGoldFunctionality = "bypass-skia-gold-functionality";
@@ -67,11 +68,6 @@ void AppendArgsJustAfterProgram(base::CommandLine& cmd,
                                 base::CommandLine::StringVector args) {
   base::CommandLine::StringVector& argv =
       const_cast<base::CommandLine::StringVector&>(cmd.argv());
-  int args_size = args.size();
-  argv.resize(argv.size() + args_size);
-  for (int i = argv.size() - args_size; i > 1; --i) {
-    argv[i + args_size - 1] = argv[i - 1];
-  }
   argv.insert(argv.begin() + 1, args.begin(), args.end());
 }
 
@@ -90,13 +86,6 @@ void FillInSystemEnvironment(base::Value::DictStorage& ds) {
   ds["processor"] = std::make_unique<base::Value>(processor);
 }
 
-// TODO(crbug.com/1081962) Support grace period.
-// Set ignore to true. When the test fails, Skia Gold will not make
-// comment on Gerrit.
-void FillInGracePeriod(base::Value::DictStorage& ds) {
-  ds["ignore"] = std::make_unique<base::Value>("1");
-}
-
 // Fill in test environment to the keys_file. The format is json.
 // We need the system information to determine whether a new screenshot
 // is good or not. All the information that can affect the output of pixels
@@ -105,7 +94,6 @@ void FillInGracePeriod(base::Value::DictStorage& ds) {
 bool FillInTestEnvironment(const base::FilePath& keys_file) {
   base::Value::DictStorage ds;
   FillInSystemEnvironment(ds);
-  FillInGracePeriod(ds);
   base::Value root(std::move(ds));
   std::string content;
   base::JSONWriter::Write(root, &content);
@@ -133,7 +121,7 @@ SkiaGoldPixelDiff::~SkiaGoldPixelDiff() = default;
 std::string SkiaGoldPixelDiff::GetPlatform() {
 #if defined(OS_WIN)
   return "windows";
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   return "macOS";
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
   return "linux";
@@ -188,7 +176,7 @@ void SkiaGoldPixelDiff::InitSkiaGold() {
     cmd.AppendSwitchASCII("issue", issue_);
     cmd.AppendSwitchASCII("patchset", patchset_);
     cmd.AppendSwitchASCII("jobid", job_id_);
-    cmd.AppendSwitchASCII("crs", "gerrit");
+    cmd.AppendSwitchASCII("crs", code_review_system_);
     cmd.AppendSwitchASCII("cis", "buildbucket");
   }
 
@@ -200,7 +188,8 @@ void SkiaGoldPixelDiff::InitSkiaGold() {
   ASSERT_EQ(exit_code, 0);
 }
 
-void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix) {
+void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix,
+                             const std::string& corpus) {
   auto* cmd_line = base::CommandLine::ForCurrentProcess();
   ASSERT_TRUE(cmd_line->HasSwitch(kBuildRevisionKey))
       << "Missing switch " << kBuildRevisionKey;
@@ -217,12 +206,17 @@ void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix) {
     issue_ = cmd_line->GetSwitchValueASCII(kIssueKey);
     patchset_ = cmd_line->GetSwitchValueASCII(kPatchSetKey);
     job_id_ = cmd_line->GetSwitchValueASCII(kJobIdKey);
+    code_review_system_ = cmd_line->GetSwitchValueASCII(kCodeReviewSystemKey);
+    if (code_review_system_.empty()) {
+      code_review_system_ = "gerrit";
+    }
   }
   if (cmd_line->HasSwitch(kNoLuciAuth)) {
     luci_auth_ = false;
   }
   initialized_ = true;
   prefix_ = screenshot_prefix;
+  corpus_ = corpus.length() ? corpus : "gtest-pixeltests";
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::CreateNewTempDirectory(FILE_PATH_LITERAL("SkiaGoldTemp"),
                                &working_dir_);
@@ -244,7 +238,7 @@ bool SkiaGoldPixelDiff::UploadToSkiaGoldServer(
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::CommandLine cmd(GetAbsoluteSrcRelativePath(kSkiaGoldCtl));
   cmd.AppendSwitchASCII("test-name", remote_golden_image_name);
-  cmd.AppendSwitchASCII("add-test-key", "source_type:gtest-pixeltests");
+  cmd.AppendSwitchASCII("corpus", corpus_);
   cmd.AppendSwitchPath("png-file", local_file_path);
   cmd.AppendSwitchPath("work-dir", working_dir_);
 

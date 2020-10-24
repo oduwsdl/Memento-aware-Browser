@@ -26,7 +26,7 @@ Screen::~Screen() = default;
 
 // static
 Screen* Screen::GetScreen() {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // TODO(scottmg): https://crbug.com/558054
   if (!g_screen)
     g_screen = CreateNativeScreen();
@@ -63,6 +63,10 @@ void Screen::SetDisplayForNewWindows(int64_t display_id) {
   display_id_for_new_windows_ = display_id;
 }
 
+void Screen::SetScreenSaverSuspended(bool suspend) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
 gfx::Rect Screen::ScreenToDIPRectInWindow(gfx::NativeWindow window,
                                           const gfx::Rect& screen_rect) const {
   float scale = GetDisplayNearestWindow(window).device_scale_factor();
@@ -95,6 +99,10 @@ void Screen::SetPanelRotationForTesting(int64_t display_id,
 std::string Screen::GetCurrentWorkspace() {
   NOTIMPLEMENTED_LOG_ONCE();
   return {};
+}
+
+base::Value Screen::GetGpuInfo(const gfx::GpuExtraInfo& gpu_extra_info) {
+  return base::Value(base::Value::Type::LIST);
 }
 
 void Screen::SetScopedDisplayForNewWindows(int64_t display_id) {

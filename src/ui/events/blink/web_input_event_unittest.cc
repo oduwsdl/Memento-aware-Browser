@@ -8,8 +8,10 @@
 #include <stdint.h>
 
 #include "base/stl_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event.h"
@@ -20,11 +22,14 @@
 #include "ui/events/test/keyboard_layout.h"
 
 #if defined(USE_X11)
-#include "ui/events/test/events_test_utils_x11.h"
-#include "ui/events/x/x11_event_translation.h"  // nogncheck
-#include "ui/gfx/x/event.h"                     // nogncheck
-#include "ui/gfx/x/x11.h"                       // nogncheck
-#include "ui/gfx/x/x11_types.h"                 // nogncheck
+#include "ui/base/x/x11_util.h"                    // nogncheck
+#include "ui/events/test/events_test_utils_x11.h"  // nogncheck
+#include "ui/events/x/x11_event_translation.h"     // nogncheck
+#include "ui/gfx/x/event.h"                        // nogncheck
+#include "ui/gfx/x/keysyms/keysyms.h"              // nogncheck
+#include "ui/gfx/x/x11.h"                          // nogncheck
+#include "ui/gfx/x/x11_types.h"                    // nogncheck
+#include "ui/gfx/x/xproto.h"                       // nogncheck
 #endif
 
 namespace ui {
@@ -77,6 +82,9 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEvent) {
     EXPECT_EQ(static_cast<int>(DomKey::CONTROL), webkit_event.dom_key);
   }
 #if defined(USE_X11)
+  // https://crbug.com/1109112): fix this.
+  if (features::IsUsingOzonePlatform())
+    return;
   const int kLocationModifiers =
       blink::WebInputEvent::kIsLeft | blink::WebInputEvent::kIsRight;
   ScopedXI2Event xev;
@@ -91,7 +99,8 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEvent) {
   }
   {
     // Release Ctrl.
-    xev.InitKeyEvent(ET_KEY_RELEASED, VKEY_CONTROL, ControlMask);
+    xev.InitKeyEvent(ET_KEY_RELEASED, VKEY_CONTROL,
+                     static_cast<uint32_t>(x11::KeyButMask::Control));
     auto event = ui::BuildKeyEventFromXEvent(*xev);
     blink::WebKeyboardEvent webkit_event = MakeWebKeyboardEvent(*event);
     // However, modifier bit for Control in |webkit_event| shouldn't be set.
@@ -102,14 +111,16 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEvent) {
 
 TEST(WebInputEventTest, TestMakeWebKeyboardEventWindowsKeyCode) {
 #if defined(USE_X11)
+  // https://crbug.com/1109112): enable this.
+  if (features::IsUsingOzonePlatform())
+    return;
   ScopedXI2Event xev;
   {
     // Press left Ctrl.
     xev.InitKeyEvent(ET_KEY_PRESSED, VKEY_CONTROL, 0);
     x11::Event* x11_event = xev;
-    XEvent* xevent = &x11_event->xlib_event();
-    xevent->xkey.keycode =
-        KeycodeConverter::DomCodeToNativeKeycode(DomCode::CONTROL_LEFT);
+    x11_event->As<x11::KeyEvent>()->detail = static_cast<x11::KeyCode>(
+        KeycodeConverter::DomCodeToNativeKeycode(DomCode::CONTROL_LEFT));
     auto event = ui::BuildKeyEventFromXEvent(*xev);
     blink::WebKeyboardEvent webkit_event = MakeWebKeyboardEvent(*event);
     EXPECT_EQ(VKEY_CONTROL, webkit_event.windows_key_code);
@@ -118,9 +129,8 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEventWindowsKeyCode) {
     // Press right Ctrl.
     xev.InitKeyEvent(ET_KEY_PRESSED, VKEY_CONTROL, 0);
     x11::Event* x11_event = xev;
-    XEvent* xevent = &x11_event->xlib_event();
-    xevent->xkey.keycode =
-        KeycodeConverter::DomCodeToNativeKeycode(DomCode::CONTROL_RIGHT);
+    x11_event->As<x11::KeyEvent>()->detail = static_cast<x11::KeyCode>(
+        KeycodeConverter::DomCodeToNativeKeycode(DomCode::CONTROL_RIGHT));
     auto event = ui::BuildKeyEventFromXEvent(*xev);
     blink::WebKeyboardEvent webkit_event = MakeWebKeyboardEvent(*event);
     EXPECT_EQ(VKEY_CONTROL, webkit_event.windows_key_code);
@@ -213,6 +223,9 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEventKeyPadKeyCode) {
         << "}, expect: " << test_case.expected_result;
   }
 #if defined(USE_X11)
+  // https://crbug.com/1109112): fix this.
+  if (features::IsUsingOzonePlatform())
+    return;
   ScopedXI2Event xev;
   for (size_t i = 0; i < base::size(kTesCases); ++i) {
     const TestCase& test_case = kTesCases[i];
@@ -225,11 +238,11 @@ TEST(WebInputEventTest, TestMakeWebKeyboardEventKeyPadKeyCode) {
 
     xev.InitKeyEvent(ET_KEY_PRESSED, test_case.ui_keycode, EF_NONE);
     x11::Event* x11_event = xev;
-    XEvent* xevent = &x11_event->xlib_event();
-    xevent->xkey.keycode =
-        XKeysymToKeycode(gfx::GetXDisplay(), test_case.x_keysym);
-    if (!xevent->xkey.keycode)
+    auto keycode = x11::Connection::Get()->KeysymToKeycode(
+        static_cast<x11::KeySym>(test_case.x_keysym));
+    if (keycode == x11::KeyCode{})
       continue;
+    x11_event->As<x11::KeyEvent>()->detail = keycode;
     auto event = ui::BuildKeyEventFromXEvent(*xev);
     blink::WebKeyboardEvent webkit_event = MakeWebKeyboardEvent(*event);
     EXPECT_EQ(test_case.expected_result, (webkit_event.GetModifiers() &
@@ -465,6 +478,26 @@ TEST(WebInputEventTest, TestMakeWebMouseWheelEvent) {
     EXPECT_EQ(321, webkit_event.PositionInWidget().y());
   }
 }
+
+#if !defined(OS_MAC)
+TEST(WebInputEventTest, TestPercentMouseWheelScroll) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPercentBasedScrolling);
+
+  base::TimeTicks timestamp = EventTimeForNow();
+  MouseWheelEvent ui_event(gfx::Vector2d(0, -MouseWheelEvent::kWheelDelta),
+                           gfx::Point(123, 321), gfx::Point(123, 321),
+                           timestamp, 0, 0);
+  blink::WebMouseWheelEvent webkit_event = MakeWebMouseWheelEvent(ui_event);
+
+  EXPECT_EQ(ui::ScrollGranularity::kScrollByPercentage,
+            webkit_event.delta_units);
+  EXPECT_FLOAT_EQ(0.f, webkit_event.delta_x);
+  EXPECT_FLOAT_EQ(-0.05, webkit_event.delta_y);
+  EXPECT_FLOAT_EQ(0.f, webkit_event.wheel_ticks_x);
+  EXPECT_FLOAT_EQ(-1.f, webkit_event.wheel_ticks_y);
+}
+#endif
 
 TEST(WebInputEventTest, KeyEvent) {
   ui::ScopedKeyboardLayout keyboard_layout(ui::KEYBOARD_LAYOUT_ENGLISH_US);

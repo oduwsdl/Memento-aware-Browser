@@ -269,7 +269,7 @@ VulkanImplementationScenic::CreateImageFromGpuMemoryHandle(
   auto image = gpu::VulkanImage::Create(
       device_queue, vk_image, vk_device_memory, size, vk_image_info.format,
       vk_image_info.tiling, vk_device_size, 0 /* memory_type_index */,
-      ycbcr_info);
+      ycbcr_info, vk_image_info.usage, vk_image_info.flags);
 
   if (image->format() != vk_format) {
     DLOG(ERROR) << "Unexpected format " << vk_format << " vs "
@@ -278,6 +278,8 @@ VulkanImplementationScenic::CreateImageFromGpuMemoryHandle(
     return nullptr;
   }
 
+  image->set_native_pixmap(collection->CreateNativePixmap(
+      gmb_handle.native_pixmap_handle.buffer_index));
   return image;
 }
 
@@ -300,10 +302,23 @@ VulkanImplementationScenic::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
     zx::channel token,
     gfx::BufferFormat format,
-    gfx::BufferUsage usage) {
+    gfx::BufferUsage usage,
+    gfx::Size size,
+    size_t min_buffer_count,
+    bool register_with_image_pipe) {
+  // SCANOUT images must be protected in protected mode.
+  bool force_protected =
+      usage == gfx::BufferUsage::SCANOUT && enforce_protected_memory();
+
+  fuchsia::images::ImagePipe2Ptr image_pipe = nullptr;
+  auto buffer_collection = sysmem_buffer_manager_->ImportSysmemBufferCollection(
+      device, id, std::move(token), size, format, usage, min_buffer_count,
+      force_protected, register_with_image_pipe);
+  if (!buffer_collection)
+    return nullptr;
+
   return std::make_unique<SysmemBufferCollectionImpl>(
-      sysmem_buffer_manager_->ImportSysmemBufferCollection(
-          device, id, std::move(token), format, usage));
+      std::move(buffer_collection));
 }
 
 }  // namespace ui

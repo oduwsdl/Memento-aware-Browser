@@ -40,7 +40,11 @@ class SkiaGoldPixelDiff {
   //   test class name as the prefix. The name will be
   //   |screenshot_prefix| + "_" + |screenshot_name|.'
   //   E.g. 'ToolbarTest_BackButtonHover'.
-  void Init(const std::string& screenshot_prefix);
+  // corpus The corpus (i.e. result group) that will be used to store the
+  //   result in Gold. If omitted, will default to the generic corpus for
+  //   results from gtest-based tests.
+  void Init(const std::string& screenshot_prefix,
+            const std::string& corpus = std::string());
 
   bool CompareScreenshot(
       const std::string& screenshot_name,
@@ -65,6 +69,8 @@ class SkiaGoldPixelDiff {
   bool initialized_ = false;
   // Use luci auth on bots. Don't use luci auth for local development.
   bool luci_auth_ = true;
+  // Which corpus in the instance to associate results with.
+  std::string corpus_;
   // Build revision. This is only used for CI run.
   std::string build_revision_;
   // The following 3 members are for tryjob run.
@@ -74,6 +80,9 @@ class SkiaGoldPixelDiff {
   std::string patchset_;
   // Buildbucket build id.
   std::string job_id_;
+  // Which code review system is being used, typically "gerrit" for Chromium
+  // and "gerrit-internal" for Chrome.
+  std::string code_review_system_;
   // The working dir for goldctl. It's the dir for storing temporary files.
   base::FilePath working_dir_;
 

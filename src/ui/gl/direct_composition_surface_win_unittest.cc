@@ -46,6 +46,7 @@ class TestPlatformDelegate : public ui::PlatformWindowDelegate {
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override {}
   void OnLostCapture() override {}
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override {}
+  void OnWillDestroyAcceleratedWidget() override {}
   void OnAcceleratedWidgetDestroyed() override {}
   void OnActivationChanged(bool active) override {}
   void OnMouseEnter() override {}
@@ -140,8 +141,7 @@ class DirectCompositionSurfaceTest : public testing::Test {
     DirectCompositionSurfaceWin::Settings settings;
     scoped_refptr<DirectCompositionSurfaceWin> surface =
         base::MakeRefCounted<DirectCompositionSurfaceWin>(
-            /*vsync_provider=*/nullptr,
-            DirectCompositionSurfaceWin::VSyncCallback(), parent_window_,
+            parent_window_, DirectCompositionSurfaceWin::VSyncCallback(),
             settings);
     EXPECT_TRUE(surface->Initialize(GLSurfaceFormat()));
 
@@ -1081,10 +1081,7 @@ TEST_F(DirectCompositionPixelTest, ResizeVideoLayer) {
     EXPECT_EQ(gfx::SwapResult::SWAP_ACK,
               surface_->SwapBuffers(base::DoNothing()));
   }
-
-  // Swap chain isn't recreated on resize.
-  ASSERT_TRUE(surface_->GetLayerSwapChainForTesting(0));
-  EXPECT_EQ(swap_chain.Get(), surface_->GetLayerSwapChainForTesting(0).Get());
+  swap_chain = surface_->GetLayerSwapChainForTesting(0);
   EXPECT_TRUE(SUCCEEDED(swap_chain->GetDesc1(&desc)));
   EXPECT_EQ(desc.Width, 30u);
   EXPECT_EQ(desc.Height, 30u);

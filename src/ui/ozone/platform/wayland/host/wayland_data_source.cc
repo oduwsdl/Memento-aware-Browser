@@ -5,7 +5,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_data_source.h"
 
 #include <gtk-primary-selection-client-protocol.h>
-#include <wayland-client-protocol.h>
+#include <primary-selection-unstable-v1-client-protocol.h>
 
 #include <cstdint>
 #include <vector>
@@ -111,7 +111,7 @@ void DataSource<T>::SetAction(int operation) {
 
 template <>
 void DataSource<wl_data_source>::SetAction(int operation) {
-  if (wl_data_source_get_version(data_source_.get()) >=
+  if (wl::get_version_of_object(data_source_.get()) >=
       WL_DATA_SOURCE_SET_ACTIONS_SINCE_VERSION) {
     uint32_t dnd_actions = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
     if (operation & ui::DragDropTypes::DRAG_COPY)
@@ -146,6 +146,26 @@ void DataSource<gtk_primary_selection_source>::Offer(
   connection_->ScheduleFlush();
 }
 
+template <>
+void DataSource<zwp_primary_selection_source_v1>::Initialize() {
+  static const struct zwp_primary_selection_source_v1_listener
+      kDataSourceListener = {
+          DataSource<zwp_primary_selection_source_v1>::OnSend,
+          DataSource<zwp_primary_selection_source_v1>::OnCancel};
+  zwp_primary_selection_source_v1_add_listener(data_source_.get(),
+                                               &kDataSourceListener, this);
+}
+
+template <>
+void DataSource<zwp_primary_selection_source_v1>::Offer(
+    const std::vector<std::string>& mime_types) {
+  for (const auto& mime_type : mime_types)
+    zwp_primary_selection_source_v1_offer(data_source_.get(),
+                                          mime_type.c_str());
+  connection_->ScheduleFlush();
+}
+
 template class DataSource<gtk_primary_selection_source>;
+template class DataSource<zwp_primary_selection_source_v1>;
 
 }  // namespace wl

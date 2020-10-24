@@ -1002,6 +1002,7 @@ void glObjectLabelFn(GLenum identifier,
                      GLsizei length,
                      const char* label) override;
 void glObjectPtrLabelFn(void* ptr, GLsizei length, const char* label) override;
+void glPatchParameteriFn(GLenum pname, GLint value) override;
 void glPathCommandsNVFn(GLuint path,
                         GLsizei numCommands,
                         const GLubyte* commands,
@@ -1446,6 +1447,15 @@ void glTexStorageMem2DEXTFn(GLenum target,
                             GLsizei height,
                             GLuint memory,
                             GLuint64 offset) override;
+void glTexStorageMemFlags2DANGLEFn(GLenum target,
+                                   GLsizei levels,
+                                   GLenum internalFormat,
+                                   GLsizei width,
+                                   GLsizei height,
+                                   GLuint memory,
+                                   GLuint64 offset,
+                                   GLbitfield createFlags,
+                                   GLbitfield usageFlags) override;
 void glTexSubImage2DFn(GLenum target,
                        GLint level,
                        GLint xoffset,

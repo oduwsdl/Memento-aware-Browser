@@ -13,6 +13,7 @@
 #include "ui/gfx/gpu_fence.h"
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
+#include "ui/ozone/public/mojom/wayland/wayland_overlay_config.mojom.h"
 
 namespace ui {
 
@@ -45,8 +46,10 @@ GbmSurfacelessWayland::GbmSurfacelessWayland(
 }
 
 void GbmSurfacelessWayland::QueueOverlayPlane(OverlayPlane plane,
-                                              uint32_t buffer_id) {
-  unsubmitted_frames_.back()->planes.push_back({std::move(plane), buffer_id});
+                                              BufferId buffer_id) {
+  auto result =
+      unsubmitted_frames_.back()->planes.emplace(buffer_id, std::move(plane));
+  DCHECK(result.second);
 }
 
 bool GbmSurfacelessWayland::ScheduleOverlayPlane(
@@ -99,7 +102,7 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
     return;
   }
 
-  // TODO(dcastagna): remove glFlush since eglImageFlushExternalEXT called on
+  // TODO(fangzhoug): remove glFlush since eglImageFlushExternalEXT called on
   // the image should be enough (https://crbug.com/720045).
   if (!no_gl_flush_for_tests_)
     glFlush();
@@ -114,7 +117,7 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
 
   if (!use_egl_fence_sync_ || !frame->schedule_planes_succeeded) {
     frame->ready = true;
-    SubmitFrame();
+    MaybeSubmitFrames();
     return;
   }
 
@@ -122,16 +125,16 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
   // Uset in-fences provided in the overlays. If there are none, we insert our
   // own fence and wait.
   for (auto& plane : frame->planes) {
-    if (plane.plane.gpu_fence)
-      fences.push_back(std::move(plane.plane.gpu_fence));
+    if (plane.second.gpu_fence)
+      fences.push_back(std::move(plane.second.gpu_fence));
   }
 
   base::OnceClosure fence_wait_task;
   if (!fences.empty()) {
     fence_wait_task = base::BindOnce(&WaitForGpuFences, std::move(fences));
   } else {
-    // TODO: the following should be replaced by a per surface flush as it gets
-    // implemented in GL drivers.
+    // TODO(fangzhoug): the following should be replaced by a per surface flush
+    // as it gets implemented in GL drivers.
     EGLSyncKHR fence = InsertFence(has_implicit_external_sync_);
     CHECK_NE(fence, EGL_NO_SYNC_KHR) << "eglCreateSyncKHR failed";
 
@@ -216,33 +219,36 @@ void GbmSurfacelessWayland::PendingFrame::Flush() {
     overlay.Flush();
 }
 
-void GbmSurfacelessWayland::SubmitFrame() {
-  DCHECK(!unsubmitted_frames_.empty());
-
-  if (unsubmitted_frames_.front()->ready && !submitted_frame_) {
-    submitted_frame_ = std::move(unsubmitted_frames_.front());
+void GbmSurfacelessWayland::MaybeSubmitFrames() {
+  while (!unsubmitted_frames_.empty() && unsubmitted_frames_.front()->ready) {
+    auto submitted_frame = std::move(unsubmitted_frames_.front());
     unsubmitted_frames_.erase(unsubmitted_frames_.begin());
 
-    if (!submitted_frame_->schedule_planes_succeeded) {
+    if (!submitted_frame->schedule_planes_succeeded) {
       last_swap_buffers_result_ = false;
 
-      std::move(submitted_frame_->completion_callback)
+      std::move(submitted_frame->completion_callback)
           .Run(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_FAILED));
       // Notify the caller, the buffer is never presented on a screen.
-      std::move(submitted_frame_->presentation_callback)
+      std::move(submitted_frame->presentation_callback)
           .Run(gfx::PresentationFeedback::Failure());
 
-      submitted_frame_.reset();
+      submitted_frame.reset();
       return;
     }
 
-    DCHECK_EQ(submitted_frame_->planes.size(), 1u);
-    submitted_frame_->buffer_id = submitted_frame_->planes.back().buffer_id;
-    buffer_manager_->CommitBuffer(widget_,
-                                  submitted_frame_->planes.back().buffer_id,
-                                  submitted_frame_->damage_region_);
-
-    submitted_frame_->planes.clear();
+    std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr> overlay_configs;
+    for (const auto& plane : submitted_frame->planes) {
+      overlay_configs.push_back(
+          ui::ozone::mojom::WaylandOverlayConfig::From(plane.second));
+      overlay_configs.back()->buffer_id = plane.first;
+      if (plane.second.z_order == 0) {
+        overlay_configs.back()->damage_region = submitted_frame->damage_region_;
+        submitted_frame->buffer_id = plane.first;
+      }
+    }
+    buffer_manager_->CommitOverlays(widget_, std::move(overlay_configs));
+    submitted_frames_.push_back(std::move(submitted_frame));
   }
 }
 
@@ -251,44 +257,113 @@ EGLSyncKHR GbmSurfacelessWayland::InsertFence(bool implicit) {
                                 EGL_SYNC_PRIOR_COMMANDS_IMPLICIT_EXTERNAL_ARM,
                                 EGL_NONE};
   return eglCreateSyncKHR(GetDisplay(), EGL_SYNC_FENCE_KHR,
-                          implicit ? attrib_list : NULL);
+                          implicit ? attrib_list : nullptr);
 }
 
 void GbmSurfacelessWayland::FenceRetired(PendingFrame* frame) {
   frame->ready = true;
-  SubmitFrame();
+  MaybeSubmitFrames();
 }
 
 void GbmSurfacelessWayland::SetNoGLFlushForTests() {
   no_gl_flush_for_tests_ = true;
 }
 
-void GbmSurfacelessWayland::OnSubmission(uint32_t buffer_id,
+void GbmSurfacelessWayland::OnSubmission(BufferId buffer_id,
                                          const gfx::SwapResult& swap_result) {
-  submitted_frame_->overlays.clear();
+  // submitted_frames_ may temporarily have more than one buffer in it if
+  // buffers are released out of order by the Wayland server.
+  DCHECK(!submitted_frames_.empty());
 
-  DCHECK_EQ(submitted_frame_->buffer_id, buffer_id);
-  std::move(submitted_frame_->completion_callback)
-      .Run(gfx::SwapCompletionResult(swap_result));
+  size_t erased = 0;
+  for (auto& submitted_frame : submitted_frames_) {
+    if ((erased = submitted_frame->planes.erase(buffer_id)) > 0) {
+      // |completion_callback| only takes 1 SwapResult. It's possible that only
+      // one of the buffers in a frame gets a SWAP_FAILED or
+      // SWAP_NAK_RECREATE_BUFFERS. Don't replace a failed swap_result with
+      // SWAP_ACK. If both SWAP_FAILED and SWAP_NAK_RECREATE_BUFFERS happens,
+      // this swap is treated as SWAP_FAILED.
+      if (submitted_frame->swap_result == gfx::SwapResult::SWAP_ACK ||
+          swap_result == gfx::SwapResult::SWAP_FAILED) {
+        submitted_frame->swap_result = swap_result;
+      }
+      submitted_frame->pending_presentation_buffers.insert(buffer_id);
+      break;
+    }
+  }
+  DCHECK(erased);
 
-  pending_presentation_frames_.push_back(std::move(submitted_frame_));
+  // Following while loop covers below scenario:
+  //   frame_1 submitted a buffer_1 for overlay; frame_2 submitted a buffer_2
+  //   for primary plane. This can happen at the end of a single-on-top overlay.
+  //   buffer_1 is not attached immediately due to unack'ed wl_frame_callback.
+  //   buffer_2 is attached immediately Onsubmission() of buffer_2 runs.
+  while (!submitted_frames_.empty() &&
+         submitted_frames_.front()->planes.empty()) {
+    auto submitted_frame = std::move(submitted_frames_.front());
+    submitted_frames_.erase(submitted_frames_.begin());
+    submitted_frame->overlays.clear();
+
+    std::move(submitted_frame->completion_callback)
+        .Run(gfx::SwapCompletionResult(submitted_frame->swap_result));
+
+    pending_presentation_frames_.push_back(std::move(submitted_frame));
+  }
 
   if (swap_result != gfx::SwapResult::SWAP_ACK) {
     last_swap_buffers_result_ = false;
     return;
   }
 
-  SubmitFrame();
+  MaybeSubmitFrames();
 }
 
 void GbmSurfacelessWayland::OnPresentation(
-    uint32_t buffer_id,
+    BufferId buffer_id,
     const gfx::PresentationFeedback& feedback) {
-  DCHECK(!pending_presentation_frames_.empty());
-  auto* frame = pending_presentation_frames_.front().get();
-  DCHECK_EQ(frame->buffer_id, buffer_id);
-  std::move(frame->presentation_callback).Run(feedback);
-  pending_presentation_frames_.erase(pending_presentation_frames_.begin());
+  DCHECK(!submitted_frames_.empty() || !pending_presentation_frames_.empty());
+
+  size_t erased = 0;
+  for (auto& frame : pending_presentation_frames_) {
+    if ((erased = frame->pending_presentation_buffers.erase(buffer_id)) > 0) {
+      frame->feedback = feedback;
+      break;
+    }
+  }
+
+  // Items in |submitted_frames_| will not be moved to
+  // |pending_presentation_frames_| until |planes| is empty.
+  // Example:
+  //    A SwapBuffers that submitted 2 buffers (buffer_1 and buffer_2) will push
+  //    a submitted_frame expecting 2 submission feedbacks and 2 presentation
+  //    feedbacks.
+  //    If IPCs comes in the order of:
+  //      buffer_1:submission > buffer_2:submission > buffer_1:presentation >
+  //      buffer_2:presentation
+  //    We are fine without below logic. However, this can happen:
+  //      buffer_1:submission > buffer_1:presentation > buffer_2:submission >
+  //      buffer_2:presentation
+  //    In this case, we have to find the item in |submitted_frames_| and
+  //    remove from |pending_presentation_buffers| there.
+  if (!erased) {
+    for (auto& frame : submitted_frames_) {
+      if ((erased = frame->pending_presentation_buffers.erase(buffer_id)) > 0) {
+        frame->feedback = feedback;
+        break;
+      }
+    }
+  }
+
+  DCHECK(erased);
+
+  while (!pending_presentation_frames_.empty() &&
+         pending_presentation_frames_.front()
+             ->pending_presentation_buffers.empty()) {
+    auto* frame = pending_presentation_frames_.front().get();
+    DCHECK(frame->planes.empty());
+    std::move(frame->presentation_callback).Run(frame->feedback);
+    pending_presentation_frames_.erase(pending_presentation_frames_.begin());
+  }
 }
 
 }  // namespace ui

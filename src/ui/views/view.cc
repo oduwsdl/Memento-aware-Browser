@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
+#include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/notreached.h"
 #include "base/scoped_observer.h"
@@ -25,6 +26,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/compositor.h"
@@ -192,10 +194,28 @@ View::~View() {
   if (parent_)
     parent_->RemoveChildView(this);
 
+  // This view should have been removed from the focus list by now.
+  DCHECK_EQ(next_focusable_view_, nullptr);
+  DCHECK_EQ(previous_focusable_view_, nullptr);
+
+  // Need to remove layout manager before deleting children because if we do not
+  // it is possible for layout-related calls (e.g. CalculatePreferredSize()) to
+  // be called on this view during one of the callbacks below. Since most
+  // layout managers access child view properties, this would result in a
+  // use-after-free error.
+  layout_manager_.reset();
+
   {
     internal::ScopedChildrenLock lock(this);
     for (auto* child : children_) {
       child->parent_ = nullptr;
+
+      // Since all children are removed here, it is safe to set
+      // |child|'s focus list pointers to null and expect any references
+      // to |child| will be removed subsequently.
+      child->next_focusable_view_ = nullptr;
+      child->previous_focusable_view_ = nullptr;
+
       if (!child->owned_by_client_)
         delete child;
     }
@@ -248,12 +268,7 @@ void View::ReorderChildView(View* view, int index) {
 
   // Update focus siblings.  Unhook |view| from the focus cycle first so
   // SetFocusSiblings() won't traverse through it.
-  View* next_focusable = view->next_focusable_view_;
-  View* prev_focusable = view->previous_focusable_view_;
-  if (prev_focusable)
-    prev_focusable->next_focusable_view_ = next_focusable;
-  if (next_focusable)
-    next_focusable->previous_focusable_view_ = prev_focusable;
+  view->RemoveFromFocusList();
   SetFocusSiblings(view, pos);
 
   for (ViewObserver& observer : observers_)
@@ -264,13 +279,12 @@ void View::ReorderChildView(View* view, int index) {
 }
 
 void View::RemoveChildView(View* view) {
-  DoRemoveChildView(view, true, true, false, nullptr);
+  DoRemoveChildView(view, true, false, nullptr);
 }
 
 void View::RemoveAllChildViews(bool delete_children) {
   while (!children_.empty())
-    DoRemoveChildView(children_.front(), false, false, delete_children,
-                      nullptr);
+    DoRemoveChildView(children_.front(), false, delete_children, nullptr);
   UpdateTooltip();
 }
 
@@ -334,7 +348,7 @@ void View::SetBoundsRect(const gfx::Rect& bounds) {
     // In RTL mode, if our width has changed, our children's mirrored bounds
     // will have changed. Update the child's layer bounds, or if it is not a
     // layer, the bounds of any layers inside the child.
-    if (base::i18n::IsRTL() && bounds_.width() != prev.width()) {
+    if (GetMirrored() && bounds_.width() != prev.width()) {
       for (View* child : children_) {
         child->UpdateChildLayerBounds(
             LayerOffsetData(layer()->device_scale_factor(),
@@ -579,7 +593,7 @@ gfx::Transform View::GetTransform() const {
   gfx::ScrollOffset scroll_offset = layer()->CurrentScrollOffset();
   // Offsets for layer-based scrolling are never negative, but the horizontal
   // scroll direction is reversed in RTL via canvas flipping.
-  transform.Translate((base::i18n::IsRTL() ? 1 : -1) * scroll_offset.x(),
+  transform.Translate((GetMirrored() ? 1 : -1) * scroll_offset.x(),
                       -scroll_offset.y());
   return transform;
 }
@@ -727,7 +741,7 @@ int View::GetMirroredX() const {
 }
 
 int View::GetMirroredXForRect(const gfx::Rect& rect) const {
-  return base::i18n::IsRTL() ? (width() - rect.x() - rect.width()) : rect.x();
+  return GetMirrored() ? (width() - rect.x() - rect.width()) : rect.x();
 }
 
 gfx::Rect View::GetMirroredRect(const gfx::Rect& rect) const {
@@ -737,11 +751,11 @@ gfx::Rect View::GetMirroredRect(const gfx::Rect& rect) const {
 }
 
 int View::GetMirroredXInView(int x) const {
-  return base::i18n::IsRTL() ? width() - x : x;
+  return GetMirrored() ? width() - x : x;
 }
 
 int View::GetMirroredXWithWidthInView(int x, int w) const {
-  return base::i18n::IsRTL() ? width() - x - w : x;
+  return GetMirrored() ? width() - x - w : x;
 }
 
 // Layout ----------------------------------------------------------------------
@@ -1134,8 +1148,34 @@ void View::SetNativeThemeForTesting(ui::NativeTheme* theme) {
 
 // RTL painting ----------------------------------------------------------------
 
-void View::EnableCanvasFlippingForRTLUI(bool enable) {
+bool View::GetFlipCanvasOnPaintForRTLUI() const {
+  return flip_canvas_on_paint_for_rtl_ui_;
+}
+
+void View::SetFlipCanvasOnPaintForRTLUI(bool enable) {
+  if (enable == flip_canvas_on_paint_for_rtl_ui_)
+    return;
   flip_canvas_on_paint_for_rtl_ui_ = enable;
+
+  OnPropertyChanged(&flip_canvas_on_paint_for_rtl_ui_, kPropertyEffectsPaint);
+}
+
+PropertyChangedSubscription View::AddFlipCanvasOnPaintForRTLUIChangedCallback(
+    PropertyChangedCallback callback) {
+  return AddPropertyChangedCallback(&flip_canvas_on_paint_for_rtl_ui_,
+                                    std::move(callback));
+}
+
+void View::SetMirrored(bool is_mirrored) {
+  if (is_mirrored_ && is_mirrored_.value() == is_mirrored)
+    return;
+  is_mirrored_ = is_mirrored;
+
+  OnPropertyChanged(&is_mirrored_, kPropertyEffectsPaint);
+}
+
+bool View::GetMirrored() const {
+  return is_mirrored_.value_or(base::i18n::IsRTL());
 }
 
 // Input -----------------------------------------------------------------------
@@ -1148,13 +1188,20 @@ View* View::GetEventHandlerForRect(const gfx::Rect& rect) {
   return GetEffectiveViewTargeter()->TargetForRect(this, rect);
 }
 
-bool View::CanProcessEventsWithinSubtree() const {
+bool View::GetCanProcessEventsWithinSubtree() const {
   return can_process_events_within_subtree_;
+}
+
+void View::SetCanProcessEventsWithinSubtree(bool can_process) {
+  if (can_process_events_within_subtree_ == can_process)
+    return;
+  can_process_events_within_subtree_ = can_process;
+  OnPropertyChanged(&can_process_events_within_subtree_, kPropertyEffectsNone);
 }
 
 View* View::GetTooltipHandlerForPoint(const gfx::Point& point) {
   // TODO(tdanderson): Move this implementation into ViewTargetDelegate.
-  if (!HitTestPoint(point) || !CanProcessEventsWithinSubtree())
+  if (!HitTestPoint(point) || !GetCanProcessEventsWithinSubtree())
     return nullptr;
 
   // Walk the child Views recursively looking for the View that most
@@ -1303,6 +1350,14 @@ void View::OnTouchEvent(ui::TouchEvent* event) {
 
 void View::OnGestureEvent(ui::GestureEvent* event) {}
 
+void View::SetNotifyEnterExitOnChild(bool notify) {
+  notify_enter_exit_on_child_ = notify;
+}
+
+bool View::GetNotifyEnterExitOnChild() const {
+  return notify_enter_exit_on_child_;
+}
+
 const ui::InputMethod* View::GetInputMethod() const {
   Widget* widget = const_cast<Widget*>(GetWidget());
   return widget ? const_cast<const ui::InputMethod*>(widget->GetInputMethod())
@@ -1444,10 +1499,54 @@ View* View::GetPreviousFocusableView() {
   return previous_focusable_view_;
 }
 
-void View::SetNextFocusableView(View* view) {
-  if (view)
-    view->previous_focusable_view_ = this;
+void View::RemoveFromFocusList() {
+  View* const old_prev = previous_focusable_view_;
+  View* const old_next = next_focusable_view_;
+
+  previous_focusable_view_ = nullptr;
+  next_focusable_view_ = nullptr;
+
+  if (old_prev)
+    old_prev->next_focusable_view_ = old_next;
+
+  if (old_next)
+    old_next->previous_focusable_view_ = old_prev;
+}
+
+void View::InsertBeforeInFocusList(View* view) {
+  DCHECK(view);
+  DCHECK_EQ(parent_, view->parent_);
+
+  if (view == next_focusable_view_)
+    return;
+
+  RemoveFromFocusList();
+
   next_focusable_view_ = view;
+  previous_focusable_view_ = view->previous_focusable_view_;
+
+  if (previous_focusable_view_)
+    previous_focusable_view_->next_focusable_view_ = this;
+
+  next_focusable_view_->previous_focusable_view_ = this;
+}
+
+void View::InsertAfterInFocusList(View* view) {
+  DCHECK(view);
+  DCHECK_EQ(parent_, view->parent_);
+
+  if (view == previous_focusable_view_)
+    return;
+
+  RemoveFromFocusList();
+
+  if (view->next_focusable_view_) {
+    InsertBeforeInFocusList(view->next_focusable_view_);
+    return;
+  }
+
+  view->next_focusable_view_ = this;
+  previous_focusable_view_ = view;
 }
 
 View::FocusBehavior View::GetFocusBehavior() const {
@@ -2069,7 +2168,6 @@ void View::HandlePropertyChangeEffects(PropertyEffects effects) {
     InvalidateLayout();
   if (effects & kPropertyEffectsPaint)
     SchedulePaint();
-  OnHandlePropertyChangeEffects(effects);
 }
 
 PropertyChangedSubscription View::AddPropertyChangedCallback(
@@ -2255,7 +2353,7 @@ void View::AddChildViewAtImpl(View* view, int index) {
   if (parent) {
     old_theme = view->GetNativeTheme();
     old_widget = view->GetWidget();
-    parent->DoRemoveChildView(view, true, true, false, this);
+    parent->DoRemoveChildView(view, true, false, this);
   }
 
   view->parent_ = this;
@@ -2264,6 +2362,7 @@ void View::AddChildViewAtImpl(View* view, int index) {
 #endif
   const auto pos = children_.insert(std::next(children_.cbegin(), index), view);
 
+  view->RemoveFromFocusList();
   SetFocusSiblings(view, pos);
 
   // Ensure the layer tree matches the view tree before calling to any client
@@ -2314,7 +2413,6 @@ void View::AddChildViewAtImpl(View* view, int index) {
 }
 
 void View::DoRemoveChildView(View* view,
-                             bool update_focus_cycle,
                              bool update_tool_tip,
                              bool delete_removed_view,
                              View* new_parent) {
@@ -2325,14 +2423,7 @@ void View::DoRemoveChildView(View* view,
     return;
 
   std::unique_ptr<View> view_to_be_deleted;
-  if (update_focus_cycle) {
-    View* next_focusable = view->next_focusable_view_;
-    View* prev_focusable = view->previous_focusable_view_;
-    if (prev_focusable)
-      prev_focusable->next_focusable_view_ = next_focusable;
-    if (next_focusable)
-      next_focusable->previous_focusable_view_ = prev_focusable;
-  }
+  view->RemoveFromFocusList();
 
   Widget* widget = GetWidget();
   bool is_removed_from_widget = false;
@@ -2768,7 +2859,7 @@ void View::ProcessMouseDragged(ui::MouseEvent* event) {
        drag_controller_->CanStartDragForView(this, GetDragInfo()->start_pt,
                                              event->location()))) {
     if (DoDrag(*event, GetDragInfo()->start_pt,
-               ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE)) {
+               ui::mojom::DragEventSource::kMouse)) {
       event->StopPropagation();
       return;
     }
@@ -2857,34 +2948,22 @@ void View::SetFocusSiblings(View* view, Views::const_iterator pos) {
   DCHECK(pos != children_.cend());
   DCHECK_EQ(view, *pos);
 
-  View* prev = nullptr;
-  View* next = nullptr;
   if (children_.size() > 1) {
-    if (pos == std::prev(children_.cend())) {
+    if (std::next(pos) == children_.cend()) {
       // |view| was inserted at the end, but the end of the child list may not
       // be the last focusable element. Try to hook in after the last focusable
       // child.
-      prev = *std::find_if(children_.cbegin(), pos,
-                           [](View* v) { return !v->next_focusable_view_; });
-      if (prev == view) {
-        // There is a cycle in the focus list. Insert |view| after the last
-        // child.
-        prev = *std::prev(pos);
-      }
-      next = prev->next_focusable_view_;
+      View* const old_last =
+          *std::find_if(children_.cbegin(), pos,
+                        [](View* v) { return !v->next_focusable_view_; });
+      DCHECK_NE(old_last, view);
+      view->InsertAfterInFocusList(old_last);
     } else {
       // |view| was inserted somewhere other than the end.  Hook in before the
       // subsequent child.
-      next = *std::next(pos);
-      prev = next->GetPreviousFocusableView();
+      view->InsertBeforeInFocusList(*std::next(pos));
     }
   }
-  if (prev)
-    prev->next_focusable_view_ = view;
-  view->previous_focusable_view_ = prev;
-  view->next_focusable_view_ = next;
-  if (next)
-    next->previous_focusable_view_ = view;
 }
 
 void View::AdvanceFocusIfNecessary() {
@@ -2954,7 +3033,7 @@ void View::UpdateTooltip() {
 
 bool View::DoDrag(const ui::LocatedEvent& event,
                   const gfx::Point& press_pt,
-                  ui::DragDropTypes::DragEventSource source) {
+                  ui::mojom::DragEventSource source) {
   int drag_operations = GetDragOperations(press_pt);
   if (drag_operations == ui::DragDropTypes::DRAG_NONE)
     return false;
@@ -2992,15 +3071,19 @@ DEFINE_ENUM_CONVERTERS(View::FocusBehavior,
 
 // This block requires the existence of METADATA_HEADER(View) in the class
 // declaration for View.
-BEGIN_METADATA(View)
-ADD_READONLY_PROPERTY_METADATA(View, const char*, ClassName)
-ADD_PROPERTY_METADATA(View, bool, Enabled)
-ADD_PROPERTY_METADATA(View, View::FocusBehavior, FocusBehavior)
-ADD_PROPERTY_METADATA(View, int, Group)
-ADD_PROPERTY_METADATA(View, int, ID)
-ADD_READONLY_PROPERTY_METADATA(View, gfx::Size, MaximumSize)
-ADD_READONLY_PROPERTY_METADATA(View, gfx::Size, MinimumSize)
-ADD_PROPERTY_METADATA(View, bool, Visible)
-END_METADATA()
+BEGIN_METADATA_BASE(View)
+ADD_READONLY_PROPERTY_METADATA(const char*, ClassName)
+ADD_PROPERTY_METADATA(bool, Enabled)
+ADD_PROPERTY_METADATA(View::FocusBehavior, FocusBehavior)
+ADD_PROPERTY_METADATA(bool, FlipCanvasOnPaintForRTLUI)
+ADD_PROPERTY_METADATA(int, Group)
+ADD_PROPERTY_METADATA(int, ID)
+ADD_READONLY_PROPERTY_METADATA(gfx::Size, MaximumSize)
+ADD_READONLY_PROPERTY_METADATA(gfx::Size, MinimumSize)
+ADD_PROPERTY_METADATA(bool, Mirrored)
+ADD_PROPERTY_METADATA(bool, NotifyEnterExitOnChild)
+ADD_PROPERTY_METADATA(bool, Visible)
+ADD_PROPERTY_METADATA(bool, CanProcessEventsWithinSubtree)
+END_METADATA
 
 }  // namespace views

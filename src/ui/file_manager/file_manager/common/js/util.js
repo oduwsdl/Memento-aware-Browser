@@ -1187,14 +1187,17 @@ util.getEntryLabel = (locationInfo, entry) => {
     }
   }
 
-  // Special case for MyFiles/Downloads and MyFiles/PvmDefault.
+  // Special case for MyFiles/Downloads, MyFiles/PvmDefault and MyFiles/Camera.
   if (locationInfo &&
       locationInfo.rootType == VolumeManagerCommon.RootType.DOWNLOADS) {
     if (entry.fullPath == '/Downloads') {
       return str('DOWNLOADS_DIRECTORY_LABEL');
     }
-    if (util.isPluginVmEnabled() && entry.fullPath == '/PvmDefault') {
+    if (entry.fullPath == '/PvmDefault') {
       return str('PLUGIN_VM_DIRECTORY_LABEL');
+    }
+    if (util.isFilesCameraFolderEnabled() && entry.fullPath == '/Camera') {
+      return str('CAMERA_DIRECTORY_LABEL');
     }
   }
 
@@ -1203,8 +1206,8 @@ util.getEntryLabel = (locationInfo, entry) => {
 
 /**
  * Returns true if specified entry is a special entry such as MyFiles/Downloads,
- * MyFiles/PvmDefault or Linux files root which cannot be modified such as
- * deleted/cut or renamed.
+ * MyFiles/PvmDefault, MyFiles/Camera or Linux files root which cannot be
+ * modified such as deleted/cut or renamed.
  *
  * @param {!VolumeManager} volumeManager
  * @param {(Entry|FakeEntry)} entry Entry or a fake entry.
@@ -1233,6 +1236,9 @@ util.isNonModifiable = (volumeManager, entry) => {
       return true;
     }
     if (util.isPluginVmEnabled() && entry.fullPath === '/PvmDefault') {
+      return true;
+    }
+    if (util.isFilesCameraFolderEnabled() && entry.fullPath === '/Camera') {
       return true;
     }
   }
@@ -1393,11 +1399,27 @@ util.timeoutPromise = (promise, ms, opt_message) => {
 };
 
 /**
+ * Returns true when FilesCameraFolder is enabled.
+ * @return {boolean}
+ */
+util.isFilesCameraFolderEnabled = () => {
+  return loadTimeData.getBoolean('FILES_CAMERA_FOLDER_ENABLED');
+};
+
+/**
  * Returns true when FilesNG is enabled.
  * @return {boolean}
  */
 util.isFilesNg = () => {
   return loadTimeData.getBoolean('FILES_NG_ENABLED');
+};
+
+/**
+ * Returns true when copy image to clipboard is enabled.
+ * @return {boolean}
+ */
+util.isCopyImageEnabled = () => {
+  return loadTimeData.getBoolean('COPY_IMAGE_ENABLED');
 };
 
 /**
@@ -1409,12 +1431,54 @@ util.isUnifiedMediaViewEnabled = () => {
 };
 
 /**
- * Returns true when FilesZipNoNacl is enabled.
+ * Returns true if filters in Recents view is enabled.
+ * @return {boolean}
+ */
+util.isRecentsFilterEnabled = () => {
+  return loadTimeData.getBoolean('FILTERS_IN_RECENTS_ENABLED');
+};
+
+/**
+ * Returns true when FilesZipMount feature is enabled.
  * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
  * @return {boolean}
  */
-util.isZipNoNacl = () => {
-  return loadTimeData.getBoolean('ZIP_NO_NACL');
+util.isZipMountEnabled = () => {
+  return loadTimeData.getBoolean('ZIP_MOUNT');
+};
+
+/**
+ * Returns true when FilesZipPack feature is enabled.
+ * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
+ * @return {boolean}
+ */
+util.isZipPackEnabled = () => {
+  return loadTimeData.getBoolean('ZIP_PACK');
+};
+
+/**
+ * Returns true when FilesZipUnpack feature is enabled.
+ * TODO(crbug.com/912236) Remove once transition to new ZIP system is finished.
+ * @return {boolean}
+ */
+util.isZipUnpackEnabled = () => {
+  return loadTimeData.getBoolean('ZIP_UNPACK');
+};
+
+/**
+ * Returns true if transfer details flag is enabled.
+ * @return {boolean}
+ */
+util.isTransferDetailsEnabled = () => {
+  return loadTimeData.getBoolean('FILES_TRANSFER_DETAILS_ENABLED');
+};
+
+/**
+ * Returns true if FilesSinglePartitionFormat flag is enabled.
+ * @return {boolean}
+ */
+util.isSinglePartitionFormatEnabled = () => {
+  return loadTimeData.getBoolean('FILES_SINGLE_PARTITION_FORMAT_ENABLED');
 };
 
 /**
@@ -1667,4 +1731,27 @@ util.setClampLine = (element, lines) => {
   element.style.webkitLineClamp = lines;
 
   return element;
+};
+
+/**
+ * Returns true if the element's content has overflowed.
+ *
+ * @param {!Element} element The element to check.
+ * @returns {boolean}
+ */
+util.hasOverflow = (element) => {
+  return element.clientWidth < element.scrollWidth ||
+      element.clientHeight < element.scrollHeight;
+};
+
+/** @return {boolean} */
+util.isSharesheetEnabled = () => {
+  return loadTimeData.valueExists('SHARESHEET_ENABLED') &&
+      loadTimeData.getBoolean('SHARESHEET_ENABLED');
+};
+
+/** @return {boolean} */
+util.isHoldingSpaceEnabled = () => {
+  return loadTimeData.valueExists('HOLDING_SPACE_ENABLED') &&
+      loadTimeData.getBoolean('HOLDING_SPACE_ENABLED');
 };

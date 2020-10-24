@@ -134,6 +134,30 @@
     <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_CELLULAR_SETUP_JS"
                file="cr_components/chromeos/cellular_setup/cellular_setup.js"
                type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_PSIM_FLOW_HTML"
+               file="cr_components/chromeos/cellular_setup/psim_flow_ui.html"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_PSIM_FLOW_JS"
+               file="cr_components/chromeos/cellular_setup/psim_flow_ui.js"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_ESIM_FLOW_HTML"
+               file="cr_components/chromeos/cellular_setup/esim_flow_ui.html"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_ESIM_FLOW_JS"
+               file="cr_components/chromeos/cellular_setup/esim_flow_ui.js"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_TYPES_JS"
+               file="cr_components/chromeos/cellular_setup/cellular_types.js"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_TYPES_HTML"
+               file="cr_components/chromeos/cellular_setup/cellular_types.html"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_DELEGATE_HTML"
+               file="cr_components/chromeos/cellular_setup/cellular_setup_delegate.html"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_DELEGATE_JS"
+               file="cr_components/chromeos/cellular_setup/cellular_setup_delegate.js"
+               type="chrome_html" />
     <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_MOJO_INTERFACE_PROVIDER_HTML"
                file="cr_components/chromeos/cellular_setup/mojo_interface_provider.html"
                type="chrome_html" />
@@ -175,6 +199,18 @@
                type="chrome_html" />
     <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_WEBVIEW_POST_UTIL_JS"
                file="cr_components/chromeos/cellular_setup/webview_post_util.js"
+               type="chrome_html" />
+     <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_SELECTION_FLOW_HTML"
+               file="cr_components/chromeos/cellular_setup/setup_selection_flow.html"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SETUP_SELECTION_FLOW_JS"
+               file="cr_components/chromeos/cellular_setup/setup_selection_flow.js"
+               type="chrome_html" />
+     <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SUBFLOW_BEHAVIOR_HTML"
+               file="cr_components/chromeos/cellular_setup/subflow_behavior.html"
+               type="chrome_html" />
+    <structure name="IDR_WEBUI_CHROMEOS_CELLULAR_SUBFLOW_BEHAVIOR_JS"
+               file="cr_components/chromeos/cellular_setup/subflow_behavior.js"
                type="chrome_html" />
 
     <!-- Shared between MultiDevice setup flow and OOBE. -->
@@ -264,6 +300,12 @@
     <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_HEALTH_SUMMARY_JS"
                file="cr_components/chromeos/network_health/network_health_summary.js"
                type="chrome_html" />
+    <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_DIAGNOSTICS_HTML"
+               file="cr_components/chromeos/network_health/network_diagnostics.html"
+               type="chrome_html" />
+    <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_DIAGNOSTICS_JS"
+               file="cr_components/chromeos/network_health/network_diagnostics.js"
+               type="chrome_html" />
 
     <!-- Shared between settings and add new share flow. -->
     <structure name="IDR_WEBUI_CHROMEOS_SMB_SHARES_SMB_BROWSER_PROXY_HTML"
@@ -280,6 +322,18 @@
                type="chrome_html" />
 
     <!-- Used to render network-list and related subcomponents. -->
+    <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_CR_POLICY_NETWORK_BEHAVIOR_MOJO_HTML"
+               file="cr_components/chromeos/network/cr_policy_network_behavior_mojo.html"
+               type="chrome_html" />
+    <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_CR_POLICY_NETWORK_BEHAVIOR_MOJO_JS"
+               file="cr_components/chromeos/network/cr_policy_network_behavior_mojo.js"
+               type="chrome_html" />
+    <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_CR_POLICY_NETWORK_INDICATOR_MOJO_HTML"
+               file="cr_components/chromeos/network/cr_policy_network_indicator_mojo.html"
+               type="chrome_html" />
+    <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_CR_POLICY_NETWORK_INDICATOR_MOJO_JS"
+               file="cr_components/chromeos/network/cr_policy_network_indicator_mojo.js"
+               type="chrome_html" />
     <structure name="IDR_CR_COMPONENTS_CHROMEOS_NETWORK_ICON_HTML"
                file="cr_components/chromeos/network/network_icon.html"
                type="chrome_html" />
