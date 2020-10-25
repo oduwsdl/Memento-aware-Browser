@@ -285,23 +285,6 @@ vs-chromium-project.txt
 /src/testserver.log
 # See third_party/.gitignore for entries covering /src/third_party.
 
-/src/tools/.bisect-builds-cache.json
-/src/tools/cygprofile/*.wprgo
-/src/tools/clang/dsymutil/bin/dsymutil
-/src/tools/distcc
-/src/tools/gn/bin/linux
-/src/tools/gn/bin/mac
-/src/tools/gn/bin/win
-/src/tools/histograms
-/src/tools/json_schema_compiler/test/json_schema_compiler_tests.xml
-/src/tools/metrics/actions/actions.old.xml
-/src/tools/metrics/histograms/histograms.before.pretty-print.xml
-/src/tools/metrics/histograms/enums.before.pretty-print.xml
-/src/tools/page_cycler/acid3
-/src/tools/skia_goldctl/
-/src/tools/swarming_client
-/src/tools/tryserver
-/src/tools/win/link_limiter/build
 /src/ui/file_manager/internal
 /src/ui/keyboard/keyboard_mojom_bindings.xml
 /src/ui/surface/surface.xml
