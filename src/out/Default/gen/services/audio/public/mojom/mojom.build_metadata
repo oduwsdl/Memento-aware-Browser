@@ -1,0 +1,16 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/audio/public/mojom/audio_device_description.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/audio_service.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/debug_recording.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/device_notifications.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/log_factory_manager.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/stream_factory.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/system_info.mojom",
+    "/Users/macuser/chromium/src/services/audio/public/mojom/testing_api.mojom"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/chrome/browser/media/feeds/mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/browser/media/kaleidoscope/mojom/kaleidoscope.mojom"
+  ]
+}

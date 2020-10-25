@@ -1,0 +1,17 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -DPERFETTO_IMPLEMENTATION
+include_dirs = -I../.. -Inewlib_pnacl/gen -I../../third_party/protobuf/src -Inewlib_pnacl/gen/protoc_out -I../../third_party/perfetto -I../../third_party/perfetto/include -Inewlib_pnacl/gen/third_party/perfetto/build_config -Inewlib_pnacl/gen/third_party/perfetto
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = zero
+root_out_dir = newlib_pnacl
+target_out_dir = newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu
+target_output_name = libzero
+
+build newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero.inputdeps.stamp: newlib_pnacl_stamp newlib_pnacl/obj/third_party/perfetto/gn/gen_buildflags.stamp newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero_gen.stamp
+build newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero/gpu_counter_config.pbzero.o: newlib_pnacl_cxx newlib_pnacl/gen/third_party/perfetto/protos/perfetto/config/gpu/gpu_counter_config.pbzero.cc || newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero.inputdeps.stamp
+build newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero/vulkan_memory_config.pbzero.o: newlib_pnacl_cxx newlib_pnacl/gen/third_party/perfetto/protos/perfetto/config/gpu/vulkan_memory_config.pbzero.cc || newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero.inputdeps.stamp
+
+build newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/libzero.a: newlib_pnacl_alink newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero/gpu_counter_config.pbzero.o newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero/vulkan_memory_config.pbzero.o || newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu/zero_gen.stamp newlib_pnacl/obj/third_party/perfetto/src/protozero/protozero.stamp newlib_pnacl/obj/third_party/perfetto/include/perfetto/base/base.stamp newlib_pnacl/obj/third_party/perfetto/include/perfetto/protozero/protozero.stamp newlib_pnacl/obj/third_party/perfetto/src/base/base.stamp newlib_pnacl/obj/third_party/perfetto/include/perfetto/ext/base/base.stamp
+  arflags =
+  output_extension = .a
+  output_dir = newlib_pnacl/obj/third_party/perfetto/protos/perfetto/config/gpu

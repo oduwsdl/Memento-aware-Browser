@@ -1,0 +1,5 @@
+./test_opus_decode
+../../testing/test_env.py
+../../.vpython
+bin/run_test_opus_decode
+./libc++.dylib

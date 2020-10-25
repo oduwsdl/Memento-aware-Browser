@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/components/media_router/common/mojom/media_router.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/media_router/common/mojom/media_router_traits_test_service.mojom"
+  ]
+}

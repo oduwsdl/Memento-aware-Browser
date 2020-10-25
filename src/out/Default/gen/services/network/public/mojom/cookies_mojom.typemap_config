@@ -1,0 +1,92 @@
+[
+  {
+    "traits_headers": [
+      "services/network/public/cpp/cookie_manager_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net"
+    ],
+    "traits_sources": [
+      "//services/network/public/cpp/cookie_manager_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::net::CookiePriority",
+        "mojom": "network.mojom.CookiePriority"
+      },
+      {
+        "cpp": "::net::CookieSameSite",
+        "mojom": "network.mojom.CookieSameSite"
+      },
+      {
+        "cpp": "::net::CookieEffectiveSameSite",
+        "mojom": "network.mojom.CookieEffectiveSameSite"
+      },
+      {
+        "cpp": "::net::CookieOptions::SameSiteCookieContext",
+        "mojom": "network.mojom.CookieSameSiteContext"
+      },
+      {
+        "cpp": "::net::CookieAccessSemantics",
+        "mojom": "network.mojom.CookieAccessSemantics"
+      },
+      {
+        "cpp": "::net::CookieOptions",
+        "mojom": "network.mojom.CookieOptions"
+      },
+      {
+        "cpp": "::net::CanonicalCookie",
+        "mojom": "network.mojom.CanonicalCookie"
+      },
+      {
+        "cpp": "::net::CookieInclusionStatus::WarningReason",
+        "mojom": "network.mojom.CookieInclusionStatusWarningReason"
+      },
+      {
+        "cpp": "::net::CookieInclusionStatus",
+        "mojom": "network.mojom.CookieInclusionStatus",
+        "move_only": true
+      },
+      {
+        "cpp": "::net::CookieAccessResult",
+        "mojom": "network.mojom.CookieAccessResult",
+        "move_only": true
+      },
+      {
+        "cpp": "::net::CookieWithAccessResult",
+        "mojom": "network.mojom.CookieWithAccessResult"
+      },
+      {
+        "cpp": "::net::CookieAndLineWithAccessResult",
+        "mojom": "network.mojom.CookieAndLineWithAccessResult"
+      },
+      {
+        "cpp": "::net::CookieChangeCause",
+        "mojom": "network.mojom.CookieChangeCause"
+      },
+      {
+        "cpp": "::net::CookieChangeInfo",
+        "mojom": "network.mojom.CookieChangeInfo"
+      },
+      {
+        "cpp": "::net::CookieSourceScheme",
+        "mojom": "network.mojom.CookieSourceScheme"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/site_for_cookies_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net",
+      "//services/network/public/cpp:cookies_mojom_support"
+    ],
+    "types": [
+      {
+        "cpp": "::net::SiteForCookies",
+        "mojom": "network.mojom.SiteForCookies"
+      }
+    ]
+  }
+]

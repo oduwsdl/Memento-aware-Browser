@@ -1,0 +1,12 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -DABSL_ALLOCATOR_NOTHROW=1
+include_dirs = -I../.. -Inewlib_pnacl/gen -I../../third_party/abseil-cpp
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden -Werror -Wno-unused-variable -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden -Wbool-conversion -Wconstant-conversion -Wenum-conversion -Wint-conversion -Wliteral-conversion -Wnon-literal-null-conversion -Wnull-conversion -Wobjc-literal-conversion -Wno-sign-conversion -Wstring-conversion
+label_name = malloc_internal
+root_out_dir = newlib_pnacl
+target_out_dir = newlib_pnacl/obj/third_party/abseil-cpp/absl/base
+target_output_name = malloc_internal
+
+build newlib_pnacl/obj/third_party/abseil-cpp/absl/base/malloc_internal/low_level_alloc.o: newlib_pnacl_cxx ../../third_party/abseil-cpp/absl/base/internal/low_level_alloc.cc
+
+build newlib_pnacl/obj/third_party/abseil-cpp/absl/base/malloc_internal.stamp: newlib_pnacl_stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/malloc_internal/low_level_alloc.o || newlib_pnacl/obj/third_party/abseil-cpp/absl/base/base.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/base_internal.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/config.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/core_headers.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/dynamic_annotations.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/raw_logging_internal.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/atomic_hook.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/meta/type_traits.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/log_severity.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/spinlock_wait.stamp newlib_pnacl/obj/third_party/abseil-cpp/absl/base/errno_saver.stamp

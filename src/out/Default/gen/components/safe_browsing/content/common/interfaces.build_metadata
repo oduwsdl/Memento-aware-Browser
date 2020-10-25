@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/components/safe_browsing/core/common/interfaces.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/third_party/blink/public/mojom/mojom_platform.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/safe_browsing/content/common/safe_browsing.mojom"
+  ]
+}

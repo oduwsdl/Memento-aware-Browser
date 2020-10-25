@@ -1,0 +1,16 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DGOOGLE_PROTOBUF_NO_RTTI -DGOOGLE_PROTOBUF_NO_STATIC_INITIALIZER -DHAVE_PTHREAD -DPROTOBUF_USE_DLLS
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/protobuf/src -Igen/protoc_out -I../../third_party/protobuf/src
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Wno-shorten-64-to-32
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = background_fetch_proto
+target_gen_dir = gen/content/browser/background_fetch
+target_out_dir = obj/content/browser/background_fetch
+target_output_name = libbackground_fetch_proto
+
+build obj/content/browser/background_fetch/background_fetch_proto/background_fetch.pb.o: cxx gen/content/browser/background_fetch/background_fetch.pb.cc || obj/content/browser/background_fetch/background_fetch_proto_gen.stamp
+
+build obj/content/browser/background_fetch/libbackground_fetch_proto.a: alink obj/content/browser/background_fetch/background_fetch_proto/background_fetch.pb.o || ./libprotobuf_lite.dylib.TOC obj/content/browser/background_fetch/background_fetch_proto_gen.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/content/browser/background_fetch

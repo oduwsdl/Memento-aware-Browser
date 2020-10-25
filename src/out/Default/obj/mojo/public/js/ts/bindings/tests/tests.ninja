@@ -1,0 +1,11 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen
+label_name = tests
+target_gen_dir = gen/mojo/public/js/ts/bindings/tests
+target_out_dir = obj/mojo/public/js/ts/bindings/tests
+target_output_name = tests
+
+build obj/mojo/public/js/ts/bindings/tests/tests.inputdeps.stamp: stamp obj/mojo/public/js/ts/bindings/tests/other_test_interfaces1_js__generator.stamp obj/mojo/public/js/ts/bindings/tests/other_test_interfaces2_js__generator.stamp obj/mojo/public/js/ts/bindings/tests/other_test_interfaces3_js__generator.stamp obj/mojo/public/js/ts/bindings/tests/test_interfaces_js__generator.stamp
+
+build obj/mojo/public/js/ts/bindings/tests/tests.stamp: stamp || obj/mojo/public/js/ts/bindings/tests/test_interfaces_js.stamp

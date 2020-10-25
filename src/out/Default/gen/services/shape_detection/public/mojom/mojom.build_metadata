@@ -1,0 +1,14 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/shape_detection/public/mojom/barcodedetection.mojom",
+    "/Users/macuser/chromium/src/services/shape_detection/public/mojom/barcodedetection_provider.mojom",
+    "/Users/macuser/chromium/src/services/shape_detection/public/mojom/facedetection.mojom",
+    "/Users/macuser/chromium/src/services/shape_detection/public/mojom/facedetection_provider.mojom",
+    "/Users/macuser/chromium/src/services/shape_detection/public/mojom/shape_detection_service.mojom",
+    "/Users/macuser/chromium/src/services/shape_detection/public/mojom/textdetection.mojom"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/content/public/common/interfaces.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/extensions/common/api/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/extensions/common/mojom/app_window.mojom",
+    "/Users/macuser/chromium/src/extensions/common/mojom/guest_view.mojom",
+    "/Users/macuser/chromium/src/extensions/common/mojom/keep_alive.mojom"
+  ]
+}

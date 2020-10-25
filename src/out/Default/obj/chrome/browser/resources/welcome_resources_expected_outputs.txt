@@ -1,0 +1,4 @@
+gen/chrome/grit/welcome_resources.h
+gen/chrome/grit/welcome_resources_map.cc
+gen/chrome/grit/welcome_resources_map.h
+gen/chrome/welcome_resources.pak

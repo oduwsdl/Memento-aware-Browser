@@ -1,0 +1,10 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DANGLE_IS_64_BIT_CPU
+framework_dirs =
+include_dirs = -I../../third_party/angle/include -I../../third_party/angle/src -I../../third_party/angle -I../../third_party/angle/include
+label_name = angle_util_loader_headers
+target_gen_dir = gen/third_party/angle/util
+target_out_dir = obj/third_party/angle/util
+target_output_name = angle_util_loader_headers
+
+
+build obj/third_party/angle/util/angle_util_loader_headers.stamp: stamp || obj/third_party/angle/includes.stamp

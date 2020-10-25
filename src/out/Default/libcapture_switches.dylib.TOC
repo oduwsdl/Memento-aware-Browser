@@ -1,0 +1,9 @@
+          cmd LC_ID_DYLIB
+      cmdsize 64
+         name @rpath/libcapture_switches.dylib (offset 24)
+   time stamp 1 Wed Dec 31 19:00:01 1969
+      current version 0.0.0
+compatibility version 0.0.0
+__ZN8switches31kVideoCaptureUseGpuMemoryBufferE S
+__ZN8switches38kDisableVideoCaptureUseGpuMemoryBufferE S
+dyld_stub_binder U

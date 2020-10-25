@@ -1,0 +1,24 @@
+defines = -DAVIF_CODEC_DAV1D -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DCONFIG_LOG=1 -DSTACK_ALIGNMENT=32 -DDAV1D_API=
+framework_dirs =
+include_dirs = -I../../third_party/libavif/src/include -I../../third_party/dav1d/libdav1d/include -I../.. -Igen -I../../third_party/dav1d/version
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = libavif
+target_gen_dir = gen/third_party/libavif
+target_out_dir = obj/third_party/libavif
+target_output_name = libavif
+
+build obj/third_party/libavif/libavif/alpha.o: cc ../../third_party/libavif/src/src/alpha.c
+build obj/third_party/libavif/libavif/avif.o: cc ../../third_party/libavif/src/src/avif.c
+build obj/third_party/libavif/libavif/codec_dav1d.o: cc ../../third_party/libavif/src/src/codec_dav1d.c
+build obj/third_party/libavif/libavif/colr.o: cc ../../third_party/libavif/src/src/colr.c
+build obj/third_party/libavif/libavif/io.o: cc ../../third_party/libavif/src/src/io.c
+build obj/third_party/libavif/libavif/mem.o: cc ../../third_party/libavif/src/src/mem.c
+build obj/third_party/libavif/libavif/obu.o: cc ../../third_party/libavif/src/src/obu.c
+build obj/third_party/libavif/libavif/rawdata.o: cc ../../third_party/libavif/src/src/rawdata.c
+build obj/third_party/libavif/libavif/read.o: cc ../../third_party/libavif/src/src/read.c
+build obj/third_party/libavif/libavif/reformat.o: cc ../../third_party/libavif/src/src/reformat.c
+build obj/third_party/libavif/libavif/stream.o: cc ../../third_party/libavif/src/src/stream.c
+build obj/third_party/libavif/libavif/utils.o: cc ../../third_party/libavif/src/src/utils.c
+
+build obj/third_party/libavif/libavif.stamp: stamp obj/third_party/libavif/libavif/alpha.o obj/third_party/libavif/libavif/avif.o obj/third_party/libavif/libavif/codec_dav1d.o obj/third_party/libavif/libavif/colr.o obj/third_party/libavif/libavif/io.o obj/third_party/libavif/libavif/mem.o obj/third_party/libavif/libavif/obu.o obj/third_party/libavif/libavif/rawdata.o obj/third_party/libavif/libavif/read.o obj/third_party/libavif/libavif/reformat.o obj/third_party/libavif/libavif/stream.o obj/third_party/libavif/libavif/utils.o || obj/third_party/dav1d/libdav1d.a obj/third_party/dav1d/libdav1d_10bit.a obj/third_party/dav1d/libdav1d_8bit.a obj/third_party/dav1d/libdav1d_entrypoints.a obj/third_party/dav1d/libdav1d_x86.a obj/third_party/dav1d/libdav1d_asm.a

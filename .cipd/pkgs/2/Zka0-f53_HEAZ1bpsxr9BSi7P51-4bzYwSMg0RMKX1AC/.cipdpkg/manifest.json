@@ -1,0 +1,17 @@
+{
+  "format_version": "1.1",
+  "package_name": "chromium/third_party/glslang_js",
+  "install_mode": "copy",
+  "files": [
+    {
+      "name": "lib/glslang.js",
+      "size": 14904,
+      "hash": "xNh0tjYV5O0DpznrAVBigsJeA5VNl_E9_ZosngYTgSAC"
+    },
+    {
+      "name": "lib/glslang.wasm",
+      "size": 943680,
+      "hash": "15RT4IA-vN83U8ax2NUVQ7Uv7Zb38NSuyUrNhH4iUWkC"
+    }
+  ]
+}

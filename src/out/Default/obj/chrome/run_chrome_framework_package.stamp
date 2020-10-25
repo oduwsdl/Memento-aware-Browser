@@ -1,0 +1,1 @@
+Namespace(contents=['Chromium Framework', 'Helpers', 'Libraries', 'Resources', 'XPCServices', 'Internet Plug-Ins'], framework='Chromium Framework.framework', stamp='obj/chrome/run_chrome_framework_package.stamp', version='88.0.4302.0')

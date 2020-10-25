@@ -1,0 +1,10 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DOPENSCREEN_TEST_DATA_DIR=\"third_party/openscreen/src/test/data/\" -DABSL_CONSUME_DLL
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/openscreen/src -Igen/third_party/openscreen/src -I../../third_party/abseil-cpp -I../../third_party/jsoncpp/source/include
+label_name = common
+target_gen_dir = gen/third_party/openscreen/src/discovery
+target_out_dir = obj/third_party/openscreen/src/discovery
+target_output_name = common
+
+
+build obj/third_party/openscreen/src/discovery/common.stamp: stamp || obj/third_party/openscreen/src/platform/platform.stamp obj/third_party/openscreen/src/third_party/abseil/abseil.stamp obj/third_party/openscreen/src/util/util.stamp obj/third_party/openscreen/src/platform/api.stamp obj/third_party/openscreen/src/platform/base.stamp ./libabsl.dylib.TOC obj/third_party/openscreen/src/third_party/jsoncpp/jsoncpp.stamp obj/third_party/jsoncpp/jsoncpp.stamp ./libboringssl.dylib.TOC obj/third_party/openscreen/src/third_party/mozilla/mozilla.stamp

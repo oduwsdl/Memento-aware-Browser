@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/device/vr/public/mojom/browser_test_interfaces.mojom"
+  ]
+}

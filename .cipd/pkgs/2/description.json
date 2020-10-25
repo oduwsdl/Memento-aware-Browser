@@ -1,0 +1,4 @@
+{
+  "subdir": "src/third_party/blink/web_tests/wpt_internal/webgpu/third_party/glslang_js",
+  "package_name": "chromium/third_party/glslang_js"
+}

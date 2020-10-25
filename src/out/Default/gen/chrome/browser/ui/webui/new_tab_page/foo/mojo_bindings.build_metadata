@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/browser/ui/webui/new_tab_page/foo/foo.mojom"
+  ]
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "traits_deps": [
+      "//ipc"
+    ],
+    "traits_headers": [
+      "chrome/common/web_application_info.h"
+    ],
+    "traits_private_headers": [
+      "chrome/common/web_application_info_provider_param_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::WebApplicationInfo",
+        "mojom": "chrome.mojom.WebApplicationInfo"
+      }
+    ]
+  }
+]

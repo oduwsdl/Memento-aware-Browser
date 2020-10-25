@@ -1,0 +1,123 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DENABLE_DISASSEMBLER -DV8_TYPED_ARRAY_MAX_SIZE_IN_HEAP=64 -DENABLE_MINOR_MC -DOBJECT_PRINT -DVERIFY_HEAP -DV8_TRACE_MAPS -DV8_ENABLE_ALLOCATION_TIMEOUT -DV8_ENABLE_FORCE_SLOW_PATH -DV8_ENABLE_DOUBLE_CONST_STORE_CHECK -DV8_INTL_SUPPORT -DENABLE_HANDLE_ZAPPING -DV8_SNAPSHOT_NATIVE_CODE_COUNTERS -DV8_USE_EXTERNAL_STARTUP_DATA -DV8_ATOMIC_OBJECT_FIELD_WRITES -DV8_ATOMIC_MARKING_STATE -DV8_ENABLE_LAZY_SOURCE_POSITIONS -DV8_WIN64_UNWINDING_INFO -DV8_ENABLE_REGEXP_INTERPRETER_THREADED_DISPATCH -DV8_SNAPSHOT_COMPRESSION -DV8_ENABLE_CHECKS -DV8_COMPRESS_POINTERS -DV8_31BIT_SMIS_ON_64BIT_ARCH -DV8_DEPRECATION_WARNINGS -DV8_NO_ARGUMENTS_ADAPTOR -DV8_TARGET_ARCH_X64 -DV8_HAVE_TARGET_OS -DV8_TARGET_OS_MACOSX -DDEBUG -DDISABLE_UNTRUSTED_CODE_MITIGATIONS -DBUILDING_V8_SHARED -DV8_ENABLE_CHECKS -DV8_COMPRESS_POINTERS -DV8_31BIT_SMIS_ON_64BIT_ARCH -DV8_DEPRECATION_WARNINGS -DV8_NO_ARGUMENTS_ADAPTOR -DU_USING_ICU_NAMESPACE=0 -DU_ENABLE_DYLOAD=0 -DUSE_CHROMIUM_ICU=1 -DU_ENABLE_TRACING=1 -DU_ENABLE_RESOURCE_TRACING=0 -DICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_FILE -DUCHAR_TYPE=uint16_t
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../v8 -I../../v8/include -Igen/v8 -I../../third_party/icu/source/common -I../../third_party/icu/source/i18n
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Wmissing-field-initializers -Wunreachable-code -Wshorten-64-to-32 -O3 -Wexit-time-destructors
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = v8_compiler
+target_gen_dir = gen/v8
+target_out_dir = obj/v8
+target_output_name = v8_compiler
+
+build obj/v8/v8_compiler.inputdeps.stamp: stamp obj/third_party/icu/icudata.stamp obj/v8/generate_bytecode_builtins_list.stamp obj/v8/run_torque.stamp
+build obj/v8/v8_compiler/access-builder.o: cxx ../../v8/src/compiler/access-builder.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/access-info.o: cxx ../../v8/src/compiler/access-info.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/add-type-assertions-reducer.o: cxx ../../v8/src/compiler/add-type-assertions-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/all-nodes.o: cxx ../../v8/src/compiler/all-nodes.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/code-generator.o: cxx ../../v8/src/compiler/backend/code-generator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/frame-elider.o: cxx ../../v8/src/compiler/backend/frame-elider.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/gap-resolver.o: cxx ../../v8/src/compiler/backend/gap-resolver.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/instruction-scheduler.o: cxx ../../v8/src/compiler/backend/instruction-scheduler.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/instruction-selector.o: cxx ../../v8/src/compiler/backend/instruction-selector.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/instruction.o: cxx ../../v8/src/compiler/backend/instruction.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/jump-threading.o: cxx ../../v8/src/compiler/backend/jump-threading.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/mid-tier-register-allocator.o: cxx ../../v8/src/compiler/backend/mid-tier-register-allocator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/move-optimizer.o: cxx ../../v8/src/compiler/backend/move-optimizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/register-allocator-verifier.o: cxx ../../v8/src/compiler/backend/register-allocator-verifier.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/register-allocator.o: cxx ../../v8/src/compiler/backend/register-allocator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/spill-placer.o: cxx ../../v8/src/compiler/backend/spill-placer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/basic-block-instrumentor.o: cxx ../../v8/src/compiler/basic-block-instrumentor.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/branch-elimination.o: cxx ../../v8/src/compiler/branch-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/bytecode-analysis.o: cxx ../../v8/src/compiler/bytecode-analysis.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/bytecode-graph-builder.o: cxx ../../v8/src/compiler/bytecode-graph-builder.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/bytecode-liveness-map.o: cxx ../../v8/src/compiler/bytecode-liveness-map.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/c-linkage.o: cxx ../../v8/src/compiler/c-linkage.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/checkpoint-elimination.o: cxx ../../v8/src/compiler/checkpoint-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/code-assembler.o: cxx ../../v8/src/compiler/code-assembler.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/common-node-cache.o: cxx ../../v8/src/compiler/common-node-cache.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/common-operator-reducer.o: cxx ../../v8/src/compiler/common-operator-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/common-operator.o: cxx ../../v8/src/compiler/common-operator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/compilation-dependencies.o: cxx ../../v8/src/compiler/compilation-dependencies.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/compiler-source-position-table.o: cxx ../../v8/src/compiler/compiler-source-position-table.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/constant-folding-reducer.o: cxx ../../v8/src/compiler/constant-folding-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/control-equivalence.o: cxx ../../v8/src/compiler/control-equivalence.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/control-flow-optimizer.o: cxx ../../v8/src/compiler/control-flow-optimizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/csa-load-elimination.o: cxx ../../v8/src/compiler/csa-load-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/dead-code-elimination.o: cxx ../../v8/src/compiler/dead-code-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/decompression-optimizer.o: cxx ../../v8/src/compiler/decompression-optimizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/effect-control-linearizer.o: cxx ../../v8/src/compiler/effect-control-linearizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/escape-analysis-reducer.o: cxx ../../v8/src/compiler/escape-analysis-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/escape-analysis.o: cxx ../../v8/src/compiler/escape-analysis.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/feedback-source.o: cxx ../../v8/src/compiler/feedback-source.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/frame-states.o: cxx ../../v8/src/compiler/frame-states.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/frame.o: cxx ../../v8/src/compiler/frame.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/graph-assembler.o: cxx ../../v8/src/compiler/graph-assembler.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/graph-reducer.o: cxx ../../v8/src/compiler/graph-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/graph-trimmer.o: cxx ../../v8/src/compiler/graph-trimmer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/graph-visualizer.o: cxx ../../v8/src/compiler/graph-visualizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/graph.o: cxx ../../v8/src/compiler/graph.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/int64-lowering.o: cxx ../../v8/src/compiler/int64-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-call-reducer.o: cxx ../../v8/src/compiler/js-call-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-context-specialization.o: cxx ../../v8/src/compiler/js-context-specialization.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-create-lowering.o: cxx ../../v8/src/compiler/js-create-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-generic-lowering.o: cxx ../../v8/src/compiler/js-generic-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-graph.o: cxx ../../v8/src/compiler/js-graph.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-heap-broker.o: cxx ../../v8/src/compiler/js-heap-broker.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-heap-copy-reducer.o: cxx ../../v8/src/compiler/js-heap-copy-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-inlining-heuristic.o: cxx ../../v8/src/compiler/js-inlining-heuristic.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-inlining.o: cxx ../../v8/src/compiler/js-inlining.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-intrinsic-lowering.o: cxx ../../v8/src/compiler/js-intrinsic-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-native-context-specialization.o: cxx ../../v8/src/compiler/js-native-context-specialization.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-operator.o: cxx ../../v8/src/compiler/js-operator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-type-hint-lowering.o: cxx ../../v8/src/compiler/js-type-hint-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/js-typed-lowering.o: cxx ../../v8/src/compiler/js-typed-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/linkage.o: cxx ../../v8/src/compiler/linkage.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/load-elimination.o: cxx ../../v8/src/compiler/load-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/loop-analysis.o: cxx ../../v8/src/compiler/loop-analysis.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/loop-peeling.o: cxx ../../v8/src/compiler/loop-peeling.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/loop-variable-optimizer.o: cxx ../../v8/src/compiler/loop-variable-optimizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/machine-graph-verifier.o: cxx ../../v8/src/compiler/machine-graph-verifier.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/machine-graph.o: cxx ../../v8/src/compiler/machine-graph.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/machine-operator-reducer.o: cxx ../../v8/src/compiler/machine-operator-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/machine-operator.o: cxx ../../v8/src/compiler/machine-operator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/map-inference.o: cxx ../../v8/src/compiler/map-inference.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/memory-lowering.o: cxx ../../v8/src/compiler/memory-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/memory-optimizer.o: cxx ../../v8/src/compiler/memory-optimizer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/node-marker.o: cxx ../../v8/src/compiler/node-marker.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/node-matchers.o: cxx ../../v8/src/compiler/node-matchers.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/node-origin-table.o: cxx ../../v8/src/compiler/node-origin-table.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/node-properties.o: cxx ../../v8/src/compiler/node-properties.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/node.o: cxx ../../v8/src/compiler/node.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/opcodes.o: cxx ../../v8/src/compiler/opcodes.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/operation-typer.o: cxx ../../v8/src/compiler/operation-typer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/operator-properties.o: cxx ../../v8/src/compiler/operator-properties.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/operator.o: cxx ../../v8/src/compiler/operator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/osr.o: cxx ../../v8/src/compiler/osr.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/pipeline-statistics.o: cxx ../../v8/src/compiler/pipeline-statistics.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/pipeline.o: cxx ../../v8/src/compiler/pipeline.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/property-access-builder.o: cxx ../../v8/src/compiler/property-access-builder.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/raw-machine-assembler.o: cxx ../../v8/src/compiler/raw-machine-assembler.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/redundancy-elimination.o: cxx ../../v8/src/compiler/redundancy-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/refs-map.o: cxx ../../v8/src/compiler/refs-map.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/representation-change.o: cxx ../../v8/src/compiler/representation-change.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/schedule.o: cxx ../../v8/src/compiler/schedule.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/scheduled-machine-lowering.o: cxx ../../v8/src/compiler/scheduled-machine-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/scheduler.o: cxx ../../v8/src/compiler/scheduler.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/select-lowering.o: cxx ../../v8/src/compiler/select-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/serializer-for-background-compilation.o: cxx ../../v8/src/compiler/serializer-for-background-compilation.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/simd-scalar-lowering.o: cxx ../../v8/src/compiler/simd-scalar-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/simplified-lowering.o: cxx ../../v8/src/compiler/simplified-lowering.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/simplified-operator-reducer.o: cxx ../../v8/src/compiler/simplified-operator-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/simplified-operator.o: cxx ../../v8/src/compiler/simplified-operator.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/state-values-utils.o: cxx ../../v8/src/compiler/state-values-utils.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/store-store-elimination.o: cxx ../../v8/src/compiler/store-store-elimination.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/type-cache.o: cxx ../../v8/src/compiler/type-cache.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/type-narrowing-reducer.o: cxx ../../v8/src/compiler/type-narrowing-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/typed-optimization.o: cxx ../../v8/src/compiler/typed-optimization.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/typer.o: cxx ../../v8/src/compiler/typer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/types.o: cxx ../../v8/src/compiler/types.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/value-numbering-reducer.o: cxx ../../v8/src/compiler/value-numbering-reducer.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/verifier.o: cxx ../../v8/src/compiler/verifier.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/wasm-compiler.o: cxx ../../v8/src/compiler/wasm-compiler.cc || obj/v8/v8_compiler.inputdeps.stamp
+build obj/v8/v8_compiler/zone-stats.o: cxx ../../v8/src/compiler/zone-stats.cc || obj/v8/v8_compiler.inputdeps.stamp
+
+build obj/v8/v8_compiler.stamp: stamp obj/v8/v8_compiler/access-builder.o obj/v8/v8_compiler/access-info.o obj/v8/v8_compiler/add-type-assertions-reducer.o obj/v8/v8_compiler/all-nodes.o obj/v8/v8_compiler/code-generator.o obj/v8/v8_compiler/frame-elider.o obj/v8/v8_compiler/gap-resolver.o obj/v8/v8_compiler/instruction-scheduler.o obj/v8/v8_compiler/instruction-selector.o obj/v8/v8_compiler/instruction.o obj/v8/v8_compiler/jump-threading.o obj/v8/v8_compiler/mid-tier-register-allocator.o obj/v8/v8_compiler/move-optimizer.o obj/v8/v8_compiler/register-allocator-verifier.o obj/v8/v8_compiler/register-allocator.o obj/v8/v8_compiler/spill-placer.o obj/v8/v8_compiler/basic-block-instrumentor.o obj/v8/v8_compiler/branch-elimination.o obj/v8/v8_compiler/bytecode-analysis.o obj/v8/v8_compiler/bytecode-graph-builder.o obj/v8/v8_compiler/bytecode-liveness-map.o obj/v8/v8_compiler/c-linkage.o obj/v8/v8_compiler/checkpoint-elimination.o obj/v8/v8_compiler/code-assembler.o obj/v8/v8_compiler/common-node-cache.o obj/v8/v8_compiler/common-operator-reducer.o obj/v8/v8_compiler/common-operator.o obj/v8/v8_compiler/compilation-dependencies.o obj/v8/v8_compiler/compiler-source-position-table.o obj/v8/v8_compiler/constant-folding-reducer.o obj/v8/v8_compiler/control-equivalence.o obj/v8/v8_compiler/control-flow-optimizer.o obj/v8/v8_compiler/csa-load-elimination.o obj/v8/v8_compiler/dead-code-elimination.o obj/v8/v8_compiler/decompression-optimizer.o obj/v8/v8_compiler/effect-control-linearizer.o obj/v8/v8_compiler/escape-analysis-reducer.o obj/v8/v8_compiler/escape-analysis.o obj/v8/v8_compiler/feedback-source.o obj/v8/v8_compiler/frame-states.o obj/v8/v8_compiler/frame.o obj/v8/v8_compiler/graph-assembler.o obj/v8/v8_compiler/graph-reducer.o obj/v8/v8_compiler/graph-trimmer.o obj/v8/v8_compiler/graph-visualizer.o obj/v8/v8_compiler/graph.o obj/v8/v8_compiler/int64-lowering.o obj/v8/v8_compiler/js-call-reducer.o obj/v8/v8_compiler/js-context-specialization.o obj/v8/v8_compiler/js-create-lowering.o obj/v8/v8_compiler/js-generic-lowering.o obj/v8/v8_compiler/js-graph.o obj/v8/v8_compiler/js-heap-broker.o obj/v8/v8_compiler/js-heap-copy-reducer.o obj/v8/v8_compiler/js-inlining-heuristic.o obj/v8/v8_compiler/js-inlining.o obj/v8/v8_compiler/js-intrinsic-lowering.o obj/v8/v8_compiler/js-native-context-specialization.o obj/v8/v8_compiler/js-operator.o obj/v8/v8_compiler/js-type-hint-lowering.o obj/v8/v8_compiler/js-typed-lowering.o obj/v8/v8_compiler/linkage.o obj/v8/v8_compiler/load-elimination.o obj/v8/v8_compiler/loop-analysis.o obj/v8/v8_compiler/loop-peeling.o obj/v8/v8_compiler/loop-variable-optimizer.o obj/v8/v8_compiler/machine-graph-verifier.o obj/v8/v8_compiler/machine-graph.o obj/v8/v8_compiler/machine-operator-reducer.o obj/v8/v8_compiler/machine-operator.o obj/v8/v8_compiler/map-inference.o obj/v8/v8_compiler/memory-lowering.o obj/v8/v8_compiler/memory-optimizer.o obj/v8/v8_compiler/node-marker.o obj/v8/v8_compiler/node-matchers.o obj/v8/v8_compiler/node-origin-table.o obj/v8/v8_compiler/node-properties.o obj/v8/v8_compiler/node.o obj/v8/v8_compiler/opcodes.o obj/v8/v8_compiler/operation-typer.o obj/v8/v8_compiler/operator-properties.o obj/v8/v8_compiler/operator.o obj/v8/v8_compiler/osr.o obj/v8/v8_compiler/pipeline-statistics.o obj/v8/v8_compiler/pipeline.o obj/v8/v8_compiler/property-access-builder.o obj/v8/v8_compiler/raw-machine-assembler.o obj/v8/v8_compiler/redundancy-elimination.o obj/v8/v8_compiler/refs-map.o obj/v8/v8_compiler/representation-change.o obj/v8/v8_compiler/schedule.o obj/v8/v8_compiler/scheduled-machine-lowering.o obj/v8/v8_compiler/scheduler.o obj/v8/v8_compiler/select-lowering.o obj/v8/v8_compiler/serializer-for-background-compilation.o obj/v8/v8_compiler/simd-scalar-lowering.o obj/v8/v8_compiler/simplified-lowering.o obj/v8/v8_compiler/simplified-operator-reducer.o obj/v8/v8_compiler/simplified-operator.o obj/v8/v8_compiler/state-values-utils.o obj/v8/v8_compiler/store-store-elimination.o obj/v8/v8_compiler/type-cache.o obj/v8/v8_compiler/type-narrowing-reducer.o obj/v8/v8_compiler/typed-optimization.o obj/v8/v8_compiler/typer.o obj/v8/v8_compiler/types.o obj/v8/v8_compiler/value-numbering-reducer.o obj/v8/v8_compiler/verifier.o obj/v8/v8_compiler/wasm-compiler.o obj/v8/v8_compiler/zone-stats.o || obj/v8/generate_bytecode_builtins_list.stamp obj/v8/run_torque.stamp obj/v8/v8_maybe_icu.stamp obj/v8/v8_tracing.stamp ./libicui18n.dylib.TOC ./libicuuc.dylib.TOC

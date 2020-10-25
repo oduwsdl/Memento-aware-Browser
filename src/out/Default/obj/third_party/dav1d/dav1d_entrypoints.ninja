@@ -1,0 +1,17 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DCONFIG_LOG=1 -DSTACK_ALIGNMENT=32 -DDAV1D_API=
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/dav1d/libdav1d -I../../third_party/dav1d/libdav1d/include -I../../third_party/dav1d/libdav1d/include/dav1d -I../../third_party/dav1d/config/linux/x64 -I../../third_party/dav1d/version
+cflags = -D_FILE_OFFSET_BITS=64 -D_POSIX_C_SOURCE=200112L -std=c99 -mstack-alignment=32 -D_DARWIN_C_SOURCE -mstackrealign -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = dav1d_entrypoints
+target_gen_dir = gen/third_party/dav1d
+target_out_dir = obj/third_party/dav1d
+target_output_name = libdav1d_entrypoints
+
+build obj/third_party/dav1d/dav1d_entrypoints/lib.o: cc ../../third_party/dav1d/libdav1d/src/lib.c
+build obj/third_party/dav1d/dav1d_entrypoints/thread_task.o: cc ../../third_party/dav1d/libdav1d/src/thread_task.c
+
+build obj/third_party/dav1d/libdav1d_entrypoints.a: alink obj/third_party/dav1d/dav1d_entrypoints/lib.o obj/third_party/dav1d/dav1d_entrypoints/thread_task.o
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/dav1d

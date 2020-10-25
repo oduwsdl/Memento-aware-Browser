@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/mojo/public/cpp/bindings/tests/extra_cpp_template_unittest.test-mojom"
+  ]
+}

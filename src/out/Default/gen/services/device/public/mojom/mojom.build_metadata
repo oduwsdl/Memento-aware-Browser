@@ -1,0 +1,33 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/url_loader_base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/device/public/mojom/battery_monitor.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/battery_status.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/bluetooth_system.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/fingerprint.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/geolocation.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/geolocation_config.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/geolocation_context.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/geolocation_control.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/geoposition.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/hid.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/input_service.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/nfc.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/nfc_provider.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/power_monitor.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/public_ip_address_geolocation_provider.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/screen_orientation.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/screen_orientation_lock_types.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/serial.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/time_zone_monitor.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/vibration_manager.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/wake_lock.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/wake_lock_context.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/wake_lock_provider.mojom"
+  ]
+}

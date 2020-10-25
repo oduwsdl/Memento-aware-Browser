@@ -1,0 +1,12 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/device/public/mojom/usb_device.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/usb_enumeration_options.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/usb_manager.mojom",
+    "/Users/macuser/chromium/src/services/device/public/mojom/usb_manager_client.mojom"
+  ]
+}

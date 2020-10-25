@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/media_router/common/mojom/media_controller.mojom",
+    "/Users/macuser/chromium/src/components/media_router/common/mojom/media_status.mojom"
+  ]
+}

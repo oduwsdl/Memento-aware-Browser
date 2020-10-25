@@ -1,0 +1,65 @@
+[
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/tokens/tokens_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::LocalFrameToken",
+        "mojom": "blink.mojom.LocalFrameToken"
+      },
+      {
+        "cpp": "::blink::RemoteFrameToken",
+        "mojom": "blink.mojom.RemoteFrameToken"
+      },
+      {
+        "cpp": "::blink::FrameToken",
+        "mojom": "blink.mojom.FrameToken"
+      },
+      {
+        "cpp": "::blink::DedicatedWorkerToken",
+        "mojom": "blink.mojom.DedicatedWorkerToken"
+      },
+      {
+        "cpp": "::blink::ServiceWorkerToken",
+        "mojom": "blink.mojom.ServiceWorkerToken"
+      },
+      {
+        "cpp": "::blink::SharedWorkerToken",
+        "mojom": "blink.mojom.SharedWorkerToken"
+      },
+      {
+        "cpp": "::blink::WorkerToken",
+        "mojom": "blink.mojom.WorkerToken"
+      },
+      {
+        "cpp": "::blink::AnimationWorkletToken",
+        "mojom": "blink.mojom.AnimationWorkletToken"
+      },
+      {
+        "cpp": "::blink::AudioWorkletToken",
+        "mojom": "blink.mojom.AudioWorkletToken"
+      },
+      {
+        "cpp": "::blink::PaintWorkletToken",
+        "mojom": "blink.mojom.PaintWorkletToken"
+      },
+      {
+        "cpp": "::blink::WorkletToken",
+        "mojom": "blink.mojom.WorkletToken"
+      },
+      {
+        "cpp": "::blink::ExecutionContextToken",
+        "mojom": "blink.mojom.ExecutionContextToken"
+      },
+      {
+        "cpp": "::blink::PortalToken",
+        "mojom": "blink.mojom.PortalToken"
+      },
+      {
+        "cpp": "::blink::V8ContextToken",
+        "mojom": "blink.mojom.V8ContextToken"
+      }
+    ]
+  }
+]

@@ -1,0 +1,52 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DENABLE_DISASSEMBLER -DV8_TYPED_ARRAY_MAX_SIZE_IN_HEAP=64 -DENABLE_MINOR_MC -DOBJECT_PRINT -DVERIFY_HEAP -DV8_TRACE_MAPS -DV8_ENABLE_ALLOCATION_TIMEOUT -DV8_ENABLE_FORCE_SLOW_PATH -DV8_ENABLE_DOUBLE_CONST_STORE_CHECK -DV8_INTL_SUPPORT -DENABLE_HANDLE_ZAPPING -DV8_SNAPSHOT_NATIVE_CODE_COUNTERS -DV8_USE_EXTERNAL_STARTUP_DATA -DV8_ATOMIC_OBJECT_FIELD_WRITES -DV8_ATOMIC_MARKING_STATE -DV8_ENABLE_LAZY_SOURCE_POSITIONS -DV8_WIN64_UNWINDING_INFO -DV8_ENABLE_REGEXP_INTERPRETER_THREADED_DISPATCH -DV8_SNAPSHOT_COMPRESSION -DV8_ENABLE_CHECKS -DV8_COMPRESS_POINTERS -DV8_31BIT_SMIS_ON_64BIT_ARCH -DV8_DEPRECATION_WARNINGS -DV8_NO_ARGUMENTS_ADAPTOR -DV8_TARGET_ARCH_X64 -DV8_HAVE_TARGET_OS -DV8_TARGET_OS_MACOSX -DDEBUG -DDISABLE_UNTRUSTED_CODE_MITIGATIONS -DBUILDING_V8_SHARED -DV8_ENABLE_CHECKS -DV8_COMPRESS_POINTERS -DV8_31BIT_SMIS_ON_64BIT_ARCH -DV8_DEPRECATION_WARNINGS -DV8_NO_ARGUMENTS_ADAPTOR -DCPPGC_CAGED_HEAP -DUSING_V8_BASE_SHARED -DUSING_V8_PLATFORM_SHARED
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../v8 -I../../v8/include -Igen/v8 -I../../v8/include
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Wmissing-field-initializers -Wunreachable-code -Wshorten-64-to-32 -O3 -Wexit-time-destructors
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = cppgc_base
+target_gen_dir = gen/v8
+target_out_dir = obj/v8
+target_output_name = cppgc_base
+
+build obj/v8/cppgc_base/allocation.o: cxx ../../v8/src/heap/cppgc/allocation.cc
+build obj/v8/cppgc_base/compaction-worklists.o: cxx ../../v8/src/heap/cppgc/compaction-worklists.cc
+build obj/v8/cppgc_base/compactor.o: cxx ../../v8/src/heap/cppgc/compactor.cc
+build obj/v8/cppgc_base/concurrent-marker.o: cxx ../../v8/src/heap/cppgc/concurrent-marker.cc
+build obj/v8/cppgc_base/free-list.o: cxx ../../v8/src/heap/cppgc/free-list.cc
+build obj/v8/cppgc_base/gc-info-table.o: cxx ../../v8/src/heap/cppgc/gc-info-table.cc
+build obj/v8/cppgc_base/gc-info.o: cxx ../../v8/src/heap/cppgc/gc-info.cc
+build obj/v8/cppgc_base/gc-invoker.o: cxx ../../v8/src/heap/cppgc/gc-invoker.cc
+build obj/v8/cppgc_base/heap-base.o: cxx ../../v8/src/heap/cppgc/heap-base.cc
+build obj/v8/cppgc_base/heap-growing.o: cxx ../../v8/src/heap/cppgc/heap-growing.cc
+build obj/v8/cppgc_base/heap-object-header.o: cxx ../../v8/src/heap/cppgc/heap-object-header.cc
+build obj/v8/cppgc_base/heap-page.o: cxx ../../v8/src/heap/cppgc/heap-page.cc
+build obj/v8/cppgc_base/heap-space.o: cxx ../../v8/src/heap/cppgc/heap-space.cc
+build obj/v8/cppgc_base/heap.o: cxx ../../v8/src/heap/cppgc/heap.cc
+build obj/v8/cppgc_base/incremental-marking-schedule.o: cxx ../../v8/src/heap/cppgc/incremental-marking-schedule.cc
+build obj/v8/cppgc_base/liveness-broker.o: cxx ../../v8/src/heap/cppgc/liveness-broker.cc
+build obj/v8/cppgc_base/logging.o: cxx ../../v8/src/heap/cppgc/logging.cc
+build obj/v8/cppgc_base/marker.o: cxx ../../v8/src/heap/cppgc/marker.cc
+build obj/v8/cppgc_base/marking-state.o: cxx ../../v8/src/heap/cppgc/marking-state.cc
+build obj/v8/cppgc_base/marking-verifier.o: cxx ../../v8/src/heap/cppgc/marking-verifier.cc
+build obj/v8/cppgc_base/marking-visitor.o: cxx ../../v8/src/heap/cppgc/marking-visitor.cc
+build obj/v8/cppgc_base/marking-worklists.o: cxx ../../v8/src/heap/cppgc/marking-worklists.cc
+build obj/v8/cppgc_base/name-trait.o: cxx ../../v8/src/heap/cppgc/name-trait.cc
+build obj/v8/cppgc_base/object-allocator.o: cxx ../../v8/src/heap/cppgc/object-allocator.cc
+build obj/v8/cppgc_base/page-memory.o: cxx ../../v8/src/heap/cppgc/page-memory.cc
+build obj/v8/cppgc_base/persistent-node.o: cxx ../../v8/src/heap/cppgc/persistent-node.cc
+build obj/v8/cppgc_base/platform.o: cxx ../../v8/src/heap/cppgc/platform.cc
+build obj/v8/cppgc_base/pointer-policies.o: cxx ../../v8/src/heap/cppgc/pointer-policies.cc
+build obj/v8/cppgc_base/prefinalizer-handler.o: cxx ../../v8/src/heap/cppgc/prefinalizer-handler.cc
+build obj/v8/cppgc_base/process-heap.o: cxx ../../v8/src/heap/cppgc/process-heap.cc
+build obj/v8/cppgc_base/raw-heap.o: cxx ../../v8/src/heap/cppgc/raw-heap.cc
+build obj/v8/cppgc_base/source-location.o: cxx ../../v8/src/heap/cppgc/source-location.cc
+build obj/v8/cppgc_base/stats-collector.o: cxx ../../v8/src/heap/cppgc/stats-collector.cc
+build obj/v8/cppgc_base/sweeper.o: cxx ../../v8/src/heap/cppgc/sweeper.cc
+build obj/v8/cppgc_base/trace-trait.o: cxx ../../v8/src/heap/cppgc/trace-trait.cc
+build obj/v8/cppgc_base/virtual-memory.o: cxx ../../v8/src/heap/cppgc/virtual-memory.cc
+build obj/v8/cppgc_base/visitor.o: cxx ../../v8/src/heap/cppgc/visitor.cc
+build obj/v8/cppgc_base/write-barrier.o: cxx ../../v8/src/heap/cppgc/write-barrier.cc
+build obj/v8/cppgc_base/caged-heap-local-data.o: cxx ../../v8/src/heap/cppgc/caged-heap-local-data.cc
+build obj/v8/cppgc_base/caged-heap.o: cxx ../../v8/src/heap/cppgc/caged-heap.cc
+
+build obj/v8/cppgc_base.stamp: stamp obj/v8/cppgc_base/allocation.o obj/v8/cppgc_base/compaction-worklists.o obj/v8/cppgc_base/compactor.o obj/v8/cppgc_base/concurrent-marker.o obj/v8/cppgc_base/free-list.o obj/v8/cppgc_base/gc-info-table.o obj/v8/cppgc_base/gc-info.o obj/v8/cppgc_base/gc-invoker.o obj/v8/cppgc_base/heap-base.o obj/v8/cppgc_base/heap-growing.o obj/v8/cppgc_base/heap-object-header.o obj/v8/cppgc_base/heap-page.o obj/v8/cppgc_base/heap-space.o obj/v8/cppgc_base/heap.o obj/v8/cppgc_base/incremental-marking-schedule.o obj/v8/cppgc_base/liveness-broker.o obj/v8/cppgc_base/logging.o obj/v8/cppgc_base/marker.o obj/v8/cppgc_base/marking-state.o obj/v8/cppgc_base/marking-verifier.o obj/v8/cppgc_base/marking-visitor.o obj/v8/cppgc_base/marking-worklists.o obj/v8/cppgc_base/name-trait.o obj/v8/cppgc_base/object-allocator.o obj/v8/cppgc_base/page-memory.o obj/v8/cppgc_base/persistent-node.o obj/v8/cppgc_base/platform.o obj/v8/cppgc_base/pointer-policies.o obj/v8/cppgc_base/prefinalizer-handler.o obj/v8/cppgc_base/process-heap.o obj/v8/cppgc_base/raw-heap.o obj/v8/cppgc_base/source-location.o obj/v8/cppgc_base/stats-collector.o obj/v8/cppgc_base/sweeper.o obj/v8/cppgc_base/trace-trait.o obj/v8/cppgc_base/virtual-memory.o obj/v8/cppgc_base/visitor.o obj/v8/cppgc_base/write-barrier.o obj/v8/cppgc_base/caged-heap-local-data.o obj/v8/cppgc_base/caged-heap.o || obj/v8/v8_cppgc_shared.stamp ./libv8_libbase.dylib.TOC ./libv8_libplatform.dylib.TOC

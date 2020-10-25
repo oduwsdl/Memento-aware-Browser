@@ -1,0 +1,10 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DHAVE_CONFIG_H -DHAVE_SMALL=1 -DHAVE_CHECK_CRC32=1 -DHAVE_DECODER_LZMA2=1 -DHAVE_DECODER_X86=1 -DHAVE_ENCODER_LZMA2=1 -DHAVE_ENCODER_X86=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../chrome/installer/mac/third_party/xz/config/mac -I../../chrome/installer/mac/third_party/xz/xz/src/common -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/api -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/check -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/common -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/delta -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/lz -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/lzma -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/rangecoder -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/simple -I../../chrome/installer/mac/third_party/xz/xz/src/liblzma/api
+label_name = lzma
+target_gen_dir = gen/chrome/installer/mac/third_party/xz
+target_out_dir = obj/chrome/installer/mac/third_party/xz
+target_output_name = lzma
+
+
+build obj/chrome/installer/mac/third_party/xz/lzma.stamp: stamp || obj/chrome/installer/mac/third_party/xz/common.stamp obj/chrome/installer/mac/third_party/xz/compress.stamp obj/chrome/installer/mac/third_party/xz/decompress.stamp

@@ -1,0 +1,19 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.8
+cflags_objcc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fobjc-call-cxx-cdtors -Wobjc-missing-property-synthesis -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = gcapi_example
+target_gen_dir = gen/chrome/installer/gcapi_mac
+target_out_dir = obj/chrome/installer/gcapi_mac
+target_output_name = gcapi_example
+
+build obj/chrome/installer/gcapi_mac/gcapi_example/gcapi_example_client.o: objcxx ../../chrome/installer/gcapi_mac/gcapi_example_client.mm
+
+build ./gcapi_example: link obj/chrome/installer/gcapi_mac/gcapi_example/gcapi_example_client.o obj/chrome/installer/gcapi_mac/libgcapi_lib.a
+  ldflags = -Wl,-fatal_warnings -stdlib=libc++ -arch x86_64 -Werror -Wl,-ObjC -Wl,-rpath,@loader_path/. -Wl,-rpath,@loader_path/../../.. -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.8
+  libs =
+  frameworks = -framework Cocoa
+  swiftmodules =
+  output_extension = 
+  output_dir = .

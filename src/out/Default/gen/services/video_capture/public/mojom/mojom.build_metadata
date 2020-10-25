@@ -1,0 +1,21 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/media/capture/mojom/image_capture.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/media/capture/mojom/video_capture.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/device.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/device_factory.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/devices_changed_observer.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/producer.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/scoped_access_permission.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/testing_controls.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/video_capture_service.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/video_frame_handler.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/video_source.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/video_source_provider.mojom",
+    "/Users/macuser/chromium/src/services/video_capture/public/mojom/virtual_device.mojom"
+  ]
+}

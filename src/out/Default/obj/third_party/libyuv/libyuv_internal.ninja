@@ -1,0 +1,48 @@
+defines = -DHAVE_JPEG -DLIBYUV_DISABLE_MMI -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/libyuv/include -I../../third_party/libjpeg_turbo
+cflags = -ffp-contract=fast -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = libyuv_internal
+target_gen_dir = gen/third_party/libyuv
+target_out_dir = obj/third_party/libyuv
+target_output_name = libyuv_internal
+
+build obj/third_party/libyuv/libyuv_internal/compare.o: cxx ../../third_party/libyuv/source/compare.cc
+build obj/third_party/libyuv/libyuv_internal/compare_common.o: cxx ../../third_party/libyuv/source/compare_common.cc
+build obj/third_party/libyuv/libyuv_internal/compare_gcc.o: cxx ../../third_party/libyuv/source/compare_gcc.cc
+build obj/third_party/libyuv/libyuv_internal/compare_win.o: cxx ../../third_party/libyuv/source/compare_win.cc
+build obj/third_party/libyuv/libyuv_internal/convert.o: cxx ../../third_party/libyuv/source/convert.cc
+build obj/third_party/libyuv/libyuv_internal/convert_argb.o: cxx ../../third_party/libyuv/source/convert_argb.cc
+build obj/third_party/libyuv/libyuv_internal/convert_from.o: cxx ../../third_party/libyuv/source/convert_from.cc
+build obj/third_party/libyuv/libyuv_internal/convert_from_argb.o: cxx ../../third_party/libyuv/source/convert_from_argb.cc
+build obj/third_party/libyuv/libyuv_internal/convert_jpeg.o: cxx ../../third_party/libyuv/source/convert_jpeg.cc
+build obj/third_party/libyuv/libyuv_internal/convert_to_argb.o: cxx ../../third_party/libyuv/source/convert_to_argb.cc
+build obj/third_party/libyuv/libyuv_internal/convert_to_i420.o: cxx ../../third_party/libyuv/source/convert_to_i420.cc
+build obj/third_party/libyuv/libyuv_internal/cpu_id.o: cxx ../../third_party/libyuv/source/cpu_id.cc
+build obj/third_party/libyuv/libyuv_internal/mjpeg_decoder.o: cxx ../../third_party/libyuv/source/mjpeg_decoder.cc
+build obj/third_party/libyuv/libyuv_internal/mjpeg_validate.o: cxx ../../third_party/libyuv/source/mjpeg_validate.cc
+build obj/third_party/libyuv/libyuv_internal/planar_functions.o: cxx ../../third_party/libyuv/source/planar_functions.cc
+build obj/third_party/libyuv/libyuv_internal/rotate.o: cxx ../../third_party/libyuv/source/rotate.cc
+build obj/third_party/libyuv/libyuv_internal/rotate_any.o: cxx ../../third_party/libyuv/source/rotate_any.cc
+build obj/third_party/libyuv/libyuv_internal/rotate_argb.o: cxx ../../third_party/libyuv/source/rotate_argb.cc
+build obj/third_party/libyuv/libyuv_internal/rotate_common.o: cxx ../../third_party/libyuv/source/rotate_common.cc
+build obj/third_party/libyuv/libyuv_internal/rotate_gcc.o: cxx ../../third_party/libyuv/source/rotate_gcc.cc
+build obj/third_party/libyuv/libyuv_internal/rotate_win.o: cxx ../../third_party/libyuv/source/rotate_win.cc
+build obj/third_party/libyuv/libyuv_internal/row_any.o: cxx ../../third_party/libyuv/source/row_any.cc
+build obj/third_party/libyuv/libyuv_internal/row_common.o: cxx ../../third_party/libyuv/source/row_common.cc
+build obj/third_party/libyuv/libyuv_internal/row_gcc.o: cxx ../../third_party/libyuv/source/row_gcc.cc
+build obj/third_party/libyuv/libyuv_internal/row_win.o: cxx ../../third_party/libyuv/source/row_win.cc
+build obj/third_party/libyuv/libyuv_internal/scale.o: cxx ../../third_party/libyuv/source/scale.cc
+build obj/third_party/libyuv/libyuv_internal/scale_any.o: cxx ../../third_party/libyuv/source/scale_any.cc
+build obj/third_party/libyuv/libyuv_internal/scale_argb.o: cxx ../../third_party/libyuv/source/scale_argb.cc
+build obj/third_party/libyuv/libyuv_internal/scale_uv.o: cxx ../../third_party/libyuv/source/scale_uv.cc
+build obj/third_party/libyuv/libyuv_internal/scale_common.o: cxx ../../third_party/libyuv/source/scale_common.cc
+build obj/third_party/libyuv/libyuv_internal/scale_gcc.o: cxx ../../third_party/libyuv/source/scale_gcc.cc
+build obj/third_party/libyuv/libyuv_internal/scale_win.o: cxx ../../third_party/libyuv/source/scale_win.cc
+build obj/third_party/libyuv/libyuv_internal/video_common.o: cxx ../../third_party/libyuv/source/video_common.cc
+
+build obj/third_party/libyuv/libyuv_internal.a: alink obj/third_party/libyuv/libyuv_internal/compare.o obj/third_party/libyuv/libyuv_internal/compare_common.o obj/third_party/libyuv/libyuv_internal/compare_gcc.o obj/third_party/libyuv/libyuv_internal/compare_win.o obj/third_party/libyuv/libyuv_internal/convert.o obj/third_party/libyuv/libyuv_internal/convert_argb.o obj/third_party/libyuv/libyuv_internal/convert_from.o obj/third_party/libyuv/libyuv_internal/convert_from_argb.o obj/third_party/libyuv/libyuv_internal/convert_jpeg.o obj/third_party/libyuv/libyuv_internal/convert_to_argb.o obj/third_party/libyuv/libyuv_internal/convert_to_i420.o obj/third_party/libyuv/libyuv_internal/cpu_id.o obj/third_party/libyuv/libyuv_internal/mjpeg_decoder.o obj/third_party/libyuv/libyuv_internal/mjpeg_validate.o obj/third_party/libyuv/libyuv_internal/planar_functions.o obj/third_party/libyuv/libyuv_internal/rotate.o obj/third_party/libyuv/libyuv_internal/rotate_any.o obj/third_party/libyuv/libyuv_internal/rotate_argb.o obj/third_party/libyuv/libyuv_internal/rotate_common.o obj/third_party/libyuv/libyuv_internal/rotate_gcc.o obj/third_party/libyuv/libyuv_internal/rotate_win.o obj/third_party/libyuv/libyuv_internal/row_any.o obj/third_party/libyuv/libyuv_internal/row_common.o obj/third_party/libyuv/libyuv_internal/row_gcc.o obj/third_party/libyuv/libyuv_internal/row_win.o obj/third_party/libyuv/libyuv_internal/scale.o obj/third_party/libyuv/libyuv_internal/scale_any.o obj/third_party/libyuv/libyuv_internal/scale_argb.o obj/third_party/libyuv/libyuv_internal/scale_uv.o obj/third_party/libyuv/libyuv_internal/scale_common.o obj/third_party/libyuv/libyuv_internal/scale_gcc.o obj/third_party/libyuv/libyuv_internal/scale_win.o obj/third_party/libyuv/libyuv_internal/video_common.o || obj/third_party/jpeg_includes.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/libyuv

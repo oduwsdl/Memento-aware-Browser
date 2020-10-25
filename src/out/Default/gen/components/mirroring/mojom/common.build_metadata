@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom_ip_address.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/mirroring/mojom/cast_message_channel.mojom",
+    "/Users/macuser/chromium/src/components/mirroring/mojom/session_observer.mojom",
+    "/Users/macuser/chromium/src/components/mirroring/mojom/session_parameters.mojom"
+  ]
+}

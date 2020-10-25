@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/media/mojo/mojom/traits_test_service.mojom"
+  ]
+}

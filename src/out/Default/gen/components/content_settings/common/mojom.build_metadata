@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/components/content_settings/core/common/mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/content_settings/common/content_settings_agent.mojom",
+    "/Users/macuser/chromium/src/components/content_settings/common/content_settings_manager.mojom"
+  ]
+}

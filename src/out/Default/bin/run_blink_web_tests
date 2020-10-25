@@ -1,0 +1,59 @@
+#!/usr/bin/env vpython
+_SCRIPT_LOCATION = __file__
+import os
+import re
+import subprocess
+import sys
+
+_WRAPPED_PATH_RE = re.compile(r'@WrappedPath\(([^)]+)\)')
+_PATH_TO_OUTPUT_DIR = '..'
+_SCRIPT_DIR = os.path.dirname(os.path.realpath(_SCRIPT_LOCATION))
+
+
+def ExpandWrappedPath(arg):
+  m = _WRAPPED_PATH_RE.match(arg)
+  if m:
+    relpath = os.path.join(
+        os.path.relpath(_SCRIPT_DIR), _PATH_TO_OUTPUT_DIR, m.group(1))
+    npath = os.path.normpath(relpath)
+    if os.path.sep not in npath:
+      # If the original path points to something in the current directory,
+      # returning the normalized version of it can be a problem.
+      # normpath() strips off the './' part of the path
+      # ('./foo' becomes 'foo'), which can be a problem if the result
+      # is passed to something like os.execvp(); in that case
+      # osexecvp() will search $PATH for the executable, rather than
+      # just execing the arg directly, and if '.' isn't in $PATH, this
+      # results in an error.
+      #
+      # So, we need to explicitly return './foo' (or '.\foo' on windows)
+      # instead of 'foo'.
+      #
+      # Hopefully there are no cases where this causes a problem; if
+      # there are, we will either need to change the interface to
+      # WrappedPath() somehow to distinguish between the two, or
+      # somehow ensure that the wrapped executable doesn't hit cases
+      # like this.
+      return '.' + os.path.sep + npath
+    return npath
+  return arg
+
+
+def ExpandWrappedPaths(args):
+  for i, arg in enumerate(args):
+    args[i] = ExpandWrappedPath(arg)
+  return args
+
+
+def main(raw_args):
+  executable_path = ExpandWrappedPath('@WrappedPath(../../testing/test_env.py)')
+  executable_args = ExpandWrappedPaths(['@WrappedPath(../../testing/scripts/run_isolated_script_test.py)', '@WrappedPath(../../third_party/blink/tools/run_web_tests.py)', '--debug', '--seed', '4', '--no-show-results', '--zero-tests-executed-ok', '--clobber-old-results', '--exit-after-n-failures', '5000', '--exit-after-n-crashes-or-timeouts', '100'])
+  cmd = [executable_path] + executable_args + raw_args
+  if executable_path.endswith('.py'):
+    cmd = [sys.executable] + cmd
+  return subprocess.call(cmd)
+
+
+if __name__ == '__main__':
+  sys.exit(main(sys.argv[1:]))
+

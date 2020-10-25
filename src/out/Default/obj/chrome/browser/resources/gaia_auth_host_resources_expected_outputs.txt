@@ -1,0 +1,4 @@
+gen/chrome/grit/gaia_auth_host_resources.h
+gen/chrome/grit/gaia_auth_host_resources_map.cc
+gen/chrome/grit/gaia_auth_host_resources_map.h
+gen/chrome/gaia_auth_host_resources.pak

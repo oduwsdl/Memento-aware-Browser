@@ -1,0 +1,12 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/ui/base/ime/mojom/ime_types.mojom",
+    "/Users/macuser/chromium/src/ui/base/ime/mojom/text_input_state.mojom",
+    "/Users/macuser/chromium/src/ui/base/ime/mojom/virtual_keyboard_types.mojom"
+  ]
+}

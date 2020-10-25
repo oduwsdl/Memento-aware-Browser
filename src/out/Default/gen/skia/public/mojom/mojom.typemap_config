@@ -1,0 +1,71 @@
+[
+  {
+    "traits_headers": [
+      "skia/public/mojom/blur_image_filter_tile_mode_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//skia"
+    ],
+    "types": [
+      {
+        "cpp": "::SkBlurImageFilter::TileMode",
+        "mojom": "skia.mojom.BlurTileMode"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "skia/public/mojom/bitmap_skbitmap_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      ":shared_typemap_traits",
+      "//skia"
+    ],
+    "types": [
+      {
+        "cpp": "::SkBitmap",
+        "mojom": "skia.mojom.Bitmap",
+        "nullable_is_same_type": true
+      },
+      {
+        "cpp": "::SkBitmap",
+        "mojom": "skia.mojom.UnsafeBitmap",
+        "nullable_is_same_type": true
+      },
+      {
+        "cpp": "::SkBitmap",
+        "mojom": "skia.mojom.InlineBitmap",
+        "nullable_is_same_type": true
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "skia/public/mojom/skcolor_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//skia"
+    ],
+    "types": [
+      {
+        "cpp": "::SkColor",
+        "mojom": "skia.mojom.SkColor"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "skia/public/mojom/image_info_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      ":shared_typemap_traits",
+      "//skia"
+    ],
+    "types": [
+      {
+        "cpp": "::SkImageInfo",
+        "mojom": "skia.mojom.ImageInfo"
+      }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DWEBRTC_ENABLE_PROTOBUF=1 -DRTC_ENABLE_VP9 -DHAVE_SCTP -DENABLE_EXTERNAL_AUTH -DHAVE_WEBRTC_VIDEO -DLOGGING_INSIDE_WEBRTC -DWEBRTC_LIBRARY_IMPL -DWEBRTC_ENABLE_SYMBOL_EXPORT -DWEBRTC_ENABLE_AVX2 -DWEBRTC_NON_STATIC_TRACE_EVENT_HANDLERS=0 -DWEBRTC_CHROMIUM_BUILD -DWEBRTC_POSIX -DWEBRTC_MAC -DABSL_ALLOCATOR_NOTHROW=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/webrtc_overrides -I../../third_party/webrtc -Igen/third_party/webrtc -I../../third_party/abseil-cpp
+label_name = module_api
+target_gen_dir = gen/third_party/webrtc/modules
+target_out_dir = obj/third_party/webrtc/modules
+target_output_name = module_api
+
+
+build obj/third_party/webrtc/modules/module_api.stamp: stamp

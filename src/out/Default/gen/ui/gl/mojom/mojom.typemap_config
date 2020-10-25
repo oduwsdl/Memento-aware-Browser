@@ -1,0 +1,37 @@
+[
+  {
+    "traits_headers": [
+      "ui/gl/mojom/gpu_preference_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//ui/gl"
+    ],
+    "types": [
+      {
+        "cpp": "::gl::GpuPreference",
+        "mojom": "gl.mojom.GpuPreference"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "ui/gl/mojom/hdr_metadata_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//ui/gl"
+    ],
+    "traits_sources": [
+      "hdr_metadata_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::gl::MasteringMetadata",
+        "mojom": "gl.mojom.MasteringMetadata"
+      },
+      {
+        "cpp": "::gl::HDRMetadata",
+        "mojom": "gl.mojom.HDRMetadata"
+      }
+    ]
+  }
+]

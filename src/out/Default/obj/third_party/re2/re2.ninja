@@ -1,0 +1,37 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/re2/src
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = re2
+target_gen_dir = gen/third_party/re2
+target_out_dir = obj/third_party/re2
+target_output_name = libre2
+
+build obj/third_party/re2/re2/bitstate.o: cxx ../../third_party/re2/src/re2/bitstate.cc
+build obj/third_party/re2/re2/compile.o: cxx ../../third_party/re2/src/re2/compile.cc
+build obj/third_party/re2/re2/dfa.o: cxx ../../third_party/re2/src/re2/dfa.cc
+build obj/third_party/re2/re2/filtered_re2.o: cxx ../../third_party/re2/src/re2/filtered_re2.cc
+build obj/third_party/re2/re2/mimics_pcre.o: cxx ../../third_party/re2/src/re2/mimics_pcre.cc
+build obj/third_party/re2/re2/nfa.o: cxx ../../third_party/re2/src/re2/nfa.cc
+build obj/third_party/re2/re2/onepass.o: cxx ../../third_party/re2/src/re2/onepass.cc
+build obj/third_party/re2/re2/parse.o: cxx ../../third_party/re2/src/re2/parse.cc
+build obj/third_party/re2/re2/perl_groups.o: cxx ../../third_party/re2/src/re2/perl_groups.cc
+build obj/third_party/re2/re2/prefilter.o: cxx ../../third_party/re2/src/re2/prefilter.cc
+build obj/third_party/re2/re2/prefilter_tree.o: cxx ../../third_party/re2/src/re2/prefilter_tree.cc
+build obj/third_party/re2/re2/prog.o: cxx ../../third_party/re2/src/re2/prog.cc
+build obj/third_party/re2/re2/re2.o: cxx ../../third_party/re2/src/re2/re2.cc
+build obj/third_party/re2/re2/regexp.o: cxx ../../third_party/re2/src/re2/regexp.cc
+build obj/third_party/re2/re2/set.o: cxx ../../third_party/re2/src/re2/set.cc
+build obj/third_party/re2/re2/simplify.o: cxx ../../third_party/re2/src/re2/simplify.cc
+build obj/third_party/re2/re2/stringpiece.o: cxx ../../third_party/re2/src/re2/stringpiece.cc
+build obj/third_party/re2/re2/tostring.o: cxx ../../third_party/re2/src/re2/tostring.cc
+build obj/third_party/re2/re2/unicode_casefold.o: cxx ../../third_party/re2/src/re2/unicode_casefold.cc
+build obj/third_party/re2/re2/unicode_groups.o: cxx ../../third_party/re2/src/re2/unicode_groups.cc
+build obj/third_party/re2/re2/rune.o: cxx ../../third_party/re2/src/util/rune.cc
+build obj/third_party/re2/re2/strutil.o: cxx ../../third_party/re2/src/util/strutil.cc
+
+build obj/third_party/re2/libre2.a: alink obj/third_party/re2/re2/bitstate.o obj/third_party/re2/re2/compile.o obj/third_party/re2/re2/dfa.o obj/third_party/re2/re2/filtered_re2.o obj/third_party/re2/re2/mimics_pcre.o obj/third_party/re2/re2/nfa.o obj/third_party/re2/re2/onepass.o obj/third_party/re2/re2/parse.o obj/third_party/re2/re2/perl_groups.o obj/third_party/re2/re2/prefilter.o obj/third_party/re2/re2/prefilter_tree.o obj/third_party/re2/re2/prog.o obj/third_party/re2/re2/re2.o obj/third_party/re2/re2/regexp.o obj/third_party/re2/re2/set.o obj/third_party/re2/re2/simplify.o obj/third_party/re2/re2/stringpiece.o obj/third_party/re2/re2/tostring.o obj/third_party/re2/re2/unicode_casefold.o obj/third_party/re2/re2/unicode_groups.o obj/third_party/re2/re2/rune.o obj/third_party/re2/re2/strutil.o
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/re2

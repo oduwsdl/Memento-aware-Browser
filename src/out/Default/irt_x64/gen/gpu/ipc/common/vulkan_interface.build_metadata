@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/irt_x64/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/gpu/ipc/common/vulkan_info.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/vulkan_types.mojom"
+  ]
+}

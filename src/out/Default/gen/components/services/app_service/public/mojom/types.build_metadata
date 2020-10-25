@@ -1,0 +1,15 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/image/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/image/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/services/app_service/public/mojom/types.mojom"
+  ]
+}

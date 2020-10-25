@@ -1,0 +1,12 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom_ip_address.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/network/public/mojom/network_param.mojom",
+    "/Users/macuser/chromium/src/services/network/public/mojom/websocket.mojom"
+  ]
+}

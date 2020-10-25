@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/services/file_util/public/mojom/file_util_service.mojom",
+    "/Users/macuser/chromium/src/chrome/services/file_util/public/mojom/safe_archive_analyzer.mojom"
+  ]
+}

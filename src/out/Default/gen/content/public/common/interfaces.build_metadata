@@ -1,0 +1,17 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/third_party/blink/public/mojom/mojom_platform.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/content/public/common/browser_controls_state.mojom",
+    "/Users/macuser/chromium/src/content/public/common/drop_data.mojom",
+    "/Users/macuser/chromium/src/content/public/common/fullscreen_video_element.mojom",
+    "/Users/macuser/chromium/src/content/public/common/resource_usage_reporter.mojom",
+    "/Users/macuser/chromium/src/content/public/common/was_activated_option.mojom",
+    "/Users/macuser/chromium/src/content/public/common/webplugininfo.mojom",
+    "/Users/macuser/chromium/src/content/public/common/window_container_type.mojom"
+  ]
+}

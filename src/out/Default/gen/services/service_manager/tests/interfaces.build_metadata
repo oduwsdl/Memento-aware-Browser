@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/service_manager/tests/background.test-mojom",
+    "/Users/macuser/chromium/src/services/service_manager/tests/test_support.test-mojom"
+  ]
+}

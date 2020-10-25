@@ -1,0 +1,346 @@
+[
+  {
+    "traits_headers": [
+      "ui/base/mojom/clipboard_blink_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//ui/base/clipboard:clipboard_types"
+    ],
+    "types": [
+      {
+        "cpp": "::ui::ClipboardBuffer",
+        "mojom": "blink.mojom.ClipboardBuffer"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "components/password_manager/content/common/credential_manager_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//components/password_manager/core/common"
+    ],
+    "traits_sources": [
+      "//components/password_manager/content/common/credential_manager_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::password_manager::CredentialType",
+        "mojom": "blink.mojom.CredentialType"
+      },
+      {
+        "cpp": "::password_manager::CredentialMediationRequirement",
+        "mojom": "blink.mojom.CredentialMediationRequirement"
+      },
+      {
+        "cpp": "::password_manager::CredentialInfo",
+        "mojom": "blink.mojom.CredentialInfo"
+      },
+      {
+        "cpp": "::password_manager::CredentialManagerError",
+        "mojom": "blink.mojom.CredentialManagerError"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/fetch/fetch_api_request_body_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//services/network/public/cpp:cpp_base"
+    ],
+    "types": [
+      {
+        "cpp": "::network::DataElement",
+        "mojom": "blink.mojom.FetchAPIDataElement",
+        "move_only": true
+      },
+      {
+        "copyable_pass_by_value": true,
+        "cpp": "::scoped_refptr<::network::ResourceRequestBody>",
+        "mojom": "blink.mojom.FetchAPIRequestBody",
+        "nullable_is_same_type": true
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/fetch/fetch_api_request_headers_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::FetchAPIRequestHeadersMap",
+        "mojom": "blink.mojom.FetchAPIRequestHeaders",
+        "move_only": true
+      }
+    ]
+  },
+  {
+    "traits_deps": [
+      "//ui/gfx/geometry/mojom:mojom_traits"
+    ],
+    "traits_headers": [
+      "third_party/blink/public/common/manifest/manifest.h",
+      "third_party/blink/public/common/common_export.h"
+    ],
+    "traits_private_headers": [
+      "third_party/blink/public/common/manifest/manifest_mojom_traits.h"
+    ],
+    "traits_sources": [
+      "//third_party/blink/common/manifest/manifest_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::Manifest",
+        "mojom": "blink.mojom.Manifest",
+        "nullable_is_same_type": true
+      },
+      {
+        "cpp": "::blink::Manifest::ImageResource",
+        "mojom": "blink.mojom.ManifestImageResource"
+      },
+      {
+        "cpp": "::blink::Manifest::RelatedApplication",
+        "mojom": "blink.mojom.ManifestRelatedApplication"
+      },
+      {
+        "cpp": "::blink::Manifest::ShareTarget",
+        "mojom": "blink.mojom.ManifestShareTarget"
+      },
+      {
+        "cpp": "::blink::Manifest::ShortcutItem",
+        "mojom": "blink.mojom.ManifestShortcutItem"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/notifications/notification_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::PlatformNotificationData",
+        "mojom": "blink.mojom.NotificationData"
+      },
+      {
+        "cpp": "::blink::NotificationResources",
+        "mojom": "blink.mojom.NotificationResources"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/peerconnection/peer_connection_tracker_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::base::PowerObserver::DeviceThermalState",
+        "mojom": "blink.mojom.DeviceThermalState"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/common/feature_policy/policy_value_mojom_traits.h"
+    ],
+    "traits_sources": [
+      "//third_party/blink/common/feature_policy/policy_value_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::PolicyValue",
+        "mojom": "blink.mojom.PolicyValue"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/user_agent/user_agent_mojom_traits.h"
+    ],
+    "traits_sources": [
+      "//third_party/blink/common/user_agent/user_agent_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::UserAgentBrandVersion",
+        "mojom": "blink.mojom.UserAgentBrandVersion"
+      },
+      {
+        "cpp": "::blink::UserAgentMetadata",
+        "mojom": "blink.mojom.UserAgentMetadata"
+      },
+      {
+        "cpp": "::blink::UserAgentOverride",
+        "mojom": "blink.mojom.UserAgentOverride"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/page/drag_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//third_party/blink/public/common:headers"
+    ],
+    "types": [
+      {
+        "copyable_pass_by_value": true,
+        "cpp": "::blink::DragOperation",
+        "mojom": "blink.mojom.DragOperation"
+      },
+      {
+        "copyable_pass_by_value": true,
+        "cpp": "::blink::DragOperationsMask",
+        "mojom": "blink.mojom.AllowedDragOperations"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::std::unique_ptr<::blink::WebCoalescedInputEvent>",
+        "mojom": "blink.mojom.Event",
+        "move_only": true
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/feature_policy/feature_policy_forward.h"
+    ],
+    "traits_private_headers": [
+      "third_party/blink/common/feature_policy/feature_policy_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::ParsedFeaturePolicyDeclaration",
+        "mojom": "blink.mojom.ParsedFeaturePolicyDeclaration"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/common/frame/frame_policy_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::FramePolicy",
+        "mojom": "blink.mojom.FramePolicy"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/mediastream/media_devices_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::MediaDeviceType",
+        "mojom": "blink.mojom.MediaDeviceType"
+      },
+      {
+        "cpp": "::blink::WebMediaDeviceInfo",
+        "mojom": "blink.mojom.MediaDeviceInfo"
+      },
+      {
+        "cpp": "::media::VideoFacingMode",
+        "mojom": "blink.mojom.FacingMode"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/mediastream/media_stream_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::MediaStreamDevice",
+        "mojom": "blink.mojom.MediaStreamDevice"
+      },
+      {
+        "cpp": "::blink::StreamControls",
+        "mojom": "blink.mojom.StreamControls"
+      },
+      {
+        "cpp": "::blink::TrackControls",
+        "mojom": "blink.mojom.TrackControls"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/widget/screen_info_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::ScreenInfo",
+        "mojom": "blink.mojom.ScreenInfo"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/widget/visual_properties_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::VisualProperties",
+        "mojom": "blink.mojom.VisualProperties"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/widget/device_emulation_params_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::DeviceEmulationParams",
+        "mojom": "blink.mojom.DeviceEmulationParams"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/loader/url_loader_factory_bundle_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//url/mojom:mojom_traits"
+    ],
+    "types": [
+      {
+        "cpp": "::std::unique_ptr<::blink::PendingURLLoaderFactoryBundle>",
+        "mojom": "blink.mojom.URLLoaderFactoryBundle",
+        "move_only": true,
+        "nullable_is_same_type": true
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/renderer_preferences/renderer_preferences_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::RendererPreferences",
+        "mojom": "blink.mojom.RendererPreferences"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::web_pref::WebPreferences",
+        "mojom": "blink.mojom.WebPreferences"
+      }
+    ]
+  }
+]

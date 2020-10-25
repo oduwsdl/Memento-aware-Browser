@@ -1,0 +1,2 @@
+gen/headless/grit/headless_lib_resources.h
+gen/headless/headless_lib_resources.pak

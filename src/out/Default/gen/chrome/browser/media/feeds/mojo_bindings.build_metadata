@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/services/media_session/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/browser/media/feeds/media_feeds_store.mojom"
+  ]
+}

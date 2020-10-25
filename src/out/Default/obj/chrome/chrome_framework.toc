@@ -1,0 +1,7 @@
+Version=88.0.4302.0
+Chromium Framework
+Helpers
+Libraries
+Resources
+XPCServices
+Internet Plug-Ins

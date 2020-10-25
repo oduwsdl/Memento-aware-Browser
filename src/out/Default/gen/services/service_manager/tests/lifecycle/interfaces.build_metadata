@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/service_manager/tests/lifecycle/lifecycle.test-mojom"
+  ]
+}

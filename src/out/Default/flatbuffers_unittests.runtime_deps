@@ -1,0 +1,9 @@
+./flatbuffers_unittests
+../../third_party/flatbuffers/src/tests/
+../../testing/scripts/common.py
+../../testing/scripts/run_flatbuffers_unittests.py
+../../testing/xvfb.py
+../../testing/test_env.py
+../../.vpython
+bin/run_flatbuffers_unittests
+./libc++.dylib

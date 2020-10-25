@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/ui/base/cursor/mojom/cursor_type.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/skia/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/ui/base/cursor/mojom/cursor.mojom"
+  ]
+}

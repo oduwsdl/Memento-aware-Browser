@@ -1,0 +1,459 @@
+[
+  {
+    "traits_headers": [
+      "media/mojo/mojom/audio_decoder_config_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//media",
+      "//media/base/ipc"
+    ],
+    "traits_sources": [
+      "audio_decoder_config_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::AudioDecoderConfig",
+        "mojom": "media.mojom.AudioDecoderConfig"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/cdm_key_information_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//media"
+    ],
+    "traits_sources": [
+      "cdm_key_information_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::std::unique_ptr<::media::CdmKeyInformation>",
+        "mojom": "media.mojom.CdmKeyInformation",
+        "move_only": true
+      },
+      {
+        "cpp": "::media::CdmKeyInformation::KeyStatus",
+        "mojom": "media.mojom.CdmKeyStatus"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/media_types_enum_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::media::VideoRotation",
+        "mojom": "media.mojom.VideoRotation"
+      },
+      {
+        "cpp": "::media::VideoFrameMetadata::CopyMode",
+        "mojom": "media.mojom.CopyMode"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/base/ipc/media_param_traits_macros.h"
+    ],
+    "traits_public_deps": [
+      "//media",
+      "//media/base/ipc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::CdmConfig",
+        "mojom": "media.mojom.CdmConfig"
+      },
+      {
+        "cpp": "::media::CdmPromise::Exception",
+        "mojom": "media.mojom.CdmPromiseResult.Exception"
+      },
+      {
+        "cpp": "::media::CdmSessionType",
+        "mojom": "media.mojom.CdmSessionType"
+      },
+      {
+        "cpp": "::media::CdmMessageType",
+        "mojom": "media.mojom.CdmMessageType"
+      },
+      {
+        "cpp": "::media::Decryptor::Status",
+        "mojom": "media.mojom.Decryptor.Status"
+      },
+      {
+        "cpp": "::media::Decryptor::StreamType",
+        "mojom": "media.mojom.Decryptor.StreamType"
+      },
+      {
+        "cpp": "::media::DemuxerStream::Status",
+        "mojom": "media.mojom.DemuxerStream.Status"
+      },
+      {
+        "cpp": "::media::DemuxerStream::Type",
+        "mojom": "media.mojom.DemuxerStream.Type"
+      },
+      {
+        "cpp": "::media::EmeInitDataType",
+        "mojom": "media.mojom.EmeInitDataType"
+      },
+      {
+        "cpp": "::media::HdcpVersion",
+        "mojom": "media.mojom.HdcpVersion"
+      },
+      {
+        "cpp": "::media::MediaDrmKeyType",
+        "mojom": "media.mojom.SessionData.KeyType"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/encryption_pattern_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//media",
+      "//media/base/ipc"
+    ],
+    "traits_sources": [
+      "encryption_pattern_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::EncryptionPattern",
+        "mojom": "media.mojom.EncryptionPattern"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/pipeline_status_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::media::PipelineStatistics",
+        "mojom": "media.mojom.PipelineStatistics"
+      },
+      {
+        "cpp": "::media::PipelineDecoderInfo",
+        "mojom": "media.mojom.PipelineDecoderInfo"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/status_mojom_traits.h"
+    ],
+    "traits_sources": [
+      "status_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::Status",
+        "mojom": "media.mojom.Status"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_color_space_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::media::VideoColorSpace::PrimaryID",
+        "mojom": "media.mojom.VideoColorSpace.PrimaryID"
+      },
+      {
+        "cpp": "::media::VideoColorSpace::TransferID",
+        "mojom": "media.mojom.VideoColorSpace.TransferID:"
+      },
+      {
+        "cpp": "::media::VideoColorSpace::MatrixID",
+        "mojom": "media.mojom.VideoColorSpace.MatrixID:"
+      },
+      {
+        "cpp": "::gfx::ColorSpace::RangeID",
+        "mojom": "media.mojom.VideoColorSpace.RangeID:"
+      },
+      {
+        "cpp": "::media::VideoColorSpace",
+        "mojom": "media.mojom.VideoColorSpace:"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/supported_video_decoder_config_mojom_traits.h",
+      "media/base/ipc/media_param_traits_macros.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//media",
+      "//media/base/ipc",
+      "//media/gpu/ipc/common",
+      "//ui/gfx/geometry/mojom:mojom_traits"
+    ],
+    "traits_sources": [
+      "supported_video_decoder_config_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::OverlayInfo",
+        "mojom": "media.mojom.OverlayInfo"
+      },
+      {
+        "cpp": "::media::SupportedVideoDecoderConfig",
+        "mojom": "media.mojom.SupportedVideoDecoderConfig"
+      },
+      {
+        "cpp": "::media::VideoDecoderImplementation",
+        "mojom": "media.mojom.VideoDecoderImplementation"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/base/video_decoder_config.h"
+    ],
+    "traits_private_headers": [
+      "media/mojo/mojom/video_decoder_config_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//media",
+      "//media/base/ipc",
+      "//ui/gfx/geometry/mojom:mojom_traits"
+    ],
+    "traits_sources": [
+      "video_decoder_config_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::VideoDecoderConfig",
+        "mojom": "media.mojom.VideoDecoderConfig"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_encode_accelerator_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//media",
+      "//media/base/ipc",
+      "//ui/gfx/geometry/mojom:mojom_traits"
+    ],
+    "traits_sources": [
+      "video_encode_accelerator_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::BitstreamBufferMetadata",
+        "mojom": "media.mojom.BitstreamBufferMetadata"
+      },
+      {
+        "cpp": "::media::VideoBitrateAllocation",
+        "mojom": "media.mojom.VideoBitrateAllocation"
+      },
+      {
+        "cpp": "::media::VideoEncodeAccelerator::Error",
+        "mojom": "media.mojom.VideoEncodeAccelerator.Error"
+      },
+      {
+        "cpp": "::media::VideoEncodeAccelerator::Config",
+        "mojom": "media.mojom.VideoEncodeAcceleratorConfig"
+      },
+      {
+        "cpp": "::media::VideoEncodeAccelerator::Config::SpatialLayer",
+        "mojom": "media.mojom.SpatialLayer"
+      },
+      {
+        "cpp": "::media::VideoEncodeAccelerator::SupportedProfile",
+        "mojom": "media.mojom.VideoEncodeAcceleratorSupportedProfile"
+      },
+      {
+        "cpp": "::media::Vp8Metadata",
+        "mojom": "media.mojom.Vp8Metadata"
+      },
+      {
+        "cpp": "::media::Vp9Metadata",
+        "mojom": "media.mojom.Vp9Metadata"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_encoder_info_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//base",
+      "//media",
+      "//media/base/ipc",
+      "//ui/gfx/geometry/mojom:mojom_traits"
+    ],
+    "traits_sources": [
+      "video_encoder_info_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::ScalingSettings",
+        "mojom": "media.mojom.ScalingSettings"
+      },
+      {
+        "cpp": "::media::ResolutionBitrateLimit",
+        "mojom": "media.mojom.ResolutionBitrateLimit"
+      },
+      {
+        "cpp": "::media::VideoEncoderInfo",
+        "mojom": "media.mojom.VideoEncoderInfo"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_transformation_mojom_traits.h",
+      "media/base/ipc/media_param_traits_macros.h"
+    ],
+    "traits_sources": [
+      "video_transformation_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::AudioCodec",
+        "mojom": "media.mojom.AudioCodec"
+      },
+      {
+        "cpp": "::media::AudioCodecProfile",
+        "mojom": "media.mojom.AudioCodecProfile"
+      },
+      {
+        "cpp": "::media::BufferingState",
+        "mojom": "media.mojom.BufferingState"
+      },
+      {
+        "cpp": "::media::BufferingStateChangeReason",
+        "mojom": "media.mojom.BufferingStateChangeReason"
+      },
+      {
+        "cpp": "::media::ChannelLayout",
+        "mojom": "media.mojom.ChannelLayout"
+      },
+      {
+        "cpp": "::media::DecodeStatus",
+        "mojom": "media.mojom.DecodeStatus"
+      },
+      {
+        "cpp": "::media::EncryptionScheme",
+        "mojom": "media.mojom.EncryptionScheme"
+      },
+      {
+        "cpp": "::media::container_names::MediaContainerName",
+        "mojom": "media.mojom.MediaContainerName"
+      },
+      {
+        "cpp": "::media::MediaLogRecord",
+        "mojom": "media.mojom.MediaLogRecord"
+      },
+      {
+        "cpp": "::media::OutputDeviceStatus",
+        "mojom": "media.mojom.OutputDeviceStatus"
+      },
+      {
+        "cpp": "::media::PipelineStatus",
+        "mojom": "media.mojom.PipelineStatus"
+      },
+      {
+        "cpp": "::media::SampleFormat",
+        "mojom": "media.mojom.SampleFormat"
+      },
+      {
+        "cpp": "::media::SubsampleEntry",
+        "mojom": "media.mojom.SubsampleEntry"
+      },
+      {
+        "cpp": "::media::VideoCodec",
+        "mojom": "media.mojom.VideoCodec"
+      },
+      {
+        "cpp": "::media::VideoCodecProfile",
+        "mojom": "media.mojom.VideoCodecProfile"
+      },
+      {
+        "cpp": "::media::VideoPixelFormat",
+        "mojom": "media.mojom.VideoPixelFormat"
+      },
+      {
+        "cpp": "::media::VideoTransformation",
+        "mojom": "media.mojom.VideoTransformation"
+      },
+      {
+        "cpp": "::media::WaitingReason",
+        "mojom": "media.mojom.WaitingReason"
+      },
+      {
+        "cpp": "::media::WatchTimeKey",
+        "mojom": "media.mojom.WatchTimeKey"
+      },
+      {
+        "cpp": "::media::MediaStatus::State",
+        "mojom": "media.mojom.MediaStatusState"
+      },
+      {
+        "cpp": "::media::StatusCode",
+        "mojom": "media.mojom.StatusCode"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_frame_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//media/mojo/common:mojo_shared_buffer_video_frame",
+      "//ui/gfx/geometry/mojom"
+    ],
+    "traits_sources": [
+      "video_frame_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::scoped_refptr<::media::VideoFrame>",
+        "mojom": "media.mojom.VideoFrame",
+        "nullable_is_same_type": true
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/base/ipc/media_param_traits.h"
+    ],
+    "traits_public_deps": [
+      "//media",
+      "//media/base/ipc"
+    ],
+    "types": [
+      {
+        "cpp": "::media::AudioParameters",
+        "mojom": "media.mojom.AudioParameters"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "media/mojo/mojom/video_frame_metadata_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      ":shared_mojom_traits"
+    ],
+    "types": [
+      {
+        "cpp": "::media::VideoFrameMetadata",
+        "mojom": "media.mojom.VideoFrameMetadata"
+      }
+    ]
+  }
+]

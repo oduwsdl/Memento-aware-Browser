@@ -1,0 +1,45 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/ots/include -I../../third_party/brotli/include -I../../third_party/woff2/include -I../../third_party/zlib
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = ots
+target_gen_dir = gen/third_party/ots
+target_out_dir = obj/third_party/ots
+target_output_name = libots
+
+build obj/third_party/ots/ots/cff.o: cxx ../../third_party/ots/src/cff.cc
+build obj/third_party/ots/ots/cff_type2_charstring.o: cxx ../../third_party/ots/src/cff_type2_charstring.cc
+build obj/third_party/ots/ots/cmap.o: cxx ../../third_party/ots/src/cmap.cc
+build obj/third_party/ots/ots/cvt.o: cxx ../../third_party/ots/src/cvt.cc
+build obj/third_party/ots/ots/fpgm.o: cxx ../../third_party/ots/src/fpgm.cc
+build obj/third_party/ots/ots/gasp.o: cxx ../../third_party/ots/src/gasp.cc
+build obj/third_party/ots/ots/gdef.o: cxx ../../third_party/ots/src/gdef.cc
+build obj/third_party/ots/ots/glyf.o: cxx ../../third_party/ots/src/glyf.cc
+build obj/third_party/ots/ots/gpos.o: cxx ../../third_party/ots/src/gpos.cc
+build obj/third_party/ots/ots/gsub.o: cxx ../../third_party/ots/src/gsub.cc
+build obj/third_party/ots/ots/hdmx.o: cxx ../../third_party/ots/src/hdmx.cc
+build obj/third_party/ots/ots/head.o: cxx ../../third_party/ots/src/head.cc
+build obj/third_party/ots/ots/hhea.o: cxx ../../third_party/ots/src/hhea.cc
+build obj/third_party/ots/ots/hmtx.o: cxx ../../third_party/ots/src/hmtx.cc
+build obj/third_party/ots/ots/kern.o: cxx ../../third_party/ots/src/kern.cc
+build obj/third_party/ots/ots/layout.o: cxx ../../third_party/ots/src/layout.cc
+build obj/third_party/ots/ots/loca.o: cxx ../../third_party/ots/src/loca.cc
+build obj/third_party/ots/ots/ltsh.o: cxx ../../third_party/ots/src/ltsh.cc
+build obj/third_party/ots/ots/math.o: cxx ../../third_party/ots/src/math.cc
+build obj/third_party/ots/ots/maxp.o: cxx ../../third_party/ots/src/maxp.cc
+build obj/third_party/ots/ots/metrics.o: cxx ../../third_party/ots/src/metrics.cc
+build obj/third_party/ots/ots/name.o: cxx ../../third_party/ots/src/name.cc
+build obj/third_party/ots/ots/os2.o: cxx ../../third_party/ots/src/os2.cc
+build obj/third_party/ots/ots/ots.o: cxx ../../third_party/ots/src/ots.cc
+build obj/third_party/ots/ots/post.o: cxx ../../third_party/ots/src/post.cc
+build obj/third_party/ots/ots/prep.o: cxx ../../third_party/ots/src/prep.cc
+build obj/third_party/ots/ots/vdmx.o: cxx ../../third_party/ots/src/vdmx.cc
+build obj/third_party/ots/ots/vhea.o: cxx ../../third_party/ots/src/vhea.cc
+build obj/third_party/ots/ots/vmtx.o: cxx ../../third_party/ots/src/vmtx.cc
+build obj/third_party/ots/ots/vorg.o: cxx ../../third_party/ots/src/vorg.cc
+
+build obj/third_party/ots/libots.a: alink obj/third_party/ots/ots/cff.o obj/third_party/ots/ots/cff_type2_charstring.o obj/third_party/ots/ots/cmap.o obj/third_party/ots/ots/cvt.o obj/third_party/ots/ots/fpgm.o obj/third_party/ots/ots/gasp.o obj/third_party/ots/ots/gdef.o obj/third_party/ots/ots/glyf.o obj/third_party/ots/ots/gpos.o obj/third_party/ots/ots/gsub.o obj/third_party/ots/ots/hdmx.o obj/third_party/ots/ots/head.o obj/third_party/ots/ots/hhea.o obj/third_party/ots/ots/hmtx.o obj/third_party/ots/ots/kern.o obj/third_party/ots/ots/layout.o obj/third_party/ots/ots/loca.o obj/third_party/ots/ots/ltsh.o obj/third_party/ots/ots/math.o obj/third_party/ots/ots/maxp.o obj/third_party/ots/ots/metrics.o obj/third_party/ots/ots/name.o obj/third_party/ots/ots/os2.o obj/third_party/ots/ots/ots.o obj/third_party/ots/ots/post.o obj/third_party/ots/ots/prep.o obj/third_party/ots/ots/vdmx.o obj/third_party/ots/ots/vhea.o obj/third_party/ots/ots/vmtx.o obj/third_party/ots/ots/vorg.o || obj/third_party/brotli/libdec.a obj/third_party/woff2/libwoff2_dec.a ./libchrome_zlib.dylib.TOC obj/third_party/brotli/headers.stamp obj/third_party/brotli/libcommon.a
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/ots

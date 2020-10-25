@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/ui/gl/mojom/gpu_preference.mojom",
+    "/Users/macuser/chromium/src/ui/gl/mojom/hdr_metadata.mojom"
+  ]
+}

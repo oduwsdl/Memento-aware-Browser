@@ -1,0 +1,9 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/test/data/webui/mojo/foobar.mojom",
+    "/Users/macuser/chromium/src/chrome/test/data/webui/web_ui_test.mojom"
+  ]
+}

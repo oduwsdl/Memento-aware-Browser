@@ -1,0 +1,10 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DTINT_BUILD_SPV_READER=1 -DTINT_BUILD_SPV_WRITER=1 -DTINT_BUILD_WGSL_READER=1 -DTINT_BUILD_WGSL_WRITER=1 -DTINT_BUILD_MSL_WRITER=1 -DTINT_BUILD_HLSL_WRITER=1
+framework_dirs =
+include_dirs = -I../.. -Igen -Igen/third_party/tint/src -I../../third_party/tint/src -I../../third_party/spirv-headers/src/include -I../../third_party/SPIRV-Tools/src -I../../third_party/SPIRV-Tools/src/include -I../../third_party/tint/src -I../../third_party/tint/src/include -I../../third_party/spirv-headers/src/include
+label_name = tint_fuzzer_common
+target_gen_dir = gen/third_party/tint/src
+target_out_dir = obj/third_party/tint/src
+target_output_name = tint_fuzzer_common
+
+
+build obj/third_party/tint/src/tint_fuzzer_common.stamp: stamp

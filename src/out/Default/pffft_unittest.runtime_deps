@@ -1,0 +1,10 @@
+./pffft_unittest
+./libbase.dylib
+./libabsl.dylib
+./libc++.dylib
+./libboringssl.dylib
+./libperfetto.dylib
+./libchrome_zlib.dylib
+../../testing/test_env.py
+../../.vpython
+bin/run_pffft_unittest

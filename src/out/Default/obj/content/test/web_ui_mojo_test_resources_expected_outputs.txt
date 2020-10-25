@@ -1,0 +1,4 @@
+gen/content/test/grit/web_ui_mojo_test_resources.h
+gen/content/test/grit/web_ui_mojo_test_resources_map.cc
+gen/content/test/grit/web_ui_mojo_test_resources_map.h
+gen/content/test/web_ui_mojo_test_resources.pak

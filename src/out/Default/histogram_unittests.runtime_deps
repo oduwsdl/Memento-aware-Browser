@@ -1,0 +1,11 @@
+./histogram_unittests
+./libprotobuf_lite.dylib
+./libc++.dylib
+./libbase.dylib
+./libabsl.dylib
+./libboringssl.dylib
+./libperfetto.dylib
+./libchrome_zlib.dylib
+../../testing/test_env.py
+../../.vpython
+bin/run_histogram_unittests

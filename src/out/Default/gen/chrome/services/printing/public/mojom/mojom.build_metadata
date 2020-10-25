@@ -1,0 +1,14 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/printing/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/services/printing/public/mojom/pdf_nup_converter.mojom",
+    "/Users/macuser/chromium/src/chrome/services/printing/public/mojom/pdf_render_settings.mojom",
+    "/Users/macuser/chromium/src/chrome/services/printing/public/mojom/pdf_to_pwg_raster_converter.mojom",
+    "/Users/macuser/chromium/src/chrome/services/printing/public/mojom/printing_service.mojom"
+  ]
+}

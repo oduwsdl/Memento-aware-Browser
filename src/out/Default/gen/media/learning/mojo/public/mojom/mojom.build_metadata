@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/media/learning/mojo/public/mojom/learning_task_controller.mojom",
+    "/Users/macuser/chromium/src/media/learning/mojo/public/mojom/learning_types.mojom"
+  ]
+}

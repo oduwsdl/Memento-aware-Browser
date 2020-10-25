@@ -1,0 +1,14 @@
+./standalone_angle_system_info_test
+../../third_party/angle/scripts/run_gtest_angle_test.py
+../../testing/scripts/common.py
+../../testing/xvfb.py
+./libabsl.dylib
+./libc++.dylib
+./libangle_util.dylib
+./libbase.dylib
+./libboringssl.dylib
+./libperfetto.dylib
+./libchrome_zlib.dylib
+../../testing/test_env.py
+../../.vpython
+bin/run_standalone_angle_system_info_test

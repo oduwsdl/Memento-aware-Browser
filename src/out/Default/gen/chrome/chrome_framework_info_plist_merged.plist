@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BuildMachineOSBuild</key>
+	<string>${BUILD_MACHINE_OS_BUILD}</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>${EXECUTABLE_NAME}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${CHROMIUM_BUNDLE_ID}.framework</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>FMWK</string>
+	<key>CFBundleShortVersionString</key>
+	<string>88.0.4302.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>4302.0</string>
+	<key>DTCompiler</key>
+	<string>${GCC_VERSION}</string>
+	<key>DTSDKBuild</key>
+	<string>${MAC_SDK_BUILD}</string>
+	<key>DTSDKName</key>
+	<string>${MAC_SDK_NAME}</string>
+	<key>DTXcode</key>
+	<string>${XCODE_VERSION}</string>
+	<key>DTXcodeBuild</key>
+	<string>${XCODE_BUILD}</string>
+	<key>SCMRevision</key>
+	<string>70a12a07d90c157e87ffbc0caf9857c0bf9d691e-refs/heads/master@{#820476}</string>
+</dict>
+</plist>

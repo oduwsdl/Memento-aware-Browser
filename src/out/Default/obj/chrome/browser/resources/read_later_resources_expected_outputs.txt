@@ -1,0 +1,4 @@
+gen/chrome/grit/read_later_resources.h
+gen/chrome/grit/read_later_resources_map.cc
+gen/chrome/grit/read_later_resources_map.h
+gen/chrome/read_later_resources.pak

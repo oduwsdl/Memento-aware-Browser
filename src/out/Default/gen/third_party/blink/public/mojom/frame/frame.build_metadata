@@ -1,0 +1,25 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/blocked_navigation_types.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/find_in_page.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/frame_owner_element_type.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/fullscreen.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/lifecycle.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/media_player_action.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/policy_container.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/reporting_observer.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/tree_scope_type.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/user_activation_notification_type.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/user_activation_update_types.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/frame/viewport_intersection_state.mojom"
+  ]
+}

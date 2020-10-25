@@ -1,0 +1,23 @@
+defines = -DWITH_SIMD -DBMP_SUPPORTED -DPPM_SUPPORTED -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/libjpeg_turbo
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = turbojpeg
+target_gen_dir = gen/third_party/libjpeg_turbo
+target_out_dir = obj/third_party/libjpeg_turbo
+target_output_name = libturbojpeg
+
+build obj/third_party/libjpeg_turbo/turbojpeg/turbojpeg.o: cc ../../third_party/libjpeg_turbo/turbojpeg.c
+build obj/third_party/libjpeg_turbo/turbojpeg/transupp.o: cc ../../third_party/libjpeg_turbo/transupp.c
+build obj/third_party/libjpeg_turbo/turbojpeg/jdatadst-tj.o: cc ../../third_party/libjpeg_turbo/jdatadst-tj.c
+build obj/third_party/libjpeg_turbo/turbojpeg/jdatasrc-tj.o: cc ../../third_party/libjpeg_turbo/jdatasrc-tj.c
+build obj/third_party/libjpeg_turbo/turbojpeg/rdbmp.o: cc ../../third_party/libjpeg_turbo/rdbmp.c
+build obj/third_party/libjpeg_turbo/turbojpeg/rdppm.o: cc ../../third_party/libjpeg_turbo/rdppm.c
+build obj/third_party/libjpeg_turbo/turbojpeg/wrbmp.o: cc ../../third_party/libjpeg_turbo/wrbmp.c
+build obj/third_party/libjpeg_turbo/turbojpeg/wrppm.o: cc ../../third_party/libjpeg_turbo/wrppm.c
+
+build obj/third_party/libjpeg_turbo/libturbojpeg.a: alink obj/third_party/libjpeg_turbo/turbojpeg/turbojpeg.o obj/third_party/libjpeg_turbo/turbojpeg/transupp.o obj/third_party/libjpeg_turbo/turbojpeg/jdatadst-tj.o obj/third_party/libjpeg_turbo/turbojpeg/jdatasrc-tj.o obj/third_party/libjpeg_turbo/turbojpeg/rdbmp.o obj/third_party/libjpeg_turbo/turbojpeg/rdppm.o obj/third_party/libjpeg_turbo/turbojpeg/wrbmp.o obj/third_party/libjpeg_turbo/turbojpeg/wrppm.o || obj/third_party/libjpeg_turbo/libjpeg.a obj/third_party/libjpeg_turbo/libjpeg_headers.stamp obj/third_party/libjpeg_turbo/libsimd.a obj/third_party/libjpeg_turbo/libsimd_asm.a
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/libjpeg_turbo

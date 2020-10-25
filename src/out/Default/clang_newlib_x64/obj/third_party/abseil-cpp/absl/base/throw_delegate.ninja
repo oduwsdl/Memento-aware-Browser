@@ -1,0 +1,12 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -DABSL_ALLOCATOR_NOTHROW=1
+include_dirs = -I../.. -Iclang_newlib_x64/gen -I../../third_party/abseil-cpp
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -integrated-as -m64 -march=x86-64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden -Werror -Wno-unused-variable -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden -Wbool-conversion -Wconstant-conversion -Wenum-conversion -Wint-conversion -Wliteral-conversion -Wnon-literal-null-conversion -Wnull-conversion -Wobjc-literal-conversion -Wno-sign-conversion -Wstring-conversion
+label_name = throw_delegate
+root_out_dir = clang_newlib_x64
+target_out_dir = clang_newlib_x64/obj/third_party/abseil-cpp/absl/base
+target_output_name = throw_delegate
+
+build clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/throw_delegate/throw_delegate.o: clang_newlib_x64_cxx ../../third_party/abseil-cpp/absl/base/internal/throw_delegate.cc
+
+build clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/throw_delegate.stamp: clang_newlib_x64_stamp clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/throw_delegate/throw_delegate.o || clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/config.stamp clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/raw_logging_internal.stamp clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/atomic_hook.stamp clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/core_headers.stamp clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/log_severity.stamp

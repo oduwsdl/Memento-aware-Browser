@@ -1,0 +1,15 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/device/vr/public/mojom/test_mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/device/gamepad/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/gpu/ipc/common/interfaces.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/display/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/device/vr/public/mojom/isolated_xr_service.mojom",
+    "/Users/macuser/chromium/src/device/vr/public/mojom/vr_service.mojom"
+  ]
+}

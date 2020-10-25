@@ -1,0 +1,23 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/crashpad/crashpad
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = mig_output
+target_gen_dir = gen/third_party/crashpad/crashpad/util
+target_out_dir = obj/third_party/crashpad/crashpad/util
+target_output_name = libmig_output
+
+build obj/third_party/crashpad/crashpad/util/mig_output/excUser.o: cc gen/third_party/crashpad/crashpad/util/mach/excUser.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/excServer.o: cc gen/third_party/crashpad/crashpad/util/mach/excServer.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/mach_excUser.o: cc gen/third_party/crashpad/crashpad/util/mach/mach_excUser.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/mach_excServer.o: cc gen/third_party/crashpad/crashpad/util/mach/mach_excServer.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/notifyUser.o: cc gen/third_party/crashpad/crashpad/util/mach/notifyUser.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/notifyServer.o: cc gen/third_party/crashpad/crashpad/util/mach/notifyServer.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/child_portUser.o: cc gen/third_party/crashpad/crashpad/util/mach/child_portUser.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+build obj/third_party/crashpad/crashpad/util/mig_output/child_portServer.o: cc gen/third_party/crashpad/crashpad/util/mach/child_portServer.c || obj/third_party/crashpad/crashpad/util/mig.stamp
+
+build obj/third_party/crashpad/crashpad/util/libmig_output.a: alink obj/third_party/crashpad/crashpad/util/mig_output/excUser.o obj/third_party/crashpad/crashpad/util/mig_output/excServer.o obj/third_party/crashpad/crashpad/util/mig_output/mach_excUser.o obj/third_party/crashpad/crashpad/util/mig_output/mach_excServer.o obj/third_party/crashpad/crashpad/util/mig_output/notifyUser.o obj/third_party/crashpad/crashpad/util/mig_output/notifyServer.o obj/third_party/crashpad/crashpad/util/mig_output/child_portUser.o obj/third_party/crashpad/crashpad/util/mig_output/child_portServer.o || obj/third_party/crashpad/crashpad/util/mig.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/crashpad/crashpad/util

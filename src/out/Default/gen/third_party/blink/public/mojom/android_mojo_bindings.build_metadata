@@ -1,0 +1,33 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/components/payments/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/components/schema_org/common/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/media_session/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/android_font_lookup/android_font_lookup.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/blob/blob.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/blob/blob_registry.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/blob/blob_url_store.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/blob/data_element.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/blob/serialized_blob.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/contacts/contacts_manager.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/digital_goods/digital_goods.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/document_metadata/document_metadata.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/font_unique_name_lookup/font_unique_name_lookup.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/input/input_host.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/input/input_messages.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/installation/installation.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/installedapp/installed_app_provider.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/installedapp/related_application.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/mediasession/media_session.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/payments/payment_handler_host.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/payments/payment_request.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/webauthn/authenticator.mojom",
+    "/Users/macuser/chromium/src/third_party/blink/public/mojom/webshare/webshare.mojom"
+  ]
+}

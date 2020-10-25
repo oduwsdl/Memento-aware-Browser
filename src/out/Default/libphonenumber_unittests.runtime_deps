@@ -1,0 +1,16 @@
+./libphonenumber_unittests
+./libprotobuf_lite.dylib
+./libc++.dylib
+./libicui18n.dylib
+./libicuuc.dylib
+icudtl.dat
+./libbase.dylib
+./libabsl.dylib
+./libboringssl.dylib
+./libperfetto.dylib
+./libchrome_zlib.dylib
+../../testing/test_env.py
+./libbase_i18n.dylib
+../../testing/test_env.py
+../../.vpython
+bin/run_libphonenumber_unittests

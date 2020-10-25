@@ -1,0 +1,4 @@
+gen/chrome/grit/downloads_resources.h
+gen/chrome/grit/downloads_resources_map.cc
+gen/chrome/grit/downloads_resources_map.h
+gen/chrome/downloads_resources.pak

@@ -1,0 +1,41 @@
+defines = -DHAVE_MACH_O_NLIST_H -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDEBUG
+framework_dirs =
+include_dirs = -I../../third_party/breakpad/breakpad/src/common/mac -I../.. -Igen -I../../third_party/breakpad/breakpad/src
+cflags = -funsigned-char -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden -frtti
+label_name = dump_syms
+target_gen_dir = gen/third_party/breakpad
+target_out_dir = obj/third_party/breakpad
+target_output_name = dump_syms
+
+build obj/third_party/breakpad/dump_syms/bytereader.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf/bytereader.cc
+build obj/third_party/breakpad/dump_syms/dwarf2diehandler.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf/dwarf2diehandler.cc
+build obj/third_party/breakpad/dump_syms/dwarf2reader.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf/dwarf2reader.cc
+build obj/third_party/breakpad/dump_syms/elf_reader.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf/elf_reader.cc
+build obj/third_party/breakpad/dump_syms/dwarf_cfi_to_module.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf_cfi_to_module.cc
+build obj/third_party/breakpad/dump_syms/dwarf_cu_to_module.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf_cu_to_module.cc
+build obj/third_party/breakpad/dump_syms/dwarf_line_to_module.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf_line_to_module.cc
+build obj/third_party/breakpad/dump_syms/dwarf_range_list_handler.o: cxx ../../third_party/breakpad/breakpad/src/common/dwarf_range_list_handler.cc
+build obj/third_party/breakpad/dump_syms/language.o: cxx ../../third_party/breakpad/breakpad/src/common/language.cc
+build obj/third_party/breakpad/dump_syms/arch_utilities.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/arch_utilities.cc
+build obj/third_party/breakpad/dump_syms/dump_syms.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/dump_syms.cc
+build obj/third_party/breakpad/dump_syms/file_id.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/file_id.cc
+build obj/third_party/breakpad/dump_syms/macho_id.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/macho_id.cc
+build obj/third_party/breakpad/dump_syms/macho_reader.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/macho_reader.cc
+build obj/third_party/breakpad/dump_syms/macho_utilities.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/macho_utilities.cc
+build obj/third_party/breakpad/dump_syms/macho_walker.o: cxx ../../third_party/breakpad/breakpad/src/common/mac/macho_walker.cc
+build obj/third_party/breakpad/dump_syms/md5.o: cxx ../../third_party/breakpad/breakpad/src/common/md5.cc
+build obj/third_party/breakpad/dump_syms/module.o: cxx ../../third_party/breakpad/breakpad/src/common/module.cc
+build obj/third_party/breakpad/dump_syms/path_helper.o: cxx ../../third_party/breakpad/breakpad/src/common/path_helper.cc
+build obj/third_party/breakpad/dump_syms/stabs_reader.o: cxx ../../third_party/breakpad/breakpad/src/common/stabs_reader.cc
+build obj/third_party/breakpad/dump_syms/stabs_to_module.o: cxx ../../third_party/breakpad/breakpad/src/common/stabs_to_module.cc
+build obj/third_party/breakpad/dump_syms/dump_syms_tool.o: cxx ../../third_party/breakpad/breakpad/src/tools/mac/dump_syms/dump_syms_tool.cc
+
+build ./dump_syms: link obj/third_party/breakpad/dump_syms/bytereader.o obj/third_party/breakpad/dump_syms/dwarf2diehandler.o obj/third_party/breakpad/dump_syms/dwarf2reader.o obj/third_party/breakpad/dump_syms/elf_reader.o obj/third_party/breakpad/dump_syms/dwarf_cfi_to_module.o obj/third_party/breakpad/dump_syms/dwarf_cu_to_module.o obj/third_party/breakpad/dump_syms/dwarf_line_to_module.o obj/third_party/breakpad/dump_syms/dwarf_range_list_handler.o obj/third_party/breakpad/dump_syms/language.o obj/third_party/breakpad/dump_syms/arch_utilities.o obj/third_party/breakpad/dump_syms/dump_syms.o obj/third_party/breakpad/dump_syms/file_id.o obj/third_party/breakpad/dump_syms/macho_id.o obj/third_party/breakpad/dump_syms/macho_reader.o obj/third_party/breakpad/dump_syms/macho_utilities.o obj/third_party/breakpad/dump_syms/macho_walker.o obj/third_party/breakpad/dump_syms/md5.o obj/third_party/breakpad/dump_syms/module.o obj/third_party/breakpad/dump_syms/path_helper.o obj/third_party/breakpad/dump_syms/stabs_reader.o obj/third_party/breakpad/dump_syms/stabs_to_module.o obj/third_party/breakpad/dump_syms/dump_syms_tool.o | ./libc++.dylib.TOC || obj/build/config/executable_deps.stamp
+  ldflags = -Wl,-fatal_warnings -stdlib=libc++ -arch x86_64 -nostdlib++ -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -Wl,-ObjC -Wl,-rpath,@loader_path/. -Wl,-rpath,@loader_path/../../.. -Werror
+  libs =
+  frameworks = -framework Foundation
+  swiftmodules =
+  output_extension = 
+  output_dir = .
+  solibs = ./libc++.dylib

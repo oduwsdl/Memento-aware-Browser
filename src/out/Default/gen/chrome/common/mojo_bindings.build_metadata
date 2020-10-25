@@ -1,0 +1,33 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/components/content_settings/core/common/mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/components/prerender/common/mojo_bindings.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/content/public/common/interfaces.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/third_party/blink/public/mojom/mojom_platform.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/image/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_origin.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/components/remote_cocoa/common/mojo.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/chrome/services/file_util/public/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/common/cache_stats_recorder.mojom",
+    "/Users/macuser/chromium/src/chrome/common/chrome_render_frame.mojom",
+    "/Users/macuser/chromium/src/chrome/common/media/webrtc_logging.mojom",
+    "/Users/macuser/chromium/src/chrome/common/metrics.mojom",
+    "/Users/macuser/chromium/src/chrome/common/net/net_error_page_support.mojom",
+    "/Users/macuser/chromium/src/chrome/common/net_benchmarking.mojom",
+    "/Users/macuser/chromium/src/chrome/common/network_diagnostics.mojom",
+    "/Users/macuser/chromium/src/chrome/common/network_easter_egg.mojom",
+    "/Users/macuser/chromium/src/chrome/common/open_search_description_document_handler.mojom",
+    "/Users/macuser/chromium/src/chrome/common/plugin.mojom",
+    "/Users/macuser/chromium/src/chrome/common/renderer_configuration.mojom",
+    "/Users/macuser/chromium/src/chrome/common/subresource_redirect_service.mojom",
+    "/Users/macuser/chromium/src/chrome/common/sync_encryption_keys_extension.mojom",
+    "/Users/macuser/chromium/src/chrome/common/caption.mojom",
+    "/Users/macuser/chromium/src/chrome/common/mac/app_shim.mojom",
+    "/Users/macuser/chromium/src/chrome/common/url_loader_factory_proxy.mojom"
+  ]
+}

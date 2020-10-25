@@ -1,0 +1,18 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DGOOGLE_PROTOBUF_NO_RTTI -DGOOGLE_PROTOBUF_NO_STATIC_INITIALIZER -DHAVE_PTHREAD -DPROTOBUF_USE_DLLS
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/protobuf/src -Igen/protoc_out -Igen/third_party/private_membership/src -Igen/third_party/shell-encryption/src -Igen/components/policy/proto -I../../third_party/protobuf/src
+label_name = proto
+target_gen_dir = gen/components/policy/proto
+target_out_dir = obj/components/policy/proto
+target_output_name = libpolicy_proto
+
+build obj/components/policy/proto/proto.inputdeps.stamp: stamp obj/components/policy/proto/policy_common_definitions_compile_proto_gen.stamp obj/components/policy/proto/proto_internal_gen.stamp obj/third_party/private_membership/private_membership_proto_gen.stamp obj/third_party/shell-encryption/serialization_proto_gen.stamp
+
+build ./libpolicy_proto.dylib ./libpolicy_proto.dylib.TOC: solink obj/components/policy/proto/proto_internal/device_management_backend.pb.o obj/components/policy/proto/proto_internal/policy_signing_key.pb.o obj/components/policy/proto/proto_internal/chrome_extension_policy.pb.o obj/components/policy/proto/libpolicy_common_definitions_compile_proto.a obj/third_party/private_membership/libprivate_membership_proto.a obj/third_party/shell-encryption/libserialization_proto.a | ./libprotobuf_lite.dylib.TOC ./libc++.dylib.TOC || obj/components/policy/proto/proto_internal.stamp obj/build/config/shared_library_deps.stamp
+  ldflags = -Wl,-fatal_warnings -stdlib=libc++ -arch x86_64 -Werror -nostdlib++ -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -Wl,-ObjC -Wl,-rpath,@loader_path/. -Wl,-rpath,@loader_path/../../..
+  libs =
+  frameworks =
+  swiftmodules =
+  output_extension = .dylib
+  output_dir = .
+  solibs = ./libprotobuf_lite.dylib ./libc++.dylib

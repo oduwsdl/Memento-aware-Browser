@@ -1,0 +1,26 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DVULKAN_NON_CMAKE_BUILD -DSYSCONFDIR=\"/etc\" -DFALLBACK_CONFIG_DIRS=\"/etc/xdg\" -DFALLBACK_DATA_DIRS=\"/usr/local/share$:/usr/share\" -DAPI_NAME=\"Vulkan\" -DUSE_UNSAFE_FILE_SEARCH=1 -DVK_USE_PLATFORM_METAL_EXT
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/angle/third_party/vulkan-loader/src/loader/generated -I../../third_party/angle/third_party/vulkan-loader/src/loader -I../../third_party/angle/third_party/vulkan-headers/src/include
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -Wno-conversion -Wno-extra-semi -Wno-sign-compare -Wno-unreachable-code -Wno-unused-function -Wno-unused-variable
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = libvulkan
+target_gen_dir = gen/third_party/angle/third_party/vulkan-loader/src
+target_out_dir = obj/third_party/angle/third_party/vulkan-loader/src
+target_output_name = libvulkan
+
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/asm_offset.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/asm_offset.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/cJSON.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/cJSON.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/debug_utils.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/debug_utils.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/dev_ext_trampoline.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/dev_ext_trampoline.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/extension_manual.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/extension_manual.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/loader.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/loader.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/murmurhash.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/murmurhash.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/phys_dev_ext.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/phys_dev_ext.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/trampoline.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/trampoline.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/unknown_ext_chain.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/unknown_ext_chain.c
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/wsi.o: cc ../../third_party/angle/third_party/vulkan-loader/src/loader/wsi.c
+
+build obj/third_party/angle/third_party/vulkan-loader/src/libvulkan.a: alink obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/asm_offset.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/cJSON.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/debug_utils.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/dev_ext_trampoline.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/extension_manual.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/loader.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/murmurhash.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/phys_dev_ext.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/trampoline.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/unknown_ext_chain.o obj/third_party/angle/third_party/vulkan-loader/src/libvulkan/wsi.o || obj/third_party/angle/third_party/vulkan-headers/src/vulkan_headers.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/angle/third_party/vulkan-loader/src

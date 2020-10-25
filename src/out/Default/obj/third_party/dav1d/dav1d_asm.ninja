@@ -1,0 +1,13 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen
+label_name = dav1d_asm
+target_gen_dir = gen/third_party/dav1d
+target_out_dir = obj/third_party/dav1d
+target_output_name = libdav1d_asm
+
+
+build obj/third_party/dav1d/libdav1d_asm.a: alink obj/third_party/dav1d/dav1d_asm/cdef_avx2.o obj/third_party/dav1d/dav1d_asm/cdef_avx512.o obj/third_party/dav1d/dav1d_asm/cdef_sse.o obj/third_party/dav1d/dav1d_asm/cpuid.o obj/third_party/dav1d/dav1d_asm/film_grain.o obj/third_party/dav1d/dav1d_asm/film_grain_ssse3.o obj/third_party/dav1d/dav1d_asm/ipred.o obj/third_party/dav1d/dav1d_asm/ipred_ssse3.o obj/third_party/dav1d/dav1d_asm/itx.o obj/third_party/dav1d/dav1d_asm/itx_ssse3.o obj/third_party/dav1d/dav1d_asm/loopfilter.o obj/third_party/dav1d/dav1d_asm/loopfilter_ssse3.o obj/third_party/dav1d/dav1d_asm/looprestoration.o obj/third_party/dav1d/dav1d_asm/looprestoration_ssse3.o obj/third_party/dav1d/dav1d_asm/mc_avx2.o obj/third_party/dav1d/dav1d_asm/mc_avx512.o obj/third_party/dav1d/dav1d_asm/mc_sse.o obj/third_party/dav1d/dav1d_asm/msac.o || obj/third_party/dav1d/dav1d_asm_action.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/dav1d

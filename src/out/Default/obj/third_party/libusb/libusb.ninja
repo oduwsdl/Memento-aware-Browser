@@ -1,0 +1,25 @@
+defines = -DDEFAULT_VISIBILITY= -DHAVE_GETTIMEOFDAY=1 -DHAVE_POLL_H=1 -DHAVE_SYS_TIME_H=1 -DLIBUSB_DESCRIBE=\"1.0.16\" -DPOLL_NFDS_TYPE=nfds_t -DTHREADS_POSIX=1 -DOS_DARWIN=1 -DOBJC_SILENCE_GC_DEPRECATIONS=1 -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../../third_party/libusb/src/libusb/os -I../../third_party/libusb/src -I../.. -Igen -I../../third_party/libusb/src/libusb
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -Wno-unused-function
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = libusb
+target_gen_dir = gen/third_party/libusb
+target_out_dir = obj/third_party/libusb
+target_output_name = libusb
+
+build obj/third_party/libusb/libusb/core.o: cc ../../third_party/libusb/src/libusb/core.c
+build obj/third_party/libusb/libusb/descriptor.o: cc ../../third_party/libusb/src/libusb/descriptor.c
+build obj/third_party/libusb/libusb/hotplug.o: cc ../../third_party/libusb/src/libusb/hotplug.c
+build obj/third_party/libusb/libusb/interrupt.o: cc ../../third_party/libusb/src/libusb/interrupt.c
+build obj/third_party/libusb/libusb/io.o: cc ../../third_party/libusb/src/libusb/io.c
+build obj/third_party/libusb/libusb/darwin_usb.o: cc ../../third_party/libusb/src/libusb/os/darwin_usb.c
+build obj/third_party/libusb/libusb/poll_posix.o: cc ../../third_party/libusb/src/libusb/os/poll_posix.c
+build obj/third_party/libusb/libusb/threads_posix.o: cc ../../third_party/libusb/src/libusb/os/threads_posix.c
+build obj/third_party/libusb/libusb/strerror.o: cc ../../third_party/libusb/src/libusb/strerror.c
+build obj/third_party/libusb/libusb/sync.o: cc ../../third_party/libusb/src/libusb/sync.c
+
+build obj/third_party/libusb/libusb.a: alink obj/third_party/libusb/libusb/core.o obj/third_party/libusb/libusb/descriptor.o obj/third_party/libusb/libusb/hotplug.o obj/third_party/libusb/libusb/interrupt.o obj/third_party/libusb/libusb/io.o obj/third_party/libusb/libusb/darwin_usb.o obj/third_party/libusb/libusb/poll_posix.o obj/third_party/libusb/libusb/threads_posix.o obj/third_party/libusb/libusb/strerror.o obj/third_party/libusb/libusb/sync.o
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/libusb

@@ -1,0 +1,24 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/native_handle_types.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/ui/gfx/mojom/accelerated_widget.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/buffer_types.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/ca_layer_params.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/color_space.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/display_color_spaces.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/font_render_params.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/gpu_extra_info.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/gpu_fence_handle.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/overlay_transform.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/presentation_feedback.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/rrect_f.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/selection_bound.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/swap_result.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/swap_timings.mojom",
+    "/Users/macuser/chromium/src/ui/gfx/mojom/transform.mojom"
+  ]
+}

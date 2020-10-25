@@ -1,0 +1,4 @@
+gen/components/autofill/core/browser/grit/autofill_address_rewriter_resources.h
+gen/components/autofill/core/browser/grit/autofill_address_rewriter_resources_map.cc
+gen/components/autofill/core/browser/grit/autofill_address_rewriter_resources_map.h
+gen/components/autofill/core/browser/autofill_address_rewriter_resources.pak

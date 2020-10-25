@@ -1,0 +1,13 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen
+label_name = ffmpeg_nasm
+target_gen_dir = gen/third_party/ffmpeg
+target_out_dir = obj/third_party/ffmpeg
+target_output_name = libffmpeg_nasm
+
+
+build obj/third_party/ffmpeg/libffmpeg_nasm.a: alink obj/third_party/ffmpeg/ffmpeg_nasm/dct32.o obj/third_party/ffmpeg/ffmpeg_nasm/fft.o obj/third_party/ffmpeg/ffmpeg_nasm/flacdsp.o obj/third_party/ffmpeg/ffmpeg_nasm/imdct36.o obj/third_party/ffmpeg/ffmpeg_nasm/vorbisdsp.o obj/third_party/ffmpeg/ffmpeg_nasm/cpuid.o obj/third_party/ffmpeg/ffmpeg_nasm/fixed_dsp.o obj/third_party/ffmpeg/ffmpeg_nasm/float_dsp.o obj/third_party/ffmpeg/ffmpeg_nasm/imgutils.o obj/third_party/ffmpeg/ffmpeg_nasm/lls.o obj/third_party/ffmpeg/ffmpeg_nasm/autorename_libavcodec_x86_videodsp.o obj/third_party/ffmpeg/ffmpeg_nasm/fpel.o obj/third_party/ffmpeg/ffmpeg_nasm/h264_intrapred.o obj/third_party/ffmpeg/ffmpeg_nasm/h264_intrapred_10bit.o obj/third_party/ffmpeg/ffmpeg_nasm/hpeldsp.o obj/third_party/ffmpeg/ffmpeg_nasm/hpeldsp_vp3.o obj/third_party/ffmpeg/ffmpeg_nasm/vp3dsp.o obj/third_party/ffmpeg/ffmpeg_nasm/vp8dsp.o obj/third_party/ffmpeg/ffmpeg_nasm/vp8dsp_loopfilter.o || obj/third_party/ffmpeg/ffmpeg_nasm_action.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/ffmpeg

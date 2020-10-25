@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/browser/promo_browser_command/promo_browser_command.mojom"
+  ]
+}

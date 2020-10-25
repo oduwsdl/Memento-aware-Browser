@@ -1,0 +1,22 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/accessibility/ax_constants_mojo.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/accessibility/ax_enums_mojo.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_action_data.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_assistant_structure.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_event.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_event_intent.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_node_data.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_relative_bounds.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_tree_data.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_tree_id.mojom",
+    "/Users/macuser/chromium/src/ui/accessibility/mojom/ax_tree_update.mojom"
+  ]
+}

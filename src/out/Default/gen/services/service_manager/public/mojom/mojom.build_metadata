@@ -1,0 +1,15 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/services/service_manager/public/mojom/constants.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/connector.mojom",
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/interface_provider.mojom",
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/interface_provider_spec.mojom",
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/service.mojom",
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/service_control.mojom",
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/service_filter.mojom",
+    "/Users/macuser/chromium/src/services/service_manager/public/mojom/service_manager.mojom"
+  ]
+}

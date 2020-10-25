@@ -1,0 +1,22 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/network/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/base/accelerators/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/base/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/display/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/events/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/alert.mojom",
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/application.mojom",
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/color_panel.mojom",
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/native_widget_ns_window.mojom",
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/native_widget_ns_window_host.mojom",
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/select_file_dialog.mojom",
+    "/Users/macuser/chromium/src/components/remote_cocoa/common/text_input_host.mojom"
+  ]
+}

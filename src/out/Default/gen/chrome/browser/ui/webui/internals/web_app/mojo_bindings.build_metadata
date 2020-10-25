@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/chrome/browser/ui/webui/internals/web_app/web_app_internals.mojom"
+  ]
+}

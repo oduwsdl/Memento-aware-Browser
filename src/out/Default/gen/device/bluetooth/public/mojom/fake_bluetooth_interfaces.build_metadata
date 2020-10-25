@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/device/bluetooth/public/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/device/bluetooth/public/mojom/test/fake_bluetooth.mojom"
+  ]
+}

@@ -1,0 +1,17 @@
+./swiftshader_unittests
+./libbase.dylib
+./libabsl.dylib
+./libc++.dylib
+./libboringssl.dylib
+./libperfetto.dylib
+./libchrome_zlib.dylib
+../../testing/test_env.py
+./libbase_i18n.dylib
+./libicui18n.dylib
+./libicuuc.dylib
+icudtl.dat
+./libswiftshader_libEGL.dylib
+./libswiftshader_libGLESv2.dylib
+../../testing/test_env.py
+../../.vpython
+bin/run_swiftshader_unittests

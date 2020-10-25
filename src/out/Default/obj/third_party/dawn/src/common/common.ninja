@@ -1,0 +1,24 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDAWN_ENABLE_ASSERTS -DDAWN_ENABLE_BACKEND_METAL -DDAWN_ENABLE_BACKEND_NULL -DDAWN_ENABLE_WGSL -DDAWN_ENABLE_ERROR_INJECTION
+framework_dirs =
+include_dirs = -I../.. -Igen -Igen/third_party/dawn/src -I../../third_party/dawn/src -Igen/third_party/dawn/src/include -I../../third_party/dawn/src/include
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Wconditional-uninitialized -Wcstring-format-directive -Wc++11-narrowing -Wdeprecated-copy -Wduplicate-enum -Wextra-semi-stmt -Wimplicit-fallthrough -Winconsistent-missing-destructor-override -Winvalid-offsetof -Wmissing-field-initializers -Wnon-c-typedef-for-linkage -Wpessimizing-move -Wrange-loop-analysis -Wreturn-std-move-in-c++11 -Wshadow-field -Wstrict-prototypes -Wtautological-unsigned-zero-compare -Wno-tautological-type-limit-compare -pedantic
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = common
+target_gen_dir = gen/third_party/dawn/src/common
+target_out_dir = obj/third_party/dawn/src/common
+target_output_name = libcommon
+
+build obj/third_party/dawn/src/common/common/Assert.o: cxx ../../third_party/dawn/src/common/Assert.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/DynamicLib.o: cxx ../../third_party/dawn/src/common/DynamicLib.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/GPUInfo.o: cxx ../../third_party/dawn/src/common/GPUInfo.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/Log.o: cxx ../../third_party/dawn/src/common/Log.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/Math.o: cxx ../../third_party/dawn/src/common/Math.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/RefCounted.o: cxx ../../third_party/dawn/src/common/RefCounted.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/Result.o: cxx ../../third_party/dawn/src/common/Result.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/SlabAllocator.o: cxx ../../third_party/dawn/src/common/SlabAllocator.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+build obj/third_party/dawn/src/common/common/SystemUtils.o: cxx ../../third_party/dawn/src/common/SystemUtils.cpp || obj/third_party/dawn/src/dawn/dawn_headers_gen.stamp
+
+build obj/third_party/dawn/src/common/libcommon.a: alink obj/third_party/dawn/src/common/common/Assert.o obj/third_party/dawn/src/common/common/DynamicLib.o obj/third_party/dawn/src/common/common/GPUInfo.o obj/third_party/dawn/src/common/common/Log.o obj/third_party/dawn/src/common/common/Math.o obj/third_party/dawn/src/common/common/RefCounted.o obj/third_party/dawn/src/common/common/Result.o obj/third_party/dawn/src/common/common/SlabAllocator.o obj/third_party/dawn/src/common/common/SystemUtils.o || obj/third_party/dawn/src/dawn/dawn_headers.stamp
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/dawn/src/common

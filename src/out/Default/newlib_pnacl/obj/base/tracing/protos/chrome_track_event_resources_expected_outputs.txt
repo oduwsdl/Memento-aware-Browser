@@ -1,0 +1,2 @@
+newlib_pnacl/gen/base/tracing/protos/grit/tracing_proto_resources.h
+newlib_pnacl/gen/base/tracing/protos/tracing_proto_resources.pak

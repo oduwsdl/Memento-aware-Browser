@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/network/public/mojom/address_family.mojom",
+    "/Users/macuser/chromium/src/services/network/public/mojom/address_list.mojom",
+    "/Users/macuser/chromium/src/services/network/public/mojom/ip_address.mojom",
+    "/Users/macuser/chromium/src/services/network/public/mojom/ip_endpoint.mojom"
+  ]
+}

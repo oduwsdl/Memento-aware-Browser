@@ -1,0 +1,30 @@
+[
+  {
+    "traits_deps": [
+      "//services/network/public/cpp:cross_origin_embedder_policy"
+    ],
+    "traits_headers": [
+      "services/network/public/cpp/cross_origin_embedder_policy_mojom_traits.h"
+    ],
+    "types": [
+      {
+        "cpp": "::network::CrossOriginEmbedderPolicy",
+        "mojom": "network.mojom.CrossOriginEmbedderPolicy"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "services/network/public/cpp/mutable_network_traffic_annotation_tag_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      "//net/traffic_annotation"
+    ],
+    "types": [
+      {
+        "cpp": "::net::MutableNetworkTrafficAnnotationTag",
+        "mojom": "network.mojom.MutableNetworkTrafficAnnotationTag"
+      }
+    ]
+  }
+]

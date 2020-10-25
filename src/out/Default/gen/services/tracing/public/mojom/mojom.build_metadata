@@ -1,0 +1,12 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/tracing/public/mojom/background_tracing_agent.mojom",
+    "/Users/macuser/chromium/src/services/tracing/public/mojom/traced_process.mojom",
+    "/Users/macuser/chromium/src/services/tracing/public/mojom/tracing_service.mojom",
+    "/Users/macuser/chromium/src/services/tracing/public/mojom/constants.mojom",
+    "/Users/macuser/chromium/src/services/tracing/public/mojom/perfetto_service.mojom"
+  ]
+}

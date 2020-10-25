@@ -1,0 +1,22 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS -DNO_SANITIZE_FUNCTION=__attribute__\(\(no_sanitize\(\"function\"\)\)\)
+framework_dirs =
+include_dirs = -I../.. -Igen
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -O2 -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -std=c++14 -fno-exceptions -fno-operator-names -g -g3 -m64 -fPIC -march=x86-64 -mtune=generic -msse2
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = swiftshader_common
+target_gen_dir = gen/third_party/swiftshader/src/Common
+target_out_dir = obj/third_party/swiftshader/src/Common
+target_output_name = swiftshader_common
+
+build obj/third_party/swiftshader/src/Common/swiftshader_common/CPUID.o: cxx ../../third_party/swiftshader/src/Common/CPUID.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Configurator.o: cxx ../../third_party/swiftshader/src/Common/Configurator.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Debug.o: cxx ../../third_party/swiftshader/src/Common/Debug.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Half.o: cxx ../../third_party/swiftshader/src/Common/Half.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Math.o: cxx ../../third_party/swiftshader/src/Common/Math.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Memory.o: cxx ../../third_party/swiftshader/src/Common/Memory.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Resource.o: cxx ../../third_party/swiftshader/src/Common/Resource.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Socket.o: cxx ../../third_party/swiftshader/src/Common/Socket.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Thread.o: cxx ../../third_party/swiftshader/src/Common/Thread.cpp
+build obj/third_party/swiftshader/src/Common/swiftshader_common/Timer.o: cxx ../../third_party/swiftshader/src/Common/Timer.cpp
+
+build obj/third_party/swiftshader/src/Common/swiftshader_common.stamp: stamp obj/third_party/swiftshader/src/Common/swiftshader_common/CPUID.o obj/third_party/swiftshader/src/Common/swiftshader_common/Configurator.o obj/third_party/swiftshader/src/Common/swiftshader_common/Debug.o obj/third_party/swiftshader/src/Common/swiftshader_common/Half.o obj/third_party/swiftshader/src/Common/swiftshader_common/Math.o obj/third_party/swiftshader/src/Common/swiftshader_common/Memory.o obj/third_party/swiftshader/src/Common/swiftshader_common/Resource.o obj/third_party/swiftshader/src/Common/swiftshader_common/Socket.o obj/third_party/swiftshader/src/Common/swiftshader_common/Thread.o obj/third_party/swiftshader/src/Common/swiftshader_common/Timer.o

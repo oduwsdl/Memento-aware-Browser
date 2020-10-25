@@ -1,0 +1,4 @@
+gen/chrome/grit/extensions_resources.h
+gen/chrome/grit/extensions_resources_map.cc
+gen/chrome/grit/extensions_resources_map.h
+gen/chrome/extensions_resources.pak

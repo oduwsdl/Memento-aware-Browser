@@ -1,0 +1,2 @@
+gen/content/grit/dev_ui_content_resources.h
+gen/content/dev_ui_content_resources.pak

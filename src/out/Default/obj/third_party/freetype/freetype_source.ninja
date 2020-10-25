@@ -1,0 +1,36 @@
+defines = -DHAVE_UNISTD_H -DHAVE_FCNTL_H -DFT2_BUILD_LIBRARY -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DFT_CONFIG_MODULES_H=\"freetype-custom/freetype/config/ftmodule.h\" -DFT_CONFIG_OPTIONS_H=\"freetype-custom/freetype/config/ftoption.h\" -DPDFIUM_REQUIRED_MODULES
+framework_dirs =
+include_dirs = -I../../third_party/freetype/src/include/freetype/config -I../.. -Igen -I../../third_party/harfbuzz-ng/src/src -I../../third_party/freetype/include -I../../third_party/freetype/include/freetype-custom -I../../third_party/freetype/src/include -I../../third_party/libpng -I../../third_party/zlib
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -Wno-unused-function -Wno-deprecated-declarations
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = freetype_source
+target_gen_dir = gen/third_party/freetype
+target_out_dir = obj/third_party/freetype
+target_output_name = freetype_source
+
+build obj/third_party/freetype/freetype_source/autofit.o: cc ../../third_party/freetype/src/src/autofit/autofit.c
+build obj/third_party/freetype/freetype_source/ftbase.o: cc ../../third_party/freetype/src/src/base/ftbase.c
+build obj/third_party/freetype/freetype_source/ftbbox.o: cc ../../third_party/freetype/src/src/base/ftbbox.c
+build obj/third_party/freetype/freetype_source/ftbitmap.o: cc ../../third_party/freetype/src/src/base/ftbitmap.c
+build obj/third_party/freetype/freetype_source/ftdebug.o: cc ../../third_party/freetype/src/src/base/ftdebug.c
+build obj/third_party/freetype/freetype_source/ftfstype.o: cc ../../third_party/freetype/src/src/base/ftfstype.c
+build obj/third_party/freetype/freetype_source/ftgasp.o: cc ../../third_party/freetype/src/src/base/ftgasp.c
+build obj/third_party/freetype/freetype_source/ftglyph.o: cc ../../third_party/freetype/src/src/base/ftglyph.c
+build obj/third_party/freetype/freetype_source/ftinit.o: cc ../../third_party/freetype/src/src/base/ftinit.c
+build obj/third_party/freetype/freetype_source/ftmm.o: cc ../../third_party/freetype/src/src/base/ftmm.c
+build obj/third_party/freetype/freetype_source/ftstroke.o: cc ../../third_party/freetype/src/src/base/ftstroke.c
+build obj/third_party/freetype/freetype_source/fttype1.o: cc ../../third_party/freetype/src/src/base/fttype1.c
+build obj/third_party/freetype/freetype_source/cff.o: cc ../../third_party/freetype/src/src/cff/cff.c
+build obj/third_party/freetype/freetype_source/ftgzip.o: cc ../../third_party/freetype/src/src/gzip/ftgzip.c
+build obj/third_party/freetype/freetype_source/psaux.o: cc ../../third_party/freetype/src/src/psaux/psaux.c
+build obj/third_party/freetype/freetype_source/pshinter.o: cc ../../third_party/freetype/src/src/pshinter/pshinter.c
+build obj/third_party/freetype/freetype_source/psnames.o: cc ../../third_party/freetype/src/src/psnames/psnames.c
+build obj/third_party/freetype/freetype_source/raster.o: cc ../../third_party/freetype/src/src/raster/raster.c
+build obj/third_party/freetype/freetype_source/sfnt.o: cc ../../third_party/freetype/src/src/sfnt/sfnt.c
+build obj/third_party/freetype/freetype_source/smooth.o: cc ../../third_party/freetype/src/src/smooth/smooth.c
+build obj/third_party/freetype/freetype_source/truetype.o: cc ../../third_party/freetype/src/src/truetype/truetype.c
+build obj/third_party/freetype/freetype_source/ftsystem.o: cc ../../third_party/freetype/src/builds/unix/ftsystem.c
+build obj/third_party/freetype/freetype_source/type1cid.o: cc ../../third_party/freetype/src/src/cid/type1cid.c
+build obj/third_party/freetype/freetype_source/type1.o: cc ../../third_party/freetype/src/src/type1/type1.c
+
+build obj/third_party/freetype/freetype_source.stamp: stamp obj/third_party/freetype/freetype_source/autofit.o obj/third_party/freetype/freetype_source/ftbase.o obj/third_party/freetype/freetype_source/ftbbox.o obj/third_party/freetype/freetype_source/ftbitmap.o obj/third_party/freetype/freetype_source/ftdebug.o obj/third_party/freetype/freetype_source/ftfstype.o obj/third_party/freetype/freetype_source/ftgasp.o obj/third_party/freetype/freetype_source/ftglyph.o obj/third_party/freetype/freetype_source/ftinit.o obj/third_party/freetype/freetype_source/ftmm.o obj/third_party/freetype/freetype_source/ftstroke.o obj/third_party/freetype/freetype_source/fttype1.o obj/third_party/freetype/freetype_source/cff.o obj/third_party/freetype/freetype_source/ftgzip.o obj/third_party/freetype/freetype_source/psaux.o obj/third_party/freetype/freetype_source/pshinter.o obj/third_party/freetype/freetype_source/psnames.o obj/third_party/freetype/freetype_source/raster.o obj/third_party/freetype/freetype_source/sfnt.o obj/third_party/freetype/freetype_source/smooth.o obj/third_party/freetype/freetype_source/truetype.o obj/third_party/freetype/freetype_source/ftsystem.o obj/third_party/freetype/freetype_source/type1cid.o obj/third_party/freetype/freetype_source/type1.o || obj/third_party/libpng/libpng.stamp ./libchrome_zlib.dylib.TOC obj/third_party/libpng/libpng_sources.stamp

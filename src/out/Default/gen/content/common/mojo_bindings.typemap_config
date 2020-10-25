@@ -1,0 +1,193 @@
+[
+  {
+    "traits_headers": [
+      "content/common/frame_messages_forward.h"
+    ],
+    "traits_private_headers": [
+      "content/common/frame_messages.h"
+    ],
+    "types": [
+      {
+        "cpp": "::std::unique_ptr<::FrameHostMsg_DidCommitProvisionalLoad_Params>",
+        "mojom": "content.mojom.DidCommitProvisionalLoadParams",
+        "move_only": true,
+        "nullable_is_same_type": true
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "cc/input/touch_action.h",
+      "content/common/cursors/webcursor.h",
+      "content/common/frame_replication_state.h",
+      "content/common/input/synthetic_pinch_gesture_params.h",
+      "content/common/input/synthetic_pointer_action_list_params.h",
+      "content/common/input/synthetic_smooth_drag_gesture_params.h",
+      "content/common/input/synthetic_smooth_scroll_gesture_params.h",
+      "content/common/input/synthetic_tap_gesture_params.h",
+      "third_party/blink/public/common/widget/visual_properties.h",
+      "third_party/blink/public/common/web_preferences/web_preferences.h",
+      "net/base/network_change_notifier.h",
+      "third_party/blink/public/common/input/web_coalesced_input_event_mojom_traits.h",
+      "third_party/blink/public/common/input/web_input_event.h",
+      "third_party/blink/public/common/input/web_mouse_wheel_event.h",
+      "third_party/blink/public/common/input/web_pointer_properties.h",
+      "third_party/blink/public/common/input/web_touch_point.h",
+      "third_party/blink/public/common/navigation/triggering_event_info.h",
+      "ui/events/blink/did_overscroll_params.h",
+      "ui/events/blink/web_input_event_traits.h",
+      "ui/latency/ipc/latency_info_param_traits.h",
+      "ui/native_theme/native_theme.h"
+    ],
+    "traits_private_headers": [
+      "content/common/frame_messages.h",
+      "content/common/input_messages.h",
+      "content/common/view_messages.h",
+      "content/common/widget_messages.h",
+      "content/public/common/common_param_traits.h",
+      "services/network/public/cpp/p2p_param_traits.h"
+    ],
+    "traits_public_deps": [
+      "//content/common:buildflags",
+      "//media",
+      "//media/base/ipc",
+      "//net",
+      "//ppapi/buildflags",
+      "//services/network/public/cpp",
+      "//third_party/blink/public/common",
+      "//ui/accessibility",
+      "//ui/base/cursor:cursor_base",
+      "//ui/base/ime:text_input_types",
+      "//ui/events/blink",
+      "//ui/gfx/ipc",
+      "//ui/gfx/ipc/color",
+      "//ui/gfx/ipc/skia",
+      "//ui/surface",
+      "//url/ipc:url_ipc"
+    ],
+    "types": [
+      {
+        "cpp": "::content::ContentSecurityPolicy",
+        "mojom": "content.mojom.ContentSecurityPolicy"
+      },
+      {
+        "cpp": "::content::FrameReplicationState",
+        "mojom": "content.mojom.FrameReplicationState"
+      },
+      {
+        "cpp": "::content::NavigationDownloadPolicy",
+        "mojom": "content.mojom.NavigationDownloadPolicy"
+      },
+      {
+        "cpp": "::net::NetworkChangeNotifier::ConnectionType",
+        "mojom": "content.mojom.NetworkConnectionType"
+      },
+      {
+        "cpp": "::content::Impression",
+        "mojom": "content.mojom.Impression"
+      },
+      {
+        "cpp": "::ui::ScrollGranularity",
+        "mojom": "content.mojom.ScrollGranularity"
+      },
+      {
+        "cpp": "::content::SyntheticPinchGestureParams",
+        "mojom": "content.mojom.SyntheticPinch"
+      },
+      {
+        "cpp": "::content::SyntheticPointerActionListParams",
+        "mojom": "content.mojom.SyntheticPointerAction"
+      },
+      {
+        "cpp": "::content::SyntheticSmoothDragGestureParams",
+        "mojom": "content.mojom.SyntheticSmoothDrag"
+      },
+      {
+        "cpp": "::content::SyntheticSmoothScrollGestureParams",
+        "mojom": "content.mojom.SyntheticSmoothScroll"
+      },
+      {
+        "cpp": "::content::SyntheticTapGestureParams",
+        "mojom": "content.mojom.SyntheticTap"
+      },
+      {
+        "cpp": "::ui::NativeTheme::SystemThemeColor",
+        "mojom": "content.mojom.SystemThemeColor"
+      },
+      {
+        "cpp": "::blink::TriggeringEventInfo",
+        "mojom": "content.mojom.TriggeringEventInfo"
+      },
+      {
+        "cpp": "::blink::VisualProperties",
+        "mojom": "content.mojom.VisualProperties"
+      },
+      {
+        "cpp": "::content::WebCursor",
+        "mojom": "content.mojom.WebCursor"
+      },
+      {
+        "cpp": "::blink::WebPopupType",
+        "mojom": "content.mojom.WebPopupType"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "content/common/content_param_traits.h",
+      "content/common/navigation_params.h",
+      "content/public/common/impression.h",
+      "content/public/common/navigation_policy.h",
+      "third_party/blink/public/common/page_state/page_state.h",
+      "third_party/blink/public/platform/web_mixed_content_context_type.h",
+      "ui/base/page_transition_types.h"
+    ],
+    "traits_private_headers": [
+      "content/common/frame_messages.h",
+      "content/common/resource_messages.h"
+    ],
+    "types": [
+      {
+        "cpp": "::content::Impression",
+        "mojom": "content.mojom.Impression"
+      },
+      {
+        "cpp": "::blink::WebMixedContentContextType",
+        "mojom": "content.mojom.MixedContentContextType"
+      },
+      {
+        "cpp": "::content::NavigationDownloadPolicy",
+        "mojom": "content.mojom.NavigationDownloadPolicy"
+      },
+      {
+        "cpp": "::blink::PageState",
+        "mojom": "content.mojom.PageState"
+      },
+      {
+        "cpp": "::ui::PageTransition",
+        "mojom": "content.mojom.PageTransition"
+      },
+      {
+        "cpp": "::net::SHA256HashValue",
+        "mojom": "content.mojom.SHA256HashValue"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "third_party/blink/public/platform/mac/web_scrollbar_theme.h"
+    ],
+    "traits_private_headers": [
+      "content/common/view_messages.h"
+    ],
+    "traits_public_deps": [
+      "//third_party/blink/public:blink_headers"
+    ],
+    "types": [
+      {
+        "cpp": "::blink::ScrollerStyle",
+        "mojom": "content.mojom.ScrollerStyle"
+      }
+    ]
+  }
+]

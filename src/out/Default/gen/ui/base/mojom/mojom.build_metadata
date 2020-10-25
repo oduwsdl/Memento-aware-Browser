@@ -1,0 +1,11 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/range/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/ui/base/mojom/ui_base_types.mojom",
+    "/Users/macuser/chromium/src/ui/base/mojom/window_open_disposition.mojom",
+    "/Users/macuser/chromium/src/ui/base/mojom/attributed_string.mojom"
+  ]
+}

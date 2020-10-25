@@ -1,0 +1,58 @@
+[
+  {
+    "traits_headers": [
+      "cc/ipc/cc_param_traits_macros.h"
+    ],
+    "traits_public_deps": [
+      "//cc/ipc"
+    ],
+    "types": [
+      {
+        "cpp": "::cc::TouchAction",
+        "mojom": "cc.mojom.TouchAction"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "cc/ipc/cc_param_traits_macros.h"
+    ],
+    "traits_public_deps": [
+      "//cc/ipc"
+    ],
+    "types": [
+      {
+        "cpp": "::cc::OverscrollBehavior",
+        "mojom": "cc.mojom.OverscrollBehavior"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "cc/ipc/cc_param_traits_macros.h"
+    ],
+    "traits_public_deps": [
+      "//cc/ipc"
+    ],
+    "types": [
+      {
+        "cpp": "::cc::BrowserControlsParams",
+        "mojom": "cc.mojom.BrowserControlsParams"
+      }
+    ]
+  },
+  {
+    "traits_headers": [
+      "cc/mojom/render_frame_metadata_mojom_traits.h"
+    ],
+    "traits_public_deps": [
+      ":shared_mojom_traits"
+    ],
+    "types": [
+      {
+        "cpp": "::cc::RenderFrameMetadata",
+        "mojom": "cc.mojom.RenderFrameMetadata"
+      }
+    ]
+  }
+]

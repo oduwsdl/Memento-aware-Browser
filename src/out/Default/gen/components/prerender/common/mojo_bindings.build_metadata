@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/prerender/common/prerender_canceler.mojom",
+    "/Users/macuser/chromium/src/components/prerender/common/prerender_types.mojom",
+    "/Users/macuser/chromium/src/components/prerender/common/render_frame_prerender_messages.mojom"
+  ]
+}

@@ -1,0 +1,10 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DANGLE_IS_64_BIT_CPU -DANGLE_USE_ABSEIL -DABSL_ALLOCATOR_NOTHROW=1 -DABSL_CONSUME_DLL
+framework_dirs =
+include_dirs = -I../../third_party/angle/include -I../../third_party/angle/src -I../../third_party/angle/src/common/third_party/base -I../../third_party/abseil-cpp -I../../third_party/abseil-cpp -Igen/angle -I../../third_party/angle/include
+label_name = angle_image_util_headers
+target_gen_dir = gen/third_party/angle
+target_out_dir = obj/third_party/angle
+target_output_name = angle_image_util_headers
+
+
+build obj/third_party/angle/angle_image_util_headers.stamp: stamp || obj/third_party/angle/libangle_common.a ./libabsl.dylib.TOC obj/third_party/angle/angle_system_utils.stamp obj/third_party/angle/angle_version.stamp obj/third_party/angle/includes.stamp obj/third_party/angle/xxhash.stamp

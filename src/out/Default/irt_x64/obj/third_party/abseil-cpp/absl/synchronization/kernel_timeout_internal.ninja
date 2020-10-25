@@ -1,0 +1,9 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -DABSL_ALLOCATOR_NOTHROW=1
+include_dirs = -I../.. -Iirt_x64/gen -I../../third_party/abseil-cpp
+label_name = kernel_timeout_internal
+root_out_dir = irt_x64
+target_out_dir = irt_x64/obj/third_party/abseil-cpp/absl/synchronization
+target_output_name = kernel_timeout_internal
+
+
+build irt_x64/obj/third_party/abseil-cpp/absl/synchronization/kernel_timeout_internal.stamp: irt_x64_stamp || irt_x64/obj/third_party/abseil-cpp/absl/base/core_headers.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/raw_logging_internal.stamp irt_x64/obj/third_party/abseil-cpp/absl/time/time.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/config.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/atomic_hook.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/log_severity.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/base.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/base_internal.stamp irt_x64/obj/third_party/abseil-cpp/absl/meta/type_traits.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/dynamic_annotations.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/spinlock_wait.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/errno_saver.stamp irt_x64/obj/third_party/abseil-cpp/absl/numeric/int128.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/bits.stamp irt_x64/obj/third_party/abseil-cpp/absl/strings/strings.stamp irt_x64/obj/third_party/abseil-cpp/absl/strings/internal.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/endian.stamp irt_x64/obj/third_party/abseil-cpp/absl/base/throw_delegate.stamp irt_x64/obj/third_party/abseil-cpp/absl/memory/memory.stamp irt_x64/obj/third_party/abseil-cpp/absl/time/internal/cctz/civil_time.stamp irt_x64/obj/third_party/abseil-cpp/absl/time/internal/cctz/time_zone.stamp

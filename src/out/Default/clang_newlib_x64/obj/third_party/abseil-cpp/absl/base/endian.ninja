@@ -1,0 +1,9 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_ -DABSL_ALLOCATOR_NOTHROW=1
+include_dirs = -I../.. -Iclang_newlib_x64/gen -I../../third_party/abseil-cpp
+label_name = endian
+root_out_dir = clang_newlib_x64
+target_out_dir = clang_newlib_x64/obj/third_party/abseil-cpp/absl/base
+target_output_name = endian
+
+
+build clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/endian.stamp: clang_newlib_x64_stamp || clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/config.stamp clang_newlib_x64/obj/third_party/abseil-cpp/absl/base/core_headers.stamp

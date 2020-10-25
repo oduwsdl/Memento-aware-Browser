@@ -1,0 +1,28 @@
+defines = -DFLAC__OVERFLOW_DETECT -DVERSION=\"1.3.1\" -DHAVE_LROUND -DHAVE_INTTYPES_H -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DFLAC__NO_DLL
+framework_dirs =
+include_dirs = -I../../third_party/flac/include -I../../third_party/flac/src/libFLAC/include -I../.. -Igen
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Wno-conversion -Wno-unused-const-variable -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = flac
+target_gen_dir = gen/third_party/flac
+target_out_dir = obj/third_party/flac
+target_output_name = flac
+
+build obj/third_party/flac/flac/alloc.o: cc ../../third_party/flac/src/libFLAC/alloc.c
+build obj/third_party/flac/flac/bitmath.o: cc ../../third_party/flac/src/libFLAC/bitmath.c
+build obj/third_party/flac/flac/bitreader.o: cc ../../third_party/flac/src/libFLAC/bitreader.c
+build obj/third_party/flac/flac/bitwriter.o: cc ../../third_party/flac/src/libFLAC/bitwriter.c
+build obj/third_party/flac/flac/cpu.o: cc ../../third_party/flac/src/libFLAC/cpu.c
+build obj/third_party/flac/flac/crc.o: cc ../../third_party/flac/src/libFLAC/crc.c
+build obj/third_party/flac/flac/fixed.o: cc ../../third_party/flac/src/libFLAC/fixed.c
+build obj/third_party/flac/flac/float.o: cc ../../third_party/flac/src/libFLAC/float.c
+build obj/third_party/flac/flac/format.o: cc ../../third_party/flac/src/libFLAC/format.c
+build obj/third_party/flac/flac/lpc.o: cc ../../third_party/flac/src/libFLAC/lpc.c
+build obj/third_party/flac/flac/md5.o: cc ../../third_party/flac/src/libFLAC/md5.c
+build obj/third_party/flac/flac/memory.o: cc ../../third_party/flac/src/libFLAC/memory.c
+build obj/third_party/flac/flac/stream_decoder.o: cc ../../third_party/flac/src/libFLAC/stream_decoder.c
+build obj/third_party/flac/flac/stream_encoder.o: cc ../../third_party/flac/src/libFLAC/stream_encoder.c
+build obj/third_party/flac/flac/stream_encoder_framing.o: cc ../../third_party/flac/src/libFLAC/stream_encoder_framing.c
+build obj/third_party/flac/flac/window.o: cc ../../third_party/flac/src/libFLAC/window.c
+
+build obj/third_party/flac/flac.stamp: stamp obj/third_party/flac/flac/alloc.o obj/third_party/flac/flac/bitmath.o obj/third_party/flac/flac/bitreader.o obj/third_party/flac/flac/bitwriter.o obj/third_party/flac/flac/cpu.o obj/third_party/flac/flac/crc.o obj/third_party/flac/flac/fixed.o obj/third_party/flac/flac/float.o obj/third_party/flac/flac/format.o obj/third_party/flac/flac/lpc.o obj/third_party/flac/flac/md5.o obj/third_party/flac/flac/memory.o obj/third_party/flac/flac/stream_decoder.o obj/third_party/flac/flac/stream_encoder.o obj/third_party/flac/flac/stream_encoder_framing.o obj/third_party/flac/flac/window.o

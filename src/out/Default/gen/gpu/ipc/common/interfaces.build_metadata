@@ -1,0 +1,23 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/gpu/ipc/common/gpu_preferences_interface.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/gpu/ipc/common/capabilities.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/context_result.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/device_perf_info.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/dx_diag_node.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/gpu_feature_info.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/gpu_info.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/gpu_peak_memory.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/mailbox.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/mailbox_holder.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/memory_stats.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/surface_handle.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/sync_token.mojom",
+    "/Users/macuser/chromium/src/gpu/ipc/common/vulkan_ycbcr_info.mojom"
+  ]
+}

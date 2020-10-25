@@ -1,0 +1,14 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DBYTE_ORDER_BIG_ENDIAN=0 -DCRC32C_TESTS_BUILT_WITH_GLOG=0 -DHAVE_MM_PREFETCH=1 -DHAVE_SSE42=1 -DHAVE_BUILTIN_PREFETCH=1 -DHAVE_ARM64_CRC32C=0 -DHAVE_STRONG_GETAUXVAL=0 -DHAVE_WEAK_GETAUXVAL=0
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/crc32c/config -I../../third_party/crc32c/src/include
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = crc32c
+target_gen_dir = gen/third_party/crc32c
+target_out_dir = obj/third_party/crc32c
+target_output_name = crc32c
+
+build obj/third_party/crc32c/crc32c/crc32c.o: cxx ../../third_party/crc32c/src/src/crc32c.cc
+build obj/third_party/crc32c/crc32c/crc32c_portable.o: cxx ../../third_party/crc32c/src/src/crc32c_portable.cc
+
+build obj/third_party/crc32c/crc32c.stamp: stamp obj/third_party/crc32c/crc32c/crc32c.o obj/third_party/crc32c/crc32c/crc32c_portable.o || obj/third_party/crc32c/crc32c_arm64.stamp obj/third_party/crc32c/crc32c_internal_headers.stamp obj/third_party/crc32c/crc32c_sse42.stamp

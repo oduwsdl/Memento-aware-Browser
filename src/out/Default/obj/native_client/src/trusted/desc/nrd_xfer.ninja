@@ -1,0 +1,37 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../.. -Igen
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -Wall -Werror -Wextra -Wimplicit-fallthrough -Wunreachable-code -Wthread-safety -Wextra-semi -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = nrd_xfer
+target_gen_dir = gen/native_client/src/trusted/desc
+target_out_dir = obj/native_client/src/trusted/desc
+target_output_name = libnrd_xfer
+
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_base.o: cc ../../native_client/src/trusted/desc/nacl_desc_base.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_cond.o: cc ../../native_client/src/trusted/desc/nacl_desc_cond.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_custom.o: cc ../../native_client/src/trusted/desc/nacl_desc_custom.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_dir.o: cc ../../native_client/src/trusted/desc/nacl_desc_dir.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_effector_trusted_mem.o: cc ../../native_client/src/trusted/desc/nacl_desc_effector_trusted_mem.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc.o: cc ../../native_client/src/trusted/desc/nacl_desc_imc.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc_shm.o: cc ../../native_client/src/trusted/desc/nacl_desc_imc_shm.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_invalid.o: cc ../../native_client/src/trusted/desc/nacl_desc_invalid.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_io.o: cc ../../native_client/src/trusted/desc/nacl_desc_io.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_mutex.o: cc ../../native_client/src/trusted/desc/nacl_desc_mutex.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_null.o: cc ../../native_client/src/trusted/desc/nacl_desc_null.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_quota.o: cc ../../native_client/src/trusted/desc/nacl_desc_quota.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_quota_interface.o: cc ../../native_client/src/trusted/desc/nacl_desc_quota_interface.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_semaphore.o: cc ../../native_client/src/trusted/desc/nacl_desc_semaphore.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_sync_socket.o: cc ../../native_client/src/trusted/desc/nacl_desc_sync_socket.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nrd_all_modules.o: cc ../../native_client/src/trusted/desc/nrd_all_modules.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nrd_xfer.o: cc ../../native_client/src/trusted/desc/nrd_xfer.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc.o: cc ../../native_client/src/trusted/desc/posix/nacl_desc.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_conn_cap.o: cc ../../native_client/src/trusted/desc/posix/nacl_desc_conn_cap.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc_bound_desc.o: cc ../../native_client/src/trusted/desc/posix/nacl_desc_imc_bound_desc.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_makeboundsock.o: cc ../../native_client/src/trusted/desc/posix/nacl_makeboundsock.c
+build obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc_shm_mach.o: cc ../../native_client/src/trusted/desc/osx/nacl_desc_imc_shm_mach.c
+
+build obj/native_client/src/trusted/desc/libnrd_xfer.a: alink obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_base.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_cond.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_custom.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_dir.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_effector_trusted_mem.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc_shm.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_invalid.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_io.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_mutex.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_null.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_quota.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_quota_interface.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_semaphore.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_sync_socket.o obj/native_client/src/trusted/desc/nrd_xfer/nrd_all_modules.o obj/native_client/src/trusted/desc/nrd_xfer/nrd_xfer.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_conn_cap.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc_bound_desc.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_makeboundsock.o obj/native_client/src/trusted/desc/nrd_xfer/nacl_desc_imc_shm_mach.o || obj/build/config/nacl/nacl_base.stamp obj/native_client/src/shared/imc/libimc.a obj/native_client/src/trusted/nacl_base/libnacl_base.a obj/native_client/src/shared/platform/libplatform.a obj/native_client/src/shared/gio/libgio.a
+  arflags =
+  output_extension = .a
+  output_dir = obj/native_client/src/trusted/desc

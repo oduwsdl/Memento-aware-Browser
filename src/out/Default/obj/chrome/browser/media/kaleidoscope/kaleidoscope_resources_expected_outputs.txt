@@ -1,0 +1,2 @@
+gen/chrome/browser/media/kaleidoscope/grit/kaleidoscope_resources.h
+gen/chrome/browser/media/kaleidoscope/kaleidoscope_resources.pak

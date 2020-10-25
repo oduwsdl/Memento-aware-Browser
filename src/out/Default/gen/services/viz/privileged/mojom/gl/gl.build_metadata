@@ -1,0 +1,15 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/gpu/ipc/common/interfaces.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/media/mojo/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gl/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/url/mojom/url_mojom_gurl.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/viz/privileged/mojom/gl/context_lost_reason.mojom",
+    "/Users/macuser/chromium/src/services/viz/privileged/mojom/gl/gpu_host.mojom",
+    "/Users/macuser/chromium/src/services/viz/privileged/mojom/gl/gpu_service.mojom"
+  ]
+}

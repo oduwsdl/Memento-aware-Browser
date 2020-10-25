@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/cpp/bindings/tests/module_to_downgrade.test-mojom"
+  ]
+}

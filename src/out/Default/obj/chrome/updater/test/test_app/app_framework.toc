@@ -1,0 +1,4 @@
+Version=88.0.4302.0
+UpdaterTestApp Framework
+Helpers
+Resources

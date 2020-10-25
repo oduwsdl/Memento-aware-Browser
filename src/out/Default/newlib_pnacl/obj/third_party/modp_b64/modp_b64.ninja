@@ -1,0 +1,15 @@
+defines = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_PREFIX=NACL_
+include_dirs = -I../.. -Inewlib_pnacl/gen
+cflags = -fno-strict-aliasing -fcolor-diagnostics -fmerge-all-constants -U__STRICT_ANSI__ -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -O0 -fno-omit-frame-pointer -g2 -fvisibility=hidden
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
+label_name = modp_b64
+root_out_dir = newlib_pnacl
+target_out_dir = newlib_pnacl/obj/third_party/modp_b64
+target_output_name = libmodp_b64
+
+build newlib_pnacl/obj/third_party/modp_b64/modp_b64/modp_b64.o: newlib_pnacl_cxx ../../third_party/modp_b64/modp_b64.cc
+
+build newlib_pnacl/obj/third_party/modp_b64/libmodp_b64.a: newlib_pnacl_alink newlib_pnacl/obj/third_party/modp_b64/modp_b64/modp_b64.o
+  arflags =
+  output_extension = .a
+  output_dir = newlib_pnacl/obj/third_party/modp_b64

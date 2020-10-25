@@ -1,0 +1,8 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/components/content_capture/common/mojo_types.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/content_capture/common/traits_test_service.test-mojom"
+  ]
+}

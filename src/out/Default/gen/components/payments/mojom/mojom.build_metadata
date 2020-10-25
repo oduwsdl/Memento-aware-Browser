@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/payments/mojom/payment_request_data.mojom"
+  ]
+}

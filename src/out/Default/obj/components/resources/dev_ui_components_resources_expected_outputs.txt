@@ -1,0 +1,2 @@
+gen/components/grit/dev_ui_components_resources.h
+gen/components/dev_ui_components_resources.pak

@@ -1,0 +1,32 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DPACKAGE_STRING=\"libsrtp2\$ 2.1.0-pre\" -DPACKAGE_VERSION=\"2.1.0-pre\" -DHAVE_CONFIG_H -DOPENSSL -DHAVE_STDLIB_H -DHAVE_STRING_H -DHAVE_STDINT_H -DHAVE_INTTYPES_H -DHAVE_INT16_T -DHAVE_INT32_T -DHAVE_INT8_T -DHAVE_UINT16_T -DHAVE_UINT32_T -DHAVE_UINT64_T -DHAVE_UINT8_T -DHAVE_ARPA_INET_H -DHAVE_NETINET_IN_H -DHAVE_SYS_TYPES_H -DHAVE_UNISTD_H -DBORINGSSL_SHARED_LIBRARY
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/libsrtp -I../../third_party/libsrtp/config -I../../third_party/libsrtp/include -I../../third_party/libsrtp/crypto/include -I../../third_party/boringssl/src/include
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = libsrtp
+target_gen_dir = gen/third_party/libsrtp
+target_out_dir = obj/third_party/libsrtp
+target_output_name = libsrtp
+
+build obj/third_party/libsrtp/libsrtp/aes_gcm_ossl.o: cc ../../third_party/libsrtp/crypto/cipher/aes_gcm_ossl.c
+build obj/third_party/libsrtp/libsrtp/aes_icm_ossl.o: cc ../../third_party/libsrtp/crypto/cipher/aes_icm_ossl.c
+build obj/third_party/libsrtp/libsrtp/cipher.o: cc ../../third_party/libsrtp/crypto/cipher/cipher.c
+build obj/third_party/libsrtp/libsrtp/null_cipher.o: cc ../../third_party/libsrtp/crypto/cipher/null_cipher.c
+build obj/third_party/libsrtp/libsrtp/auth.o: cc ../../third_party/libsrtp/crypto/hash/auth.c
+build obj/third_party/libsrtp/libsrtp/hmac_ossl.o: cc ../../third_party/libsrtp/crypto/hash/hmac_ossl.c
+build obj/third_party/libsrtp/libsrtp/null_auth.o: cc ../../third_party/libsrtp/crypto/hash/null_auth.c
+build obj/third_party/libsrtp/libsrtp/alloc.o: cc ../../third_party/libsrtp/crypto/kernel/alloc.c
+build obj/third_party/libsrtp/libsrtp/crypto_kernel.o: cc ../../third_party/libsrtp/crypto/kernel/crypto_kernel.c
+build obj/third_party/libsrtp/libsrtp/err.o: cc ../../third_party/libsrtp/crypto/kernel/err.c
+build obj/third_party/libsrtp/libsrtp/key.o: cc ../../third_party/libsrtp/crypto/kernel/key.c
+build obj/third_party/libsrtp/libsrtp/datatypes.o: cc ../../third_party/libsrtp/crypto/math/datatypes.c
+build obj/third_party/libsrtp/libsrtp/stat.o: cc ../../third_party/libsrtp/crypto/math/stat.c
+build obj/third_party/libsrtp/libsrtp/rdb.o: cc ../../third_party/libsrtp/crypto/replay/rdb.c
+build obj/third_party/libsrtp/libsrtp/rdbx.o: cc ../../third_party/libsrtp/crypto/replay/rdbx.c
+build obj/third_party/libsrtp/libsrtp/ekt.o: cc ../../third_party/libsrtp/srtp/ekt.c
+build obj/third_party/libsrtp/libsrtp/srtp.o: cc ../../third_party/libsrtp/srtp/srtp.c
+
+build obj/third_party/libsrtp/libsrtp.a: alink obj/third_party/libsrtp/libsrtp/aes_gcm_ossl.o obj/third_party/libsrtp/libsrtp/aes_icm_ossl.o obj/third_party/libsrtp/libsrtp/cipher.o obj/third_party/libsrtp/libsrtp/null_cipher.o obj/third_party/libsrtp/libsrtp/auth.o obj/third_party/libsrtp/libsrtp/hmac_ossl.o obj/third_party/libsrtp/libsrtp/null_auth.o obj/third_party/libsrtp/libsrtp/alloc.o obj/third_party/libsrtp/libsrtp/crypto_kernel.o obj/third_party/libsrtp/libsrtp/err.o obj/third_party/libsrtp/libsrtp/key.o obj/third_party/libsrtp/libsrtp/datatypes.o obj/third_party/libsrtp/libsrtp/stat.o obj/third_party/libsrtp/libsrtp/rdb.o obj/third_party/libsrtp/libsrtp/rdbx.o obj/third_party/libsrtp/libsrtp/ekt.o obj/third_party/libsrtp/libsrtp/srtp.o || ./libboringssl.dylib.TOC
+  arflags =
+  output_extension = .a
+  output_dir = obj/third_party/libsrtp

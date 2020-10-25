@@ -1,0 +1,13 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/services/viz/public/mojom/mojom.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/cc/mojom/browser_controls_params.mojom",
+    "/Users/macuser/chromium/src/cc/mojom/overscroll_behavior.mojom",
+    "/Users/macuser/chromium/src/cc/mojom/render_frame_metadata.mojom",
+    "/Users/macuser/chromium/src/cc/mojom/touch_action.mojom"
+  ]
+}

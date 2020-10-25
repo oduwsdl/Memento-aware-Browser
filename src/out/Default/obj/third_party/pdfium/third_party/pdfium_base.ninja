@@ -1,0 +1,24 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DPNG_PREFIX -DPNG_USE_READ_MACROS -DOPJ_STATIC -DPDF_ENABLE_V8 -DPDFIUM_PRINT_TEXT_WITH_GDI
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/pdfium
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -Wc++11-narrowing
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = pdfium_base
+target_gen_dir = gen/third_party/pdfium/third_party
+target_out_dir = obj/third_party/pdfium/third_party
+target_output_name = pdfium_base
+
+build obj/third_party/pdfium/third_party/pdfium_base/address_space_randomization.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/address_space_randomization.cc
+build obj/third_party/pdfium/third_party/pdfium_base/oom_callback.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/oom_callback.cc
+build obj/third_party/pdfium/third_party/pdfium_base/page_allocator.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/page_allocator.cc
+build obj/third_party/pdfium/third_party/pdfium_base/partition_alloc.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/partition_alloc.cc
+build obj/third_party/pdfium/third_party/pdfium_base/partition_bucket.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/partition_bucket.cc
+build obj/third_party/pdfium/third_party/pdfium_base/partition_oom.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/partition_oom.cc
+build obj/third_party/pdfium/third_party/pdfium_base/partition_page.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/partition_page.cc
+build obj/third_party/pdfium/third_party/pdfium_base/partition_root_base.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/partition_root_base.cc
+build obj/third_party/pdfium/third_party/pdfium_base/random.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/random.cc
+build obj/third_party/pdfium/third_party/pdfium_base/spin_lock.o: cxx ../../third_party/pdfium/third_party/base/allocator/partition_allocator/spin_lock.cc
+build obj/third_party/pdfium/third_party/pdfium_base/alias.o: cxx ../../third_party/pdfium/third_party/base/debug/alias.cc
+build obj/third_party/pdfium/third_party/pdfium_base/aligned_memory.o: cxx ../../third_party/pdfium/third_party/base/memory/aligned_memory.cc
+
+build obj/third_party/pdfium/third_party/pdfium_base.stamp: stamp obj/third_party/pdfium/third_party/pdfium_base/address_space_randomization.o obj/third_party/pdfium/third_party/pdfium_base/oom_callback.o obj/third_party/pdfium/third_party/pdfium_base/page_allocator.o obj/third_party/pdfium/third_party/pdfium_base/partition_alloc.o obj/third_party/pdfium/third_party/pdfium_base/partition_bucket.o obj/third_party/pdfium/third_party/pdfium_base/partition_oom.o obj/third_party/pdfium/third_party/pdfium_base/partition_page.o obj/third_party/pdfium/third_party/pdfium_base/partition_root_base.o obj/third_party/pdfium/third_party/pdfium_base/random.o obj/third_party/pdfium/third_party/pdfium_base/spin_lock.o obj/third_party/pdfium/third_party/pdfium_base/alias.o obj/third_party/pdfium/third_party/pdfium_base/aligned_memory.o

@@ -1,0 +1,30 @@
+[
+  {
+    "traits_headers": [
+      "services/proxy_resolver/public/cpp/mojo_host_mojom_traits.h",
+      "services/proxy_resolver/public/cpp/proxy_resolver_mojom_traits.h"
+    ],
+    "traits_sources": [
+      "//services/proxy_resolver/public/cpp/mojo_host_mojom_traits.cc",
+      "//services/proxy_resolver/public/cpp/proxy_resolver_mojom_traits.cc"
+    ],
+    "types": [
+      {
+        "cpp": "::net::ProxyResolveDnsOperation",
+        "mojom": "proxy_resolver.mojom.HostResolveOperation"
+      },
+      {
+        "cpp": "::net::ProxyInfo",
+        "mojom": "proxy_resolver.mojom.ProxyInfo"
+      },
+      {
+        "cpp": "::net::ProxyServer",
+        "mojom": "proxy_resolver.mojom.ProxyServer"
+      },
+      {
+        "cpp": "::net::ProxyScheme",
+        "mojom": "proxy_resolver.mojom.ProxyServer::Scheme"
+      }
+    ]
+  }
+]

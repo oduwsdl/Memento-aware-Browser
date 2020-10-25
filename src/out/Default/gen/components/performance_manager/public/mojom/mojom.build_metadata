@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/ui/gfx/geometry/mojom/mojom.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/performance_manager/public/mojom/coordination_unit.mojom",
+    "/Users/macuser/chromium/src/components/performance_manager/public/mojom/lifecycle.mojom"
+  ]
+}

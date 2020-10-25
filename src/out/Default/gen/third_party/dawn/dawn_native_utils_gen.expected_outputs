@@ -1,0 +1,5 @@
+src/dawn_native/ProcTable.cpp
+src/dawn_native/wgpu_structs_autogen.h
+src/dawn_native/wgpu_structs_autogen.cpp
+src/dawn_native/ValidationUtils_autogen.h
+src/dawn_native/ValidationUtils_autogen.cpp

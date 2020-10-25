@@ -1,0 +1,15 @@
+./trace_processor_minimal_smoke_tests
+./libchrome_zlib.dylib
+./libc++.dylib
+./libbase.dylib
+./libabsl.dylib
+./libboringssl.dylib
+./libperfetto.dylib
+../../testing/test_env.py
+./libbase_i18n.dylib
+./libicui18n.dylib
+./libicuuc.dylib
+icudtl.dat
+../../testing/test_env.py
+../../.vpython
+bin/run_trace_processor_minimal_smoke_tests

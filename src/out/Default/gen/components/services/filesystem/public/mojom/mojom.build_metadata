@@ -1,0 +1,10 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/mojo/public/mojom/base/base.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/components/services/filesystem/public/mojom/directory.mojom",
+    "/Users/macuser/chromium/src/components/services/filesystem/public/mojom/file.mojom",
+    "/Users/macuser/chromium/src/components/services/filesystem/public/mojom/types.mojom"
+  ]
+}

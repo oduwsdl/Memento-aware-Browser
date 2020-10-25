@@ -1,0 +1,9 @@
+{
+  "deps": [
+    "/Users/macuser/chromium/src/out/Default/gen/gpu/ipc/common/gpu_preferences_interface.build_metadata",
+    "/Users/macuser/chromium/src/out/Default/gen/gpu/ipc/common/interfaces.build_metadata"
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/gpu/ipc/common/traits_test_service.mojom"
+  ]
+}

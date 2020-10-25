@@ -1,0 +1,32 @@
+{
+  "format_version": "1.1",
+  "package_name": "chromium/third_party/shaka-player",
+  "install_mode": "copy",
+  "files": [
+    {
+      "name": "package.json",
+      "size": 2302,
+      "hash": "wRpDPHXx-F5ZVCW32C5NDJ4OS1lt9KEhdTzqTbHw460C"
+    },
+    {
+      "name": "shaka-player.ui.externs.js",
+      "size": 74795,
+      "hash": "7WCGM-ojQBZ0q0n3QGUu1se9dzfFX_Ck9l0oOwRqPLIC"
+    },
+    {
+      "name": "shaka-player.ui.js",
+      "size": 193916,
+      "hash": "AQeLkcuJJ1Vr9UFOoXcP5VGXIBxybkrBhYRf0nySGykC"
+    },
+    {
+      "name": "shaka-player.ui.map",
+      "size": 510698,
+      "hash": "2hfe2-kHDBrYznVvrWXvJY4BTr4GYPO6eKm83Zijd_4C"
+    },
+    {
+      "name": "wrapper.js",
+      "size": 491,
+      "hash": "c_hthP7xP9MygnLbUVmhu74UaCIxAy8eUlCTSMOkswEC"
+    }
+  ]
+}

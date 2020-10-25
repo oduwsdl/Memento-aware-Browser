@@ -1,0 +1,39 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1
+framework_dirs =
+include_dirs = -I../../third_party/flatbuffers/src/grpc -I../.. -Igen -I../../third_party/flatbuffers/src/include
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens
+cflags_cc = -Wno-undefined-bool-conversion -Wno-tautological-undefined-compare -std=c++14 -fno-trigraphs -Wno-trigraphs -stdlib=libc++ -fno-exceptions -fno-rtti -nostdinc++ -isystem../../buildtools/third_party/libc++/trunk/include -isystem../../buildtools/third_party/libc++abi/trunk/include -fvisibility-inlines-hidden
+label_name = compiler_files
+target_gen_dir = gen/third_party/flatbuffers
+target_out_dir = obj/third_party/flatbuffers
+target_output_name = compiler_files
+
+build obj/third_party/flatbuffers/compiler_files/cpp_generator.o: cxx ../../third_party/flatbuffers/src/grpc/src/compiler/cpp_generator.cc
+build obj/third_party/flatbuffers/compiler_files/go_generator.o: cxx ../../third_party/flatbuffers/src/grpc/src/compiler/go_generator.cc
+build obj/third_party/flatbuffers/compiler_files/java_generator.o: cxx ../../third_party/flatbuffers/src/grpc/src/compiler/java_generator.cc
+build obj/third_party/flatbuffers/compiler_files/python_generator.o: cxx ../../third_party/flatbuffers/src/grpc/src/compiler/python_generator.cc
+build obj/third_party/flatbuffers/compiler_files/swift_generator.o: cxx ../../third_party/flatbuffers/src/grpc/src/compiler/swift_generator.cc
+build obj/third_party/flatbuffers/compiler_files/code_generators.o: cxx ../../third_party/flatbuffers/src/src/code_generators.cpp
+build obj/third_party/flatbuffers/compiler_files/flatc.o: cxx ../../third_party/flatbuffers/src/src/flatc.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_cpp.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_cpp.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_csharp.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_csharp.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_dart.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_dart.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_fbs.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_fbs.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_go.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_go.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_grpc.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_grpc.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_java.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_java.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_js_ts.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_js_ts.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_json_schema.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_json_schema.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_kotlin.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_kotlin.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_lobster.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_lobster.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_lua.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_lua.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_php.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_php.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_python.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_python.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_rust.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_rust.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_swift.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_swift.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_gen_text.o: cxx ../../third_party/flatbuffers/src/src/idl_gen_text.cpp
+build obj/third_party/flatbuffers/compiler_files/idl_parser.o: cxx ../../third_party/flatbuffers/src/src/idl_parser.cpp
+build obj/third_party/flatbuffers/compiler_files/reflection.o: cxx ../../third_party/flatbuffers/src/src/reflection.cpp
+build obj/third_party/flatbuffers/compiler_files/util.o: cxx ../../third_party/flatbuffers/src/src/util.cpp
+
+build obj/third_party/flatbuffers/compiler_files.stamp: stamp obj/third_party/flatbuffers/compiler_files/cpp_generator.o obj/third_party/flatbuffers/compiler_files/go_generator.o obj/third_party/flatbuffers/compiler_files/java_generator.o obj/third_party/flatbuffers/compiler_files/python_generator.o obj/third_party/flatbuffers/compiler_files/swift_generator.o obj/third_party/flatbuffers/compiler_files/code_generators.o obj/third_party/flatbuffers/compiler_files/flatc.o obj/third_party/flatbuffers/compiler_files/idl_gen_cpp.o obj/third_party/flatbuffers/compiler_files/idl_gen_csharp.o obj/third_party/flatbuffers/compiler_files/idl_gen_dart.o obj/third_party/flatbuffers/compiler_files/idl_gen_fbs.o obj/third_party/flatbuffers/compiler_files/idl_gen_go.o obj/third_party/flatbuffers/compiler_files/idl_gen_grpc.o obj/third_party/flatbuffers/compiler_files/idl_gen_java.o obj/third_party/flatbuffers/compiler_files/idl_gen_js_ts.o obj/third_party/flatbuffers/compiler_files/idl_gen_json_schema.o obj/third_party/flatbuffers/compiler_files/idl_gen_kotlin.o obj/third_party/flatbuffers/compiler_files/idl_gen_lobster.o obj/third_party/flatbuffers/compiler_files/idl_gen_lua.o obj/third_party/flatbuffers/compiler_files/idl_gen_php.o obj/third_party/flatbuffers/compiler_files/idl_gen_python.o obj/third_party/flatbuffers/compiler_files/idl_gen_rust.o obj/third_party/flatbuffers/compiler_files/idl_gen_swift.o obj/third_party/flatbuffers/compiler_files/idl_gen_text.o obj/third_party/flatbuffers/compiler_files/idl_parser.o obj/third_party/flatbuffers/compiler_files/reflection.o obj/third_party/flatbuffers/compiler_files/util.o || obj/third_party/flatbuffers/flatbuffers.stamp

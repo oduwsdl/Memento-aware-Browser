@@ -1,0 +1,102 @@
+defines = -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -DNDEBUG -DNVALGRIND -DDYNAMIC_ANNOTATIONS_ENABLED=0 -DHAVE_CONFIG_H
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/nasm -I../../third_party/nasm/asm -I../../third_party/nasm/disasm -I../../third_party/nasm/include -I../../third_party/nasm/output -I../../third_party/nasm/x86
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -O2 -Wno-unused-function -Wno-string-conversion -Wno-macro-redefined -Wno-sign-compare -Wno-nonnull -Wno-uninitialized
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = nasm
+target_gen_dir = gen/third_party/nasm
+target_out_dir = obj/third_party/nasm
+target_output_name = nasm
+
+build obj/third_party/nasm/nasm/assemble.o: cc ../../third_party/nasm/asm/assemble.c
+build obj/third_party/nasm/nasm/directbl.o: cc ../../third_party/nasm/asm/directbl.c
+build obj/third_party/nasm/nasm/directiv.o: cc ../../third_party/nasm/asm/directiv.c
+build obj/third_party/nasm/nasm/error.o: cc ../../third_party/nasm/asm/error.c
+build obj/third_party/nasm/nasm/eval.o: cc ../../third_party/nasm/asm/eval.c
+build obj/third_party/nasm/nasm/exprdump.o: cc ../../third_party/nasm/asm/exprdump.c
+build obj/third_party/nasm/nasm/exprlib.o: cc ../../third_party/nasm/asm/exprlib.c
+build obj/third_party/nasm/nasm/floats.o: cc ../../third_party/nasm/asm/floats.c
+build obj/third_party/nasm/nasm/labels.o: cc ../../third_party/nasm/asm/labels.c
+build obj/third_party/nasm/nasm/listing.o: cc ../../third_party/nasm/asm/listing.c
+build obj/third_party/nasm/nasm/parser.o: cc ../../third_party/nasm/asm/parser.c
+build obj/third_party/nasm/nasm/pptok.o: cc ../../third_party/nasm/asm/pptok.c
+build obj/third_party/nasm/nasm/pragma.o: cc ../../third_party/nasm/asm/pragma.c
+build obj/third_party/nasm/nasm/preproc-nop.o: cc ../../third_party/nasm/asm/preproc-nop.c
+build obj/third_party/nasm/nasm/preproc.o: cc ../../third_party/nasm/asm/preproc.c
+build obj/third_party/nasm/nasm/quote.o: cc ../../third_party/nasm/asm/quote.c
+build obj/third_party/nasm/nasm/rdstrnum.o: cc ../../third_party/nasm/asm/rdstrnum.c
+build obj/third_party/nasm/nasm/segalloc.o: cc ../../third_party/nasm/asm/segalloc.c
+build obj/third_party/nasm/nasm/srcfile.o: cc ../../third_party/nasm/asm/srcfile.c
+build obj/third_party/nasm/nasm/stdscan.o: cc ../../third_party/nasm/asm/stdscan.c
+build obj/third_party/nasm/nasm/strfunc.o: cc ../../third_party/nasm/asm/strfunc.c
+build obj/third_party/nasm/nasm/tokhash.o: cc ../../third_party/nasm/asm/tokhash.c
+build obj/third_party/nasm/nasm/warnings.o: cc ../../third_party/nasm/asm/warnings.c
+build obj/third_party/nasm/nasm/common.o: cc ../../third_party/nasm/common/common.c
+build obj/third_party/nasm/nasm/disasm.o: cc ../../third_party/nasm/disasm/disasm.c
+build obj/third_party/nasm/nasm/sync.o: cc ../../third_party/nasm/disasm/sync.c
+build obj/third_party/nasm/nasm/macros.o: cc ../../third_party/nasm/macros/macros.c
+build obj/third_party/nasm/nasm/alloc.o: cc ../../third_party/nasm/nasmlib/alloc.c
+build obj/third_party/nasm/nasm/asprintf.o: cc ../../third_party/nasm/nasmlib/asprintf.c
+build obj/third_party/nasm/nasm/badenum.o: cc ../../third_party/nasm/nasmlib/badenum.c
+build obj/third_party/nasm/nasm/bsi.o: cc ../../third_party/nasm/nasmlib/bsi.c
+build obj/third_party/nasm/nasm/crc64.o: cc ../../third_party/nasm/nasmlib/crc64.c
+build obj/third_party/nasm/nasm/file.o: cc ../../third_party/nasm/nasmlib/file.c
+build obj/third_party/nasm/nasm/filename.o: cc ../../third_party/nasm/nasmlib/filename.c
+build obj/third_party/nasm/nasm/hashtbl.o: cc ../../third_party/nasm/nasmlib/hashtbl.c
+build obj/third_party/nasm/nasm/ilog2.o: cc ../../third_party/nasm/nasmlib/ilog2.c
+build obj/third_party/nasm/nasm/md5c.o: cc ../../third_party/nasm/nasmlib/md5c.c
+build obj/third_party/nasm/nasm/mmap.o: cc ../../third_party/nasm/nasmlib/mmap.c
+build obj/third_party/nasm/nasm/nctype.o: cc ../../third_party/nasm/nasmlib/nctype.c
+build obj/third_party/nasm/nasm/path.o: cc ../../third_party/nasm/nasmlib/path.c
+build obj/third_party/nasm/nasm/perfhash.o: cc ../../third_party/nasm/nasmlib/perfhash.c
+build obj/third_party/nasm/nasm/raa.o: cc ../../third_party/nasm/nasmlib/raa.c
+build obj/third_party/nasm/nasm/rbtree.o: cc ../../third_party/nasm/nasmlib/rbtree.c
+build obj/third_party/nasm/nasm/readnum.o: cc ../../third_party/nasm/nasmlib/readnum.c
+build obj/third_party/nasm/nasm/realpath.o: cc ../../third_party/nasm/nasmlib/realpath.c
+build obj/third_party/nasm/nasm/rlimit.o: cc ../../third_party/nasm/nasmlib/rlimit.c
+build obj/third_party/nasm/nasm/saa.o: cc ../../third_party/nasm/nasmlib/saa.c
+build obj/third_party/nasm/nasm/string.o: cc ../../third_party/nasm/nasmlib/string.c
+build obj/third_party/nasm/nasm/strlist.o: cc ../../third_party/nasm/nasmlib/strlist.c
+build obj/third_party/nasm/nasm/ver.o: cc ../../third_party/nasm/nasmlib/ver.c
+build obj/third_party/nasm/nasm/zerobuf.o: cc ../../third_party/nasm/nasmlib/zerobuf.c
+build obj/third_party/nasm/nasm/codeview.o: cc ../../third_party/nasm/output/codeview.c
+build obj/third_party/nasm/nasm/legacy.o: cc ../../third_party/nasm/output/legacy.c
+build obj/third_party/nasm/nasm/nulldbg.o: cc ../../third_party/nasm/output/nulldbg.c
+build obj/third_party/nasm/nasm/nullout.o: cc ../../third_party/nasm/output/nullout.c
+build obj/third_party/nasm/nasm/outaout.o: cc ../../third_party/nasm/output/outaout.c
+build obj/third_party/nasm/nasm/outas86.o: cc ../../third_party/nasm/output/outas86.c
+build obj/third_party/nasm/nasm/outbin.o: cc ../../third_party/nasm/output/outbin.c
+build obj/third_party/nasm/nasm/outcoff.o: cc ../../third_party/nasm/output/outcoff.c
+build obj/third_party/nasm/nasm/outdbg.o: cc ../../third_party/nasm/output/outdbg.c
+build obj/third_party/nasm/nasm/outelf.o: cc ../../third_party/nasm/output/outelf.c
+build obj/third_party/nasm/nasm/outform.o: cc ../../third_party/nasm/output/outform.c
+build obj/third_party/nasm/nasm/outieee.o: cc ../../third_party/nasm/output/outieee.c
+build obj/third_party/nasm/nasm/outlib.o: cc ../../third_party/nasm/output/outlib.c
+build obj/third_party/nasm/nasm/outmacho.o: cc ../../third_party/nasm/output/outmacho.c
+build obj/third_party/nasm/nasm/outobj.o: cc ../../third_party/nasm/output/outobj.c
+build obj/third_party/nasm/nasm/outrdf2.o: cc ../../third_party/nasm/output/outrdf2.c
+build obj/third_party/nasm/nasm/snprintf.o: cc ../../third_party/nasm/stdlib/snprintf.c
+build obj/third_party/nasm/nasm/strlcpy.o: cc ../../third_party/nasm/stdlib/strlcpy.c
+build obj/third_party/nasm/nasm/strnlen.o: cc ../../third_party/nasm/stdlib/strnlen.c
+build obj/third_party/nasm/nasm/strrchrnul.o: cc ../../third_party/nasm/stdlib/strrchrnul.c
+build obj/third_party/nasm/nasm/vsnprintf.o: cc ../../third_party/nasm/stdlib/vsnprintf.c
+build obj/third_party/nasm/nasm/disp8.o: cc ../../third_party/nasm/x86/disp8.c
+build obj/third_party/nasm/nasm/iflag.o: cc ../../third_party/nasm/x86/iflag.c
+build obj/third_party/nasm/nasm/insnsa.o: cc ../../third_party/nasm/x86/insnsa.c
+build obj/third_party/nasm/nasm/insnsb.o: cc ../../third_party/nasm/x86/insnsb.c
+build obj/third_party/nasm/nasm/insnsd.o: cc ../../third_party/nasm/x86/insnsd.c
+build obj/third_party/nasm/nasm/insnsn.o: cc ../../third_party/nasm/x86/insnsn.c
+build obj/third_party/nasm/nasm/regdis.o: cc ../../third_party/nasm/x86/regdis.c
+build obj/third_party/nasm/nasm/regflags.o: cc ../../third_party/nasm/x86/regflags.c
+build obj/third_party/nasm/nasm/regs.o: cc ../../third_party/nasm/x86/regs.c
+build obj/third_party/nasm/nasm/regvals.o: cc ../../third_party/nasm/x86/regvals.c
+build obj/third_party/nasm/nasm/nasm.o: cc ../../third_party/nasm/asm/nasm.c
+
+build ./nasm: link obj/third_party/nasm/nasm/assemble.o obj/third_party/nasm/nasm/directbl.o obj/third_party/nasm/nasm/directiv.o obj/third_party/nasm/nasm/error.o obj/third_party/nasm/nasm/eval.o obj/third_party/nasm/nasm/exprdump.o obj/third_party/nasm/nasm/exprlib.o obj/third_party/nasm/nasm/floats.o obj/third_party/nasm/nasm/labels.o obj/third_party/nasm/nasm/listing.o obj/third_party/nasm/nasm/parser.o obj/third_party/nasm/nasm/pptok.o obj/third_party/nasm/nasm/pragma.o obj/third_party/nasm/nasm/preproc-nop.o obj/third_party/nasm/nasm/preproc.o obj/third_party/nasm/nasm/quote.o obj/third_party/nasm/nasm/rdstrnum.o obj/third_party/nasm/nasm/segalloc.o obj/third_party/nasm/nasm/srcfile.o obj/third_party/nasm/nasm/stdscan.o obj/third_party/nasm/nasm/strfunc.o obj/third_party/nasm/nasm/tokhash.o obj/third_party/nasm/nasm/warnings.o obj/third_party/nasm/nasm/common.o obj/third_party/nasm/nasm/disasm.o obj/third_party/nasm/nasm/sync.o obj/third_party/nasm/nasm/macros.o obj/third_party/nasm/nasm/alloc.o obj/third_party/nasm/nasm/asprintf.o obj/third_party/nasm/nasm/badenum.o obj/third_party/nasm/nasm/bsi.o obj/third_party/nasm/nasm/crc64.o obj/third_party/nasm/nasm/file.o obj/third_party/nasm/nasm/filename.o obj/third_party/nasm/nasm/hashtbl.o obj/third_party/nasm/nasm/ilog2.o obj/third_party/nasm/nasm/md5c.o obj/third_party/nasm/nasm/mmap.o obj/third_party/nasm/nasm/nctype.o obj/third_party/nasm/nasm/path.o obj/third_party/nasm/nasm/perfhash.o obj/third_party/nasm/nasm/raa.o obj/third_party/nasm/nasm/rbtree.o obj/third_party/nasm/nasm/readnum.o obj/third_party/nasm/nasm/realpath.o obj/third_party/nasm/nasm/rlimit.o obj/third_party/nasm/nasm/saa.o obj/third_party/nasm/nasm/string.o obj/third_party/nasm/nasm/strlist.o obj/third_party/nasm/nasm/ver.o obj/third_party/nasm/nasm/zerobuf.o obj/third_party/nasm/nasm/codeview.o obj/third_party/nasm/nasm/legacy.o obj/third_party/nasm/nasm/nulldbg.o obj/third_party/nasm/nasm/nullout.o obj/third_party/nasm/nasm/outaout.o obj/third_party/nasm/nasm/outas86.o obj/third_party/nasm/nasm/outbin.o obj/third_party/nasm/nasm/outcoff.o obj/third_party/nasm/nasm/outdbg.o obj/third_party/nasm/nasm/outelf.o obj/third_party/nasm/nasm/outform.o obj/third_party/nasm/nasm/outieee.o obj/third_party/nasm/nasm/outlib.o obj/third_party/nasm/nasm/outmacho.o obj/third_party/nasm/nasm/outobj.o obj/third_party/nasm/nasm/outrdf2.o obj/third_party/nasm/nasm/snprintf.o obj/third_party/nasm/nasm/strlcpy.o obj/third_party/nasm/nasm/strnlen.o obj/third_party/nasm/nasm/strrchrnul.o obj/third_party/nasm/nasm/vsnprintf.o obj/third_party/nasm/nasm/disp8.o obj/third_party/nasm/nasm/iflag.o obj/third_party/nasm/nasm/insnsa.o obj/third_party/nasm/nasm/insnsb.o obj/third_party/nasm/nasm/insnsd.o obj/third_party/nasm/nasm/insnsn.o obj/third_party/nasm/nasm/regdis.o obj/third_party/nasm/nasm/regflags.o obj/third_party/nasm/nasm/regs.o obj/third_party/nasm/nasm/regvals.o obj/third_party/nasm/nasm/nasm.o | ./libc++.dylib.TOC || obj/build/win/default_exe_manifest.stamp obj/build/config/executable_deps.stamp
+  ldflags = -Wl,-fatal_warnings -stdlib=libc++ -arch x86_64 -nostdlib++ -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -Wl,-ObjC -Wl,-rpath,@loader_path/. -Wl,-rpath,@loader_path/../../.. -Werror -Wl,-dead_strip
+  libs =
+  frameworks =
+  swiftmodules =
+  output_extension = 
+  output_dir = .
+  solibs = ./libc++.dylib

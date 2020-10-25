@@ -1,0 +1,29 @@
+defines = -DPNG_INTEL_SSE_OPT=1 -D_LIBCPP_HAS_NO_ALIGNED_ALLOCATION -DCR_XCODE_VERSION=1201 -DCR_CLANG_REVISION=\"llvmorg-12-init-5627-gf086e85e-2\" -DCOMPONENT_BUILD -D_LIBCPP_ENABLE_NODISCARD -D_LIBCPP_DEBUG=0 -DCR_LIBCXX_REVISION=375504 -D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0 -D_DEBUG -DDYNAMIC_ANNOTATIONS_ENABLED=1 -DPNG_PREFIX -DPNG_USE_READ_MACROS -DOPJ_STATIC -DPDF_ENABLE_V8 -DPDFIUM_PRINT_TEXT_WITH_GDI
+framework_dirs =
+include_dirs = -I../.. -Igen -I../../third_party/pdfium -I../../third_party/zlib
+cflags = -fno-strict-aliasing -fstack-protector-strong -fcolor-diagnostics -fmerge-all-constants -fcrash-diagnostics-dir=../../tools/clang/crashreports -mllvm -instcombine-lower-dbg-declare=0 -mllvm -enable-dse-memoryssa=false -fcomplete-member-pointers -arch x86_64 -Wno-builtin-macro-redefined -D__DATE__= -D__TIME__= -D__TIMESTAMP__= -Xclang -fdebug-compilation-dir -Xclang . -no-canonical-prefixes -O0 -fno-omit-frame-pointer -gdwarf-4 -g2 -isysroot ../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -mmacosx-version-min=10.10.0 -ftrivial-auto-var-init=pattern -fvisibility=hidden -Xclang -add-plugin -Xclang find-bad-constructs -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare -Werror -Wall -Wno-unused-variable -Wno-misleading-indentation -Wunguarded-availability -Wno-missing-field-initializers -Wno-unused-parameter -Wno-c++11-narrowing -Wno-unneeded-internal-declaration -Wno-undefined-var-template -Wno-psabi -Wno-ignored-pragma-optimize -Wno-implicit-int-float-conversion -Wno-final-dtor-non-final-class -Wno-builtin-assume-aligned-alignment -Wno-deprecated-copy -Wno-non-c-typedef-for-linkage -Wno-max-tokens -Wc++11-narrowing
+cflags_c = -std=c11 -Wno-implicit-fallthrough
+label_name = fx_lpng
+target_gen_dir = gen/third_party/pdfium/third_party
+target_out_dir = obj/third_party/pdfium/third_party
+target_output_name = fx_lpng
+
+build obj/third_party/pdfium/third_party/fx_lpng/png.o: cc ../../third_party/pdfium/third_party/libpng16/png.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngerror.o: cc ../../third_party/pdfium/third_party/libpng16/pngerror.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngget.o: cc ../../third_party/pdfium/third_party/libpng16/pngget.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngmem.o: cc ../../third_party/pdfium/third_party/libpng16/pngmem.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngpread.o: cc ../../third_party/pdfium/third_party/libpng16/pngpread.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngread.o: cc ../../third_party/pdfium/third_party/libpng16/pngread.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngrio.o: cc ../../third_party/pdfium/third_party/libpng16/pngrio.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngrtran.o: cc ../../third_party/pdfium/third_party/libpng16/pngrtran.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngrutil.o: cc ../../third_party/pdfium/third_party/libpng16/pngrutil.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngset.o: cc ../../third_party/pdfium/third_party/libpng16/pngset.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngtrans.o: cc ../../third_party/pdfium/third_party/libpng16/pngtrans.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngwio.o: cc ../../third_party/pdfium/third_party/libpng16/pngwio.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngwrite.o: cc ../../third_party/pdfium/third_party/libpng16/pngwrite.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngwtran.o: cc ../../third_party/pdfium/third_party/libpng16/pngwtran.c
+build obj/third_party/pdfium/third_party/fx_lpng/pngwutil.o: cc ../../third_party/pdfium/third_party/libpng16/pngwutil.c
+build obj/third_party/pdfium/third_party/fx_lpng/filter_sse2_intrinsics.o: cc ../../third_party/pdfium/third_party/libpng16/intel/filter_sse2_intrinsics.c
+build obj/third_party/pdfium/third_party/fx_lpng/intel_init.o: cc ../../third_party/pdfium/third_party/libpng16/intel/intel_init.c
+
+build obj/third_party/pdfium/third_party/fx_lpng.stamp: stamp obj/third_party/pdfium/third_party/fx_lpng/png.o obj/third_party/pdfium/third_party/fx_lpng/pngerror.o obj/third_party/pdfium/third_party/fx_lpng/pngget.o obj/third_party/pdfium/third_party/fx_lpng/pngmem.o obj/third_party/pdfium/third_party/fx_lpng/pngpread.o obj/third_party/pdfium/third_party/fx_lpng/pngread.o obj/third_party/pdfium/third_party/fx_lpng/pngrio.o obj/third_party/pdfium/third_party/fx_lpng/pngrtran.o obj/third_party/pdfium/third_party/fx_lpng/pngrutil.o obj/third_party/pdfium/third_party/fx_lpng/pngset.o obj/third_party/pdfium/third_party/fx_lpng/pngtrans.o obj/third_party/pdfium/third_party/fx_lpng/pngwio.o obj/third_party/pdfium/third_party/fx_lpng/pngwrite.o obj/third_party/pdfium/third_party/fx_lpng/pngwtran.o obj/third_party/pdfium/third_party/fx_lpng/pngwutil.o obj/third_party/pdfium/third_party/fx_lpng/filter_sse2_intrinsics.o obj/third_party/pdfium/third_party/fx_lpng/intel_init.o || obj/third_party/pdfium/third_party/zlib.stamp ./libchrome_zlib.dylib.TOC

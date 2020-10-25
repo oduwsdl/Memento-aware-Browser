@@ -1,0 +1,8 @@
+{
+  "deps": [
+
+  ],
+  "sources": [
+    "/Users/macuser/chromium/src/services/test/echo/public/mojom/echo.mojom"
+  ]
+}
