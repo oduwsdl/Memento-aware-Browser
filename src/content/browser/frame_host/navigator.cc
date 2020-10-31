@@ -298,24 +298,8 @@ void Navigator::DidNavigate(
 
   std::string datetime = render_frame_host->DidNavigate(params, is_same_document_navigation);
 
-  if (datetime != "") {
-    DVLOG(0) << "\t Adding datetime " << datetime;
+  if (datetime != "" && root != frame_tree_node)
     root->AddMementoDate(datetime);
-  }
-
-  /*DVLOG(0) << "\t******************************************************";
-  DVLOG(0) << "\t The returned datetime in Navigator is:";
-  DVLOG(0) << "\t" << datetime;
-  DVLOG(0) << "\t******************************************************\n";*/
-
-  /*std::vector<std::string> dates = root->GetMementoDates();
-  DVLOG(0) << "\t******************************************************";
-  DVLOG(0) << "\t CHECKING THE VECTOR HERE";
-  for (auto i = dates.begin(); i != dates.end(); ++i) {
-    DVLOG(0) << "\t" << *i;
-  }
-  DVLOG(0) << "\t******************************************************";*/
-  
 
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
