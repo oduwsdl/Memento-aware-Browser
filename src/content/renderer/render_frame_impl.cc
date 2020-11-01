@@ -4921,18 +4921,8 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
       std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
   params->http_status_code = response.HttpStatusCode();
 
-  if (response.MementoDatetime() != "") {
-    params->memento_status = response.MementoInfo();
-    params->memento_datetime = response.MementoDatetime();
-
-    DVLOG(0) << "\t******************************************************";
-    DVLOG(0) << "\t*  Memento-Datetime added to params.";
-    DVLOG(0) << "\t* ----------------------------------------------------";
-    DVLOG(0) << "\t*  Class:  RenderFrameImpl";
-    DVLOG(0) << "\t*  Date:  " << response.MementoDatetime();
-    DVLOG(0) << "\t******************************************************\n";
-
-  }
+  params->memento_status = response.MementoInfo();
+  params->memento_datetime = response.MementoDatetime();
 
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
