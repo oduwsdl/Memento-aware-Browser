@@ -149,6 +149,8 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   std::vector<std::string> GetMementoDates() override;
   void SetMixedMementoContentInfo(bool is_mixed_memento_info) override;
   bool GetMixedMementoContentInfo() override;
+  void SetIterations(int iterations) override;
+  int GetIterations() override;
   void SetRedirectChain(const std::vector<GURL>& redirects) override;
   const std::vector<GURL>& GetRedirectChain() override;
   const base::Optional<ReplacedNavigationEntryData>& GetReplacedEntryData()
@@ -451,6 +453,7 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   std::string memento_datetime_;
   bool is_mixed_memento_content_;
   std::vector<std::string> memento_dates_;
+  int iterations_;
 
   // This member is not persisted with session restore because it is transient.
   // If the post request succeeds, this field is cleared since the same

@@ -299,7 +299,7 @@ base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
 
     if (IsMixedContent())
       return base::UTF8ToUTF16("Mixed archival content");
-    else {
+    else if (GetMementoDatetime() != "") {
 
       const std::string s = GetMementoDatetime();
 
@@ -329,6 +329,9 @@ base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
                                std::string(dayMatch[1]);
 
       return base::UTF8ToUTF16(dateString);
+    }
+    else {
+      return base::UTF8ToUTF16("Mixed archival content");
     }
 } 
 

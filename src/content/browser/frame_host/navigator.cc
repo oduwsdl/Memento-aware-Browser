@@ -301,11 +301,19 @@ void Navigator::DidNavigate(
   if (datetime != "" && root != frame_tree_node)
     root->AddMementoDate(datetime);
 
+  int iterations = root->GetIterations() + 1;
+
+  root->SetIterations(iterations);
+
+  DVLOG(0) << "iTERATION";
+  DVLOG(0) << iterations;
+  DVLOG(0) << datetime;
+
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
   bool did_navigate = controller_->RendererDidNavigate(
       render_frame_host, params, &details, is_same_document_navigation,
-      previous_document_was_activated, navigation_request.get(), datetime);
+      previous_document_was_activated, navigation_request.get(), datetime, iterations);
 
   // If the history length and/or offset changed, update other renderers in the
   // FrameTree.

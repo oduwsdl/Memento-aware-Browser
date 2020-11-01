@@ -1001,7 +1001,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
     bool is_same_document_navigation,
     bool previous_document_was_activated,
     NavigationRequest* navigation_request,
-    std::string datetime) {
+    std::string datetime,
+    int iterations) {
   DCHECK(navigation_request);
   is_initial_navigation_ = false;
 
@@ -1138,6 +1139,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
         NavigationEntry* visible_entry = GetVisibleEntry();
         visible_entry->SetMementoDates(datetimes);
 
+        visible_entry->SetIterations(iterations);
+
         // We don't send a notification about auto-subframe PageState during
         // UpdateStateForFrame, since it looks like nothing has changed.  Send
         // it here at commit time instead.
@@ -1191,6 +1194,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
   DVLOG(0) << "\t*  datetime:  " << datetime;
   DVLOG(0) << "\t******************************************************\n";*/
 
+
+
   if (datetime != "")
     active_entry->SetMementoDatetime(datetime);
   else if (params.memento_datetime != "")
@@ -1201,6 +1206,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
   if (active_entry->GetMementoDatetime() != "") {
     active_entry->SetMementoInfo(true);
   }
+
+  active_entry->SetIterations(iterations);
 
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.

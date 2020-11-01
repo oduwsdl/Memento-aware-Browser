@@ -231,6 +231,9 @@ class NavigationEntry : public base::SupportsUserData {
   virtual void SetMixedMementoContentInfo(bool is_mixed_memento_content) = 0;
   virtual bool GetMixedMementoContentInfo() = 0;
 
+  virtual void SetIterations(int iterations) = 0;
+  virtual int GetIterations() = 0;
+
   // The redirect chain traversed during this navigation, from the initial
   // redirecting URL to the final non-redirecting current URL.
   virtual void SetRedirectChain(const std::vector<GURL>& redirects) = 0;

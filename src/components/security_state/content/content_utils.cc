@@ -423,10 +423,6 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   content::NavigationEntry* entry =
       web_contents->GetController().GetVisibleEntry();
 
-  /*content::RenderFrameHost* frame = web_contents->GetMainFrame();
-
-  frame->GetLastCommittedURL();*/
-
   if (!entry)
     return state;
 
@@ -447,16 +443,20 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
-  state->mixed_memento = true;
-  if (entry->GetMementoDatetime() != "") {
+  DVLOG(0) << "Iterations in ContentUtils:";
+  DVLOG(0) << entry->GetIterations();
+  DVLOG(0) << entry->GetMementoDates().size();
+  if (entry->GetMementoDatetime() != "" && entry->GetMementoDates().size() <= 2) {
     state->memento_status = true;
     state->mixed_memento = false;
+    state->memento_datetime = entry->GetMementoDatetime();
   }
   else if (entry->GetMementoDates().size() > 1) {
     DVLOG(0) << "Detected Mixed Archival Content.";
     state->memento_status = true;
+    state->mixed_memento = true;
+    state->memento_datetime = "";
   }
-  state->memento_datetime = entry->GetMementoDatetime();
   //state->mixed_memento = true;//entry->GetMixedMementoContentInfo();
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;

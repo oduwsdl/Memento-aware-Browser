@@ -681,6 +681,14 @@ void NavigationEntryImpl::SetMementoDates(std::vector<std::string> datetimes) {
   memento_dates_ = datetimes;
 }
 
+void NavigationEntryImpl::SetIterations(int iterations) {
+  iterations_ = iterations;
+}
+
+int NavigationEntryImpl::GetIterations() {
+  return iterations_;
+}
+
 std::vector<std::string> NavigationEntryImpl::GetMementoDates() {
   return memento_dates_;
 }

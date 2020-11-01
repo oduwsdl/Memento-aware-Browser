@@ -235,6 +235,9 @@ void FrameTreeNode::ResetForNavigation() {
   replication_state_.accumulated_csp_headers.clear();
   render_manager_.OnDidResetContentSecurityPolicy();
 
+  memento_dates_.clear();
+  iterations_ = 0;
+
   // Clear any CSP-set sandbox flags, and the declared feature policy for the
   // frame.
   UpdateFramePolicyHeaders(network::mojom::WebSandboxFlags::kNone, {});
@@ -266,6 +269,14 @@ void FrameTreeNode::AddMementoDate(std::string memento_datetime) {
 
 std::vector<std::string> FrameTreeNode::GetMementoDates() {
   return memento_dates_;
+}
+
+void FrameTreeNode::SetIterations(int iterations) {
+  iterations_ = iterations;
+}
+
+int FrameTreeNode::GetIterations() {
+  return iterations_;
 }
 
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
