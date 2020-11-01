@@ -4241,8 +4241,6 @@ NavigationRequest::MakeDidCommitProvisionalLoadParamsForBFCache() {
   params->transition = common_params().transition;
   params->history_list_was_cleared = false;
   params->request_id = GetGlobalRequestID().request_id;
-  //params->memento_status = GetMementoInfo();
-  //params->memento_datetime = GetMementoDatetime();
 
   return params;
 }
