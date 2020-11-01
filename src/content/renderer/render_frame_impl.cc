@@ -4921,9 +4921,6 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
       std::make_unique<FrameHostMsg_DidCommitProvisionalLoad_Params>();
   params->http_status_code = response.HttpStatusCode();
 
-  params->memento_status = response.MementoInfo();
-  params->memento_datetime = response.MementoDatetime();
-
   params->url_is_unreachable = document_loader->HasUnreachableURL();
   params->method = "GET";
   params->intended_as_new_entry =
