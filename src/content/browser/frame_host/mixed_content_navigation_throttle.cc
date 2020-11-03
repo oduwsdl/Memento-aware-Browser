@@ -143,8 +143,6 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
   RenderFrameHostImpl* mixed_content_frame =
       InWhichFrameIsContentMixed(node, request->GetURL());
 
-  // Find which frames contain memento content
-  InWhichFrameIsMemento(node, request->GetURL());
 
   if (!mixed_content_frame) {
     MaybeSendBlinkFeatureUsageReport();
@@ -306,42 +304,6 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsContentMixed(
     mixed_content_features_.insert(
         blink::mojom::WebFeature::
             kMixedContentInSecureFrameThatDoesNotRestrictMixedContent);
-  }
-
-  return mixed_content_frame;
-}
-
-RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsMemento(
-    FrameTreeNode* node,
-    const GURL& url) {
-  // Main frame navigations cannot be mixed content.
-  // TODO(carlosk): except for form submissions which might be supported in the
-  // future.
-  if (node->IsMainFrame())
-    return nullptr;
-
-  /*DVLOG(0) << "\t-------------------------------------------------";
-  DVLOG(0) << "\tInWhichFrameIsMemento beginning...";
-  DVLOG(0) << "\t  " << node->current_url();
-  DVLOG(0) << "\t  " << node->depth();
-  DVLOG(0) << "\t-------------------------------------------------\n";*/
-
-  RenderFrameHostImpl* mixed_content_frame = nullptr;
-  RenderFrameHostImpl* root = node->parent()->GetMainFrame();
-
-  if (node->parent()->last_memento_datetime() != "") {
-    mixed_content_frame = root;
-
-    /*DVLOG(0) << "\t******************************************************";
-    DVLOG(0) << "\t*  Memento-Datetime response header found for an element.";
-    DVLOG(0) << "\t* ----------------------------------------------------";
-    DVLOG(0) << "\t*  Class: MixedContentNavigationThrottle";
-    DVLOG(0) << "\t*  Date: " << node->parent()->last_memento_datetime();
-    DVLOG(0) << "\t*  Page: " << node->current_url();
-    DVLOG(0) << "\t*  Depth: " << node->depth();
-    DVLOG(0) << "\t******************************************************\n";*/
-
-    //node->navigator().GetController()->GetVisibleEntry()->SetMementoDatetime(node->parent()->last_memento_datetime());
   }
 
   return mixed_content_frame;

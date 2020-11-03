@@ -54,11 +54,6 @@ class MixedContentNavigationThrottle : public NavigationThrottle {
   RenderFrameHostImpl* InWhichFrameIsContentMixed(FrameTreeNode* node,
                                                   const GURL& url);
 
-  // If a frame has a Memento datetime, the Memento status for the root
-  // is set to true.
-  RenderFrameHostImpl* InWhichFrameIsMemento(FrameTreeNode* node,
-                                                  const GURL& url);
-
   // Updates the renderer about any Blink feature usage.
   void MaybeSendBlinkFeatureUsageReport();
 
