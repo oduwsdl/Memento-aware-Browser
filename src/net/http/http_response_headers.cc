@@ -9,6 +9,8 @@
 
 #include "net/http/http_response_headers.h"
 
+#include <regex>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -600,7 +602,7 @@ bool HttpResponseHeaders::EnumerateHeader(size_t* iter,
   return true;
 }
 
-std::string HttpResponseHeaders::GetMementoDatetime() const {
+/*std::string HttpResponseHeaders::GetMementoDatetime() const {
 
   std::string value = "";
   std::string field = "Memento-Datetime";
@@ -623,6 +625,37 @@ std::string HttpResponseHeaders::GetMementoDatetime() const {
   value.assign(i+17, i + 46);
 
   return value;
+}*/
+
+std::string HttpResponseHeaders::GetMementoDatetime() const {
+
+  std::string value = "";
+  std::string field = "Memento-Datetime";
+
+  std::string status_text = GetStatusLine();
+  std::string::const_iterator value_begin = raw_headers_.begin();
+  std::string::const_iterator value_end = raw_headers_.end();
+  std::string::const_iterator field_begin = field.begin();
+  std::string::const_iterator field_end = field.end();
+
+  std::string::const_iterator i = std::search(value_begin, value_end, field_begin, field_end);
+
+  if (i == value_end) { // If "Memento-Datetime" was not present
+    std::string field = "memento-datetime";
+    std::string::const_iterator field_begin = field.begin();
+    std::string::const_iterator field_end = field.end();
+    i = std::search(value_begin, value_end, field_begin, field_end);
+  }
+
+  value.assign(i+10, i + 50);
+  const std::string s = value;
+
+  std::regex RGX("([a-zA-Z]{3}[\\,][\\ ]\\d{2}[\\ ][a-zA-Z]{3}[\\ ]\\d{4}[\\ ]\\d{2}[\\:]\\d{2}[\\:]\\d{2}[\\ ][a-zA-Z]{3})");
+  std::smatch match;
+
+  std::regex_search(s.begin(), s.end(), match, RGX);
+
+  return std::string(match[1]);
 }
 
 bool HttpResponseHeaders::HasHeaderValue(base::StringPiece name,
