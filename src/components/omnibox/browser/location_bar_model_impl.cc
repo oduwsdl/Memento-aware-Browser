@@ -279,8 +279,6 @@ base::string16 LocationBarModelImpl::GetSecureDisplayText() const {
 
 base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
 
-  DVLOG(0) << "Determining Memento display text.";
-
   std::map<std::string, std::string> months
     {
         { "Jan", "01" },
@@ -303,26 +301,20 @@ base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
 
       const std::string s = GetMementoDatetime();
 
-      DVLOG(0) << "The datetime = " << s;
-
       // Get the day
       std::regex dayRGX("[\\ ](\\d{2})[\\ ]");
       std::smatch dayMatch;
+      std::regex_search(s.begin(), s.end(), dayMatch, dayRGX);
 
-      if (std::regex_search(s.begin(), s.end(), dayMatch, dayRGX))
-          DVLOG(0 ) << "Day: " << dayMatch[1] << '\n';
-
+      // Get the year
       std::regex yearRGX("(\\d{4})");
       std::smatch yearMatch;
+      std::regex_search(s.begin(), s.end(), yearMatch, yearRGX);
 
-      if (std::regex_search(s.begin(), s.end(), yearMatch, yearRGX))
-          DVLOG(0 ) << "Year: " << yearMatch[1] << '\n';
-
+      // Get the month
       std::regex monthRGX("([A-Z]{1}[a-z]{2})[\\ ]");
       std::smatch monthMatch;
-
-      if (std::regex_search(s.begin(), s.end(), monthMatch, monthRGX))
-          DVLOG(0 ) << "Month: " << months[monthMatch[1]] << '\n';
+      std::regex_search(s.begin(), s.end(), monthMatch, monthRGX);
 
       std::string dateString = std::string(yearMatch[1]) + "-" + 
                                months[monthMatch[1]] + "-" + 
