@@ -134,11 +134,6 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
   NavigationRequest* request = NavigationRequest::From(navigation_handle());
   FrameTreeNode* node = request->frame_tree_node();
 
-  DVLOG(0) << "\t-------------------------------------------------";
-  DVLOG(0) << "\tShouldBlockNavigation beginning...";
-  DVLOG(0) << "\t  " << node->current_url();
-  DVLOG(0) << "\t-------------------------------------------------\n";
-
   // Find the parent frame where mixed content is characterized, if any.
   RenderFrameHostImpl* mixed_content_frame =
       InWhichFrameIsContentMixed(node, request->GetURL());

@@ -305,10 +305,6 @@ void Navigator::DidNavigate(
 
   root->SetIterations(iterations);
 
-  DVLOG(0) << "iTERATION";
-  DVLOG(0) << iterations;
-  DVLOG(0) << datetime;
-
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
   bool did_navigate = controller_->RendererDidNavigate(

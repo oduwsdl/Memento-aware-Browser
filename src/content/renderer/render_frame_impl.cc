@@ -5199,13 +5199,6 @@ void RenderFrameImpl::DidCommitNavigationInternal(
   auto params = MakeDidCommitProvisionalLoadParams(commit_type, transition,
                                                    embedding_token);
 
-  DVLOG(0) << "\t******************************************************";
-  DVLOG(0) << "\t*  Params contains:";
-  DVLOG(0) << "\t* ----------------------------------------------------";
-  DVLOG(0) << "\t*  Class:  RenderFrameImpl";
-  DVLOG(0) << "\t*  Date:  " << params->memento_datetime;
-  DVLOG(0) << "\t******************************************************\n";
-
   if (was_within_same_document) {    
     GetFrameHost()->DidCommitSameDocumentNavigation(std::move(params));
   } else {
