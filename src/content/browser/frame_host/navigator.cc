@@ -312,13 +312,13 @@ void Navigator::DidNavigate(
   // found, then check if the host matches the root host.
   if (datetime == "") {
 
-    DVLOG(0) << "NO DATETIME FOUND";
+    /*DVLOG(0) << "NO DATETIME FOUND";
     DVLOG(0) << "The datetime is: " << datetime;
     DVLOG(0) << "Host: " << frame_tree_node->current_url().host();
     DVLOG(0) << "URL: " << frame_tree_node->current_url();
     DVLOG(0) << "Root: " << root->current_url().host();
     DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
-    DVLOG(0) << "Depth: " << frame_tree_node->depth();
+    DVLOG(0) << "Depth: " << frame_tree_node->depth();*/
 
     if (frame_tree_node->current_url().host().length() > 3 && 
         frame_tree_node->current_url().host() != root->current_url().host() &&
@@ -330,9 +330,7 @@ void Navigator::DidNavigate(
 
   }
 
-  int iterations = root->GetIterations() + 1;
-
-  root->SetIterations(iterations);
+  root->SetIterations(root->GetIterations() + 1);
 
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;

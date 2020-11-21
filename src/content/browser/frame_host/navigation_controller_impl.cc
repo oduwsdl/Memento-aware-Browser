@@ -1132,37 +1132,26 @@ bool NavigationControllerImpl::RendererDidNavigate(
       break;
     case NAVIGATION_TYPE_AUTO_SUBFRAME:
 
-      /*DVLOG(0) << "\t******************************************************";
-      DVLOG(0) << "\t*  This is what the datetime is.";
-      DVLOG(0) << "\t* ----------------------------------------------------";
-      DVLOG(0) << "\t*  Class:  NavigationControllerImpl";
-      DVLOG(0) << "\t*  Vector length:  " << datetimes.size();
-      DVLOG(0) << "\t******************************************************\n";*/
-
       if (!RendererDidNavigateAutoSubframe(rfh, params, navigation_request)) {
 
         NavigationEntry* visible_entry = GetVisibleEntry();
+
         if (datetime != "" &&
             root != frame_tree_node && 
             frame_tree_node->depth() < 2) {
 
           root->AddMementoDate(datetime);
+          visible_entry->SetMementoDates(root->GetMementoDates());
 
-          std::vector<std::string> datetimes = root->GetMementoDates();
 
-
-          DVLOG(0) << "-------------------------------------------";
+          /*DVLOG(0) << "-------------------------------------------";
           DVLOG(0) << "The datetime is: " << datetime;
           DVLOG(0) << "Host: " << frame_tree_node->current_url().host();
           DVLOG(0) << "URL: " << frame_tree_node->current_url();
           DVLOG(0) << "Root: " << root->current_url().host();
           DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
           DVLOG(0) << "Depth: " << frame_tree_node->depth();
-          DVLOG(0) << "-------------------------------------------";
-
-          visible_entry->SetMementoDates(datetimes);
-
-
+          DVLOG(0) << "-------------------------------------------";*/
         }
 
         visible_entry->SetIterations(iterations);
@@ -1213,20 +1202,20 @@ bool NavigationControllerImpl::RendererDidNavigate(
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
 
-  DVLOG(0) << "\t******************************************************";
+  /*DVLOG(0) << "\t******************************************************";
   DVLOG(0) << "\t*  Memento-Datetime set for entry.";
   DVLOG(0) << "\t* ----------------------------------------------------";
   DVLOG(0) << "\t*  Class:  NavigationControllerImpl";
   DVLOG(0) << "\t*  Params:  " << params.memento_datetime;
   DVLOG(0) << "\t*  datetime:  " << datetime;
-  DVLOG(0) << "\t******************************************************\n";
+  DVLOG(0) << "\t******************************************************\n";*/
 
 
 
   if (datetime != "" && (active_entry->GetMementoDatetime() != "Block" || navigation_request->GetReloadType() == ReloadType::NONE)) {
     active_entry->SetMementoDatetime(datetime);
     active_entry->SetMementoInfo(true);
-  } else if (params.memento_datetime != "" && active_entry->GetMementoDatetime() != "Block") {
+  } else if (params.memento_datetime != "" && (active_entry->GetMementoDatetime() != "Block" || navigation_request->GetReloadType() == ReloadType::NONE)) {
     active_entry->SetMementoDatetime(params.memento_datetime);
     active_entry->SetMementoInfo(true);
   }
