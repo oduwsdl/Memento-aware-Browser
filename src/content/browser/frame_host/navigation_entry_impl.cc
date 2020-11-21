@@ -385,7 +385,10 @@ NavigationEntryImpl::NavigationEntryImpl(
       is_overriding_user_agent_(false),
       http_status_code_(0),
       memento_info_(false),
+      all_frames_loaded_(false),
+      current_datetime_(""),
       is_mixed_memento_content_(false),
+      mixed_memento_live_web_(false),
       is_renderer_initiated_(is_renderer_initiated),
       should_replace_entry_(false),
       should_clear_history_list_(false),
@@ -665,6 +668,22 @@ bool NavigationEntryImpl::GetMementoInfo() {
   return memento_info_;
 }
 
+void NavigationEntryImpl::SetAllFramesLoaded(bool all_frames_loaded) {
+  all_frames_loaded_ = all_frames_loaded;
+}
+
+bool NavigationEntryImpl::GetAllFramesLoaded() {
+  return all_frames_loaded_;
+}
+
+void NavigationEntryImpl::SetCurrentDatetime(std::string current_datetime) {
+  current_datetime_ = current_datetime;
+}
+
+std::string NavigationEntryImpl::GetCurrentDatetime() {
+  return current_datetime_;
+}
+
 void NavigationEntryImpl::SetMementoDatetime(std::string memento_datetime) {
   memento_datetime_ = memento_datetime;
 }
@@ -679,6 +698,14 @@ void NavigationEntryImpl::AddMementoDate(std::string memento_datetime) {
 
 void NavigationEntryImpl::SetMementoDates(std::vector<std::string> datetimes) {
   memento_dates_ = datetimes;
+}
+
+void NavigationEntryImpl::SetIsMixedMementoLiveWeb(bool mixed_memento_live_web) {
+  mixed_memento_live_web_ = mixed_memento_live_web;
+}
+
+bool NavigationEntryImpl::GetIsMixedMementoLiveWeb() {
+  return mixed_memento_live_web_;
 }
 
 void NavigationEntryImpl::SetIterations(int iterations) {

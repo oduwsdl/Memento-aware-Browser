@@ -84,6 +84,8 @@ class LocationBarModel {
   // Returns whether the page contains a mix of Memento content
   virtual bool IsMixedContent() const = 0;
 
+  virtual bool IsMixedMementoLiveWeb() const = 0;
+
   virtual std::string GetMementoDatetime() const = 0;
 
  protected:

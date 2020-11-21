@@ -210,7 +210,10 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
   }
   else if (memento_status && memento_datetime == "") {
     security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MIXED_MEMENTO_SUMMARY);
-    security_description->memento_info = base::UTF8ToUTF16("The current page contains web archived content.");
+    std::string memento_info_string = std::string("The current page contains web archived content. \n") + 
+                                                   std::string("Wed, 15 Aug 2018 12:55:04 GMT\n") + std::string("Wed, 15 Aug 2018 12:55:04 GMT\n")
+                                                    + std::string("Wed, 15 Aug 2018 12:55:04 GMT");
+    security_description->memento_info = base::UTF8ToUTF16(memento_info_string);
   }
   else {
     security_description->memento_info = base::UTF8ToUTF16("");

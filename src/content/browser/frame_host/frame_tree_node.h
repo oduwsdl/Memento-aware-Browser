@@ -134,6 +134,10 @@ class CONTENT_EXPORT FrameTreeNode {
 
   std::vector<std::string> GetMementoDates();
 
+  void SetIsMixedMementoLiveWeb(bool mixed_memento_live_web);
+
+  bool GetIsMixedMementoLiveWeb();
+
   void SetIterations(int iterations);
 
   int GetIterations();
@@ -498,6 +502,8 @@ class CONTENT_EXPORT FrameTreeNode {
   FrameReplicationState replication_state_;
 
   std::vector<std::string> memento_dates_;
+
+  bool mixed_memento_live_web_;
 
   int iterations_ = 0;
 

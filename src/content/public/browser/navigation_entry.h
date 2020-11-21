@@ -220,6 +220,12 @@ class NavigationEntry : public base::SupportsUserData {
   virtual void SetMementoInfo(bool memento_info) = 0;
   virtual bool GetMementoInfo() = 0;
 
+  virtual void SetAllFramesLoaded(bool all_frames_loaded) = 0;
+  virtual bool GetAllFramesLoaded() = 0;
+
+  virtual void SetCurrentDatetime(std::string current_datetime) = 0;
+  virtual std::string GetCurrentDatetime() = 0;
+
   virtual void SetMementoDatetime(std::string memento_datetime) = 0;
   virtual std::string GetMementoDatetime() = 0;
 
@@ -230,6 +236,9 @@ class NavigationEntry : public base::SupportsUserData {
   // Flag for whether or not the webpage has mixed memento content
   virtual void SetMixedMementoContentInfo(bool is_mixed_memento_content) = 0;
   virtual bool GetMixedMementoContentInfo() = 0;
+
+  virtual void SetIsMixedMementoLiveWeb(bool mixed_memento_live_web) = 0;
+  virtual bool GetIsMixedMementoLiveWeb() = 0;
 
   virtual void SetIterations(int iterations) = 0;
   virtual int GetIterations() = 0;

@@ -443,21 +443,33 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
-  DVLOG(0) << "Iterations in ContentUtils:";
-  DVLOG(0) << entry->GetIterations();
-  DVLOG(0) << entry->GetMementoDates().size();
-  if (entry->GetMementoDatetime() != "" && entry->GetMementoDates().size() <= 2) {
+
+  DVLOG(0) << "------------------------------------------";
+  DVLOG(0) << "Memento info: " << entry->GetMementoInfo();
+  DVLOG(0) << "Live web with memento(s): " << entry->GetMixedMementoContentInfo();
+  DVLOG(0) << "Memento with live web: " << entry->GetIsMixedMementoLiveWeb();
+  DVLOG(0) << "Datetime: " << entry->GetMementoDatetime();
+  DVLOG(0) << "Datetime array size: " << entry->GetMementoDates().size();
+  DVLOG(0) << "Iterations: " << entry->GetIterations();
+
+  if (entry->GetMementoDatetime() != "" && entry->GetMementoDatetime() != "Block") {
     state->memento_status = true;
     state->mixed_memento = false;
     state->memento_datetime = entry->GetMementoDatetime();
+
+    if (entry->GetIsMixedMementoLiveWeb()) {
+      state->mixed_memento_live_web = entry->GetIsMixedMementoLiveWeb();
+    }
+
   }
-  else if (entry->GetMementoDates().size() > 1) {
-    DVLOG(0) << "Detected Mixed Archival Content.";
+  else if (entry->GetMementoDates().size() >= 1) {
     state->memento_status = true;
     state->mixed_memento = true;
     state->memento_datetime = "";
+    entry->SetMementoDatetime("Block");
+
   }
-  //state->mixed_memento = true;//entry->GetMixedMementoContentInfo();
+  
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;

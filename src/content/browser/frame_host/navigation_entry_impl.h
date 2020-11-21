@@ -142,6 +142,10 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   int GetHttpStatusCode() override;
   void SetMementoInfo(bool memento_info) override;
   bool GetMementoInfo() override;
+  void SetAllFramesLoaded(bool all_frames_loaded) override;
+  bool GetAllFramesLoaded() override;
+  void SetCurrentDatetime(std::string current_datetime) override;
+  std::string GetCurrentDatetime() override;
   void SetMementoDatetime(std::string memento_datetime) override;
   std::string GetMementoDatetime() override;
   void AddMementoDate(std::string memento_datetime) override;
@@ -149,6 +153,8 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   std::vector<std::string> GetMementoDates() override;
   void SetMixedMementoContentInfo(bool is_mixed_memento_info) override;
   bool GetMixedMementoContentInfo() override;
+  void SetIsMixedMementoLiveWeb(bool mixed_memento_live_web) override;
+  bool GetIsMixedMementoLiveWeb() override;
   void SetIterations(int iterations) override;
   int GetIterations() override;
   void SetRedirectChain(const std::vector<GURL>& redirects) override;
@@ -450,9 +456,12 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   base::Time timestamp_;
   int http_status_code_;
   bool memento_info_;
+  bool all_frames_loaded_;
+  std::string current_datetime_;
   std::string memento_datetime_;
   bool is_mixed_memento_content_;
   std::vector<std::string> memento_dates_;
+  bool mixed_memento_live_web_;
   int iterations_;
 
   // This member is not persisted with session restore because it is transient.

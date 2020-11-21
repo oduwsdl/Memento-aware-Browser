@@ -269,6 +269,7 @@ VisibleSecurityState::VisibleSecurityState()
       memento_status(false),
       memento_datetime(""),
       mixed_memento(false),
+      mixed_memento_live_web(false),
       key_exchange_group(0),
       peer_signature_algorithm(0),
       displayed_mixed_content(false),

@@ -299,28 +299,32 @@ base::string16 LocationBarModelImpl::GetMementoDisplayText() const {
       return base::UTF8ToUTF16("Mixed archival content");
     else if (GetMementoDatetime() != "") {
 
-      const std::string s = GetMementoDatetime();
+      if (IsMixedMementoLiveWeb()) {
+        return base::UTF8ToUTF16("Memento + live content");
+      } else {
+        const std::string s = GetMementoDatetime();
 
-      // Get the day
-      std::regex dayRGX("[\\ ](\\d{2})[\\ ]");
-      std::smatch dayMatch;
-      std::regex_search(s.begin(), s.end(), dayMatch, dayRGX);
+        // Get the day
+        std::regex dayRGX("[\\ ](\\d{2})[\\ ]");
+        std::smatch dayMatch;
+        std::regex_search(s.begin(), s.end(), dayMatch, dayRGX);
 
-      // Get the year
-      std::regex yearRGX("(\\d{4})");
-      std::smatch yearMatch;
-      std::regex_search(s.begin(), s.end(), yearMatch, yearRGX);
+        // Get the year
+        std::regex yearRGX("(\\d{4})");
+        std::smatch yearMatch;
+        std::regex_search(s.begin(), s.end(), yearMatch, yearRGX);
 
-      // Get the month
-      std::regex monthRGX("([A-Z]{1}[a-z]{2})[\\ ]");
-      std::smatch monthMatch;
-      std::regex_search(s.begin(), s.end(), monthMatch, monthRGX);
+        // Get the month
+        std::regex monthRGX("([A-Z]{1}[a-z]{2})[\\ ]");
+        std::smatch monthMatch;
+        std::regex_search(s.begin(), s.end(), monthMatch, monthRGX);
 
-      std::string dateString = std::string(yearMatch[1]) + "-" + 
-                               months[monthMatch[1]] + "-" + 
-                               std::string(dayMatch[1]);
+        std::string dateString = std::string(yearMatch[1]) + "-" + 
+                                 months[monthMatch[1]] + "-" + 
+                                 std::string(dayMatch[1]);
 
-      return base::UTF8ToUTF16(dateString);
+        return base::UTF8ToUTF16(dateString);
+      }
     }
     else {
       return base::UTF8ToUTF16("Mixed archival content");
@@ -360,6 +364,13 @@ bool LocationBarModelImpl::IsMixedContent() const {
           visible_security_state = delegate_->GetVisibleSecurityState();
 
   return visible_security_state->mixed_memento;
+}
+
+bool LocationBarModelImpl::IsMixedMementoLiveWeb() const {
+  std::unique_ptr<security_state::VisibleSecurityState>
+          visible_security_state = delegate_->GetVisibleSecurityState();
+
+  return visible_security_state->mixed_memento_live_web;
 }
 
 std::string LocationBarModelImpl::GetMementoDatetime() const {

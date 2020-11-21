@@ -136,6 +136,7 @@ FrameTreeNode::FrameTreeNode(
           false /* has an active user gesture */,
           false /* has received a user gesture before nav */,
           owner_type),
+      mixed_memento_live_web_(false),
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
@@ -269,6 +270,14 @@ void FrameTreeNode::AddMementoDate(std::string memento_datetime) {
 
 std::vector<std::string> FrameTreeNode::GetMementoDates() {
   return memento_dates_;
+}
+
+void FrameTreeNode::SetIsMixedMementoLiveWeb(bool mixed_memento_live_web) {
+  mixed_memento_live_web_ = mixed_memento_live_web;
+}
+
+bool FrameTreeNode::GetIsMixedMementoLiveWeb() {
+  return mixed_memento_live_web_;
 }
 
 void FrameTreeNode::SetIterations(int iterations) {

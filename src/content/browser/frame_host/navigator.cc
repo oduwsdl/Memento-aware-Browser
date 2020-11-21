@@ -293,13 +293,42 @@ void Navigator::DidNavigate(
   if (ui::PageTransitionIsMainFrame(params.transition) && delegate_)
     delegate_->SetMainFrameMimeType(params.contents_mime_type);
 
-  /// Grab the root node
+  // Grab the root node
   FrameTreeNode* root = frame_tree->root();
 
   std::string datetime = render_frame_host->DidNavigate(params, is_same_document_navigation);
 
-  if (datetime != "" && root != frame_tree_node)
-    root->AddMementoDate(datetime);
+  /*DVLOG(0) << "-------------------------------------------";
+  DVLOG(0) << "The datetime is: " << datetime;
+  DVLOG(0) << "Host: " << frame_tree_node->current_url().host();
+  DVLOG(0) << "URL: " << frame_tree_node->current_url();
+  DVLOG(0) << "Root: " << root->current_url().host();
+  DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
+  DVLOG(0) << "Depth: " << frame_tree_node->depth();
+  DVLOG(0) << "-------------------------------------------";*/
+
+  // If we have found a datetime, then we need to add it to
+  // the list of datetimes for the page. If no datetime was
+  // found, then check if the host matches the root host.
+  if (datetime == "") {
+
+    DVLOG(0) << "NO DATETIME FOUND";
+    DVLOG(0) << "The datetime is: " << datetime;
+    DVLOG(0) << "Host: " << frame_tree_node->current_url().host();
+    DVLOG(0) << "URL: " << frame_tree_node->current_url();
+    DVLOG(0) << "Root: " << root->current_url().host();
+    DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
+    DVLOG(0) << "Depth: " << frame_tree_node->depth();
+
+    if (frame_tree_node->current_url().host().length() > 3 && 
+        frame_tree_node->current_url().host() != root->current_url().host() &&
+        frame_tree_node->current_frame_host()->last_http_status_code() == 200) {
+
+      root->SetIsMixedMementoLiveWeb(true);
+
+    }
+
+  }
 
   int iterations = root->GetIterations() + 1;
 

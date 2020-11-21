@@ -43,6 +43,7 @@ class LocationBarModelImpl : public LocationBarModel {
   bool IsOfflinePage() const override;
   bool IsMemento() const override;
   bool IsMixedContent() const override;
+  bool IsMixedMementoLiveWeb() const override;
   std::string GetMementoDatetime() const override;
 
  private:

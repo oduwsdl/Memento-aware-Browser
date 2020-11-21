@@ -59,6 +59,7 @@
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
+#include "content/public/browser/reload_type.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/web_package/web_bundle_navigation_info.h"
 #include "content/common/content_constants_internal.h"
@@ -1102,8 +1103,12 @@ bool NavigationControllerImpl::RendererDidNavigate(
 
   //NavigationEntryImpl* active_entry = GetLastCommittedEntry();
   FrameTreeNode* root = rfh->frame_tree()->root();
+  FrameTreeNode* frame_tree_node = rfh->frame_tree_node();
 
-  std::vector<std::string> datetimes = root->GetMementoDates();
+  bool mixed_memento_live_web = root->GetIsMixedMementoLiveWeb();
+
+  DVLOG(0) << "************************************************";
+  DVLOG(0) << mixed_memento_live_web;
 
   switch (details->type) {
     case NAVIGATION_TYPE_NEW_PAGE:
@@ -1137,9 +1142,31 @@ bool NavigationControllerImpl::RendererDidNavigate(
       if (!RendererDidNavigateAutoSubframe(rfh, params, navigation_request)) {
 
         NavigationEntry* visible_entry = GetVisibleEntry();
-        visible_entry->SetMementoDates(datetimes);
+        if (datetime != "" &&
+            root != frame_tree_node && 
+            frame_tree_node->depth() < 2) {
+
+          root->AddMementoDate(datetime);
+
+          std::vector<std::string> datetimes = root->GetMementoDates();
+
+
+          DVLOG(0) << "-------------------------------------------";
+          DVLOG(0) << "The datetime is: " << datetime;
+          DVLOG(0) << "Host: " << frame_tree_node->current_url().host();
+          DVLOG(0) << "URL: " << frame_tree_node->current_url();
+          DVLOG(0) << "Root: " << root->current_url().host();
+          DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
+          DVLOG(0) << "Depth: " << frame_tree_node->depth();
+          DVLOG(0) << "-------------------------------------------";
+
+          visible_entry->SetMementoDates(datetimes);
+
+
+        }
 
         visible_entry->SetIterations(iterations);
+        visible_entry->SetIsMixedMementoLiveWeb(mixed_memento_live_web);
 
         // We don't send a notification about auto-subframe PageState during
         // UpdateStateForFrame, since it looks like nothing has changed.  Send
@@ -1186,28 +1213,27 @@ bool NavigationControllerImpl::RendererDidNavigate(
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
 
-  /*DVLOG(0) << "\t******************************************************";
+  DVLOG(0) << "\t******************************************************";
   DVLOG(0) << "\t*  Memento-Datetime set for entry.";
   DVLOG(0) << "\t* ----------------------------------------------------";
   DVLOG(0) << "\t*  Class:  NavigationControllerImpl";
   DVLOG(0) << "\t*  Params:  " << params.memento_datetime;
   DVLOG(0) << "\t*  datetime:  " << datetime;
-  DVLOG(0) << "\t******************************************************\n";*/
+  DVLOG(0) << "\t******************************************************\n";
 
 
 
-  if (datetime != "")
+  if (datetime != "" && (active_entry->GetMementoDatetime() != "Block" || navigation_request->GetReloadType() == ReloadType::NONE)) {
     active_entry->SetMementoDatetime(datetime);
-  else if (params.memento_datetime != "")
+    active_entry->SetMementoInfo(true);
+  } else if (params.memento_datetime != "" && active_entry->GetMementoDatetime() != "Block") {
     active_entry->SetMementoDatetime(params.memento_datetime);
-
-  std::vector<std::string> dates = active_entry->GetMementoDates();
-  
-  if (active_entry->GetMementoDatetime() != "") {
     active_entry->SetMementoInfo(true);
   }
 
   active_entry->SetIterations(iterations);
+  active_entry->SetIsMixedMementoLiveWeb(mixed_memento_live_web);
+  active_entry->SetAllFramesLoaded(true);
 
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.
