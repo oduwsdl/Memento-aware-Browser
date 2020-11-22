@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/feature_list.h"
 #include "base/macros.h"
@@ -180,6 +181,8 @@ struct VisibleSecurityState {
   bool mixed_memento;
 
   bool mixed_memento_live_web;
+
+  std::vector<std::string> memento_dates;
   // The ID of the (EC)DH group used by the key exchange. The value is zero if
   // unknown (older cache entries may not store the value) or not applicable.
   uint16_t key_exchange_group;

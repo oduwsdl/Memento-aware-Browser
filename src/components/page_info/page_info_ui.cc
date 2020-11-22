@@ -197,7 +197,8 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
     int details_id,
     PageInfoUI::SecurityDescriptionType type,
     bool memento_status,
-    std::string memento_datetime) {
+    std::string memento_datetime,
+    std::vector<std::string> memento_dates) {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description(
       new PageInfoUI::SecurityDescription());
   security_description->summary_style = style;
@@ -210,9 +211,17 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
   }
   else if (memento_status && memento_datetime == "") {
     security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MIXED_MEMENTO_SUMMARY);
-    std::string memento_info_string = std::string("The current page contains web archived content. \n") + 
+
+    std::string memento_info_string = "The current page contains web archived content. \n\n\n\n\n\n";
+    for (std::vector<std::string>::const_iterator i = memento_dates.begin(); i != memento_dates.end(); ++i)
+      memento_info_string += *i + "\n";
+
+    memento_info_string = memento_info_string.substr(0, memento_info_string.size()-2);
+
+    /*std::string memento_info_string = std::string("The current page contains web archived content. \n") + 
                                                    std::string("Wed, 15 Aug 2018 12:55:04 GMT\n") + std::string("Wed, 15 Aug 2018 12:55:04 GMT\n")
-                                                    + std::string("Wed, 15 Aug 2018 12:55:04 GMT");
+                                                    + std::string("Wed, 15 Aug 2018 12:55:04 GMT");*/
+
     security_description->memento_info = base::UTF8ToUTF16(memento_info_string);
   }
   else {
@@ -310,21 +319,24 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
                                        IDS_PAGE_INFO_MALWARE_DETAILS,
                                        SecurityDescriptionType::SAFE_BROWSING,
                                        identity_info.memento_status,
-                                       identity_info.memento_datetime);
+                                       identity_info.memento_datetime,
+                                       identity_info.memento_dates);
     case PageInfo::SAFE_BROWSING_STATUS_SOCIAL_ENGINEERING:
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_SOCIAL_ENGINEERING_SUMMARY,
                                        IDS_PAGE_INFO_SOCIAL_ENGINEERING_DETAILS,
                                        SecurityDescriptionType::SAFE_BROWSING,
                                        identity_info.memento_status,
-                                       identity_info.memento_datetime);
+                                       identity_info.memento_datetime,
+                                       identity_info.memento_dates);
     case PageInfo::SAFE_BROWSING_STATUS_UNWANTED_SOFTWARE:
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_UNWANTED_SOFTWARE_SUMMARY,
                                        IDS_PAGE_INFO_UNWANTED_SOFTWARE_DETAILS,
                                        SecurityDescriptionType::SAFE_BROWSING,
                                        identity_info.memento_status,
-                                       identity_info.memento_datetime);
+                                       identity_info.memento_datetime,
+                                       identity_info.memento_dates);
     case PageInfo::SAFE_BROWSING_STATUS_SAVED_PASSWORD_REUSE:
     case PageInfo::SAFE_BROWSING_STATUS_SIGNED_IN_SYNC_PASSWORD_REUSE:
     case PageInfo::SAFE_BROWSING_STATUS_SIGNED_IN_NON_SYNC_PASSWORD_REUSE:
@@ -340,13 +352,15 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
                                        IDS_PAGE_INFO_BILLING_DETAILS,
                                        SecurityDescriptionType::SAFE_BROWSING,
                                        identity_info.memento_status,
-                                       identity_info.memento_datetime);
+                                       identity_info.memento_datetime,
+                                       identity_info.memento_dates);
   }
 
   std::unique_ptr<SecurityDescription> safety_tip_security_desc =
       CreateSafetyTipSecurityDescription(identity_info.safety_tip_info,
                                          identity_info.memento_status,
-                                         identity_info.memento_datetime);
+                                         identity_info.memento_datetime,
+                                         identity_info.memento_dates);
   if (safety_tip_security_desc) {
     return safety_tip_security_desc;
   }
@@ -380,35 +394,40 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
                                            IDS_PAGE_INFO_NOT_SECURE_DETAILS,
                                            SecurityDescriptionType::CONNECTION,
                                            identity_info.memento_status,
-                                           identity_info.memento_datetime);
+                                           identity_info.memento_datetime,
+                                           identity_info.memento_dates);
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
                                            IDS_PAGE_INFO_NOT_SECURE_DETAILS,
                                            SecurityDescriptionType::CONNECTION,
                                            identity_info.memento_status,
-                                           identity_info.memento_datetime);
+                                           identity_info.memento_datetime,
+                                           identity_info.memento_dates);
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
                                            IDS_PAGE_INFO_MIXED_CONTENT_DETAILS,
                                            SecurityDescriptionType::CONNECTION,
                                            identity_info.memento_status,
-                                           identity_info.memento_datetime);
+                                           identity_info.memento_datetime,
+                                           identity_info.memento_dates);
         case PageInfo::SITE_CONNECTION_STATUS_LEGACY_TLS:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_MIXED_CONTENT_SUMMARY,
                                            IDS_PAGE_INFO_LEGACY_TLS_DETAILS,
                                            SecurityDescriptionType::CONNECTION,
                                            identity_info.memento_status,
-                                           identity_info.memento_datetime);
+                                           identity_info.memento_datetime,
+                                           identity_info.memento_dates);
         default:
           return CreateSecurityDescription(SecuritySummaryColor::GREEN,
                                            IDS_PAGE_INFO_SECURE_SUMMARY,
                                            IDS_PAGE_INFO_SECURE_DETAILS,
                                            SecurityDescriptionType::CONNECTION,
                                            identity_info.memento_status,
-                                           identity_info.memento_datetime);
+                                           identity_info.memento_datetime,
+                                           identity_info.memento_dates);
       }
     case PageInfo::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
     case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
@@ -419,7 +438,8 @@ PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
                                        IDS_PAGE_INFO_NOT_SECURE_DETAILS,
                                        SecurityDescriptionType::CONNECTION,
                                        identity_info.memento_status,
-                                       identity_info.memento_datetime);
+                                       identity_info.memento_datetime,
+                                       identity_info.memento_dates);
   }
 }
 
@@ -794,7 +814,8 @@ std::unique_ptr<PageInfoUI::SecurityDescription>
 PageInfoUI::CreateSafetyTipSecurityDescription(
     const security_state::SafetyTipInfo& info,
     bool memento_status,
-    std::string memento_datetime) {
+    std::string memento_datetime,
+    std::vector<std::string> memento_dates) {
   switch (info.status) {
     case security_state::SafetyTipStatus::kBadReputation:
     case security_state::SafetyTipStatus::kBadReputationIgnored:
@@ -804,7 +825,8 @@ PageInfoUI::CreateSafetyTipSecurityDescription(
           IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_DESCRIPTION,
           PageInfoUI::SecurityDescriptionType::SAFETY_TIP,
           memento_status,
-          memento_datetime);
+          memento_datetime,
+          memento_dates);
     case security_state::SafetyTipStatus::kLookalike:
     case security_state::SafetyTipStatus::kLookalikeIgnored:
       return CreateSecurityDescriptionForLookalikeSafetyTip(info.safe_url);

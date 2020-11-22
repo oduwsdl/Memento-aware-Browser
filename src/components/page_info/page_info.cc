@@ -352,6 +352,7 @@ PageInfo::PageInfo(std::unique_ptr<PageInfoDelegate> delegate,
   memento_status_ = visible_security_state_for_metrics_.memento_status;
   memento_datetime_ = visible_security_state_for_metrics_.memento_datetime;
   mixed_memento_content_ = visible_security_state_for_metrics_.mixed_memento;
+  memento_dates_ = visible_security_state_for_metrics_.memento_dates;
 }
 
 PageInfo::~PageInfo() {
@@ -1027,6 +1028,7 @@ void PageInfo::PresentSiteIdentity(bool is_memento) {
   info.memento_status = memento_status_;
   info.memento_datetime = memento_datetime_;
   info.mixed_memento = mixed_memento_content_;
+  info.memento_dates = memento_dates_;
   if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
     info.safety_tip_info = safety_tip_info_;
   }

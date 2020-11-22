@@ -471,6 +471,7 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
     entry->SetMementoDatetime("None");
   }
   
+  state->memento_dates = entry->GetMementoDates();
   state->key_exchange_group = ssl.key_exchange_group;
   state->peer_signature_algorithm = ssl.peer_signature_algorithm;
   state->pkp_bypassed = ssl.pkp_bypassed;

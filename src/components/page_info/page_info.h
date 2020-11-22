@@ -358,6 +358,8 @@ class PageInfo : public content::WebContentsObserver {
 
   bool mixed_memento_content_ = false;
 
+  std::vector<std::string> memento_dates_;
+
   // Set when the user ignored the password reuse modal warning dialog. When
   // |show_change_password_buttons_| is true, the page identity area of the page
   // info will include buttons to change corresponding password, and to

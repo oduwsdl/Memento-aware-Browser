@@ -138,6 +138,7 @@ class PageInfoUI {
     bool memento_status = false;
     std::string memento_datetime = "";
     bool mixed_memento = false;
+    std::vector<std::string> memento_dates;
     // Status of the site's identity.
     PageInfo::SiteIdentityStatus identity_status;
     // Site's Safe Browsing status.
@@ -251,7 +252,8 @@ class PageInfoUI {
   static std::unique_ptr<SecurityDescription>
   CreateSafetyTipSecurityDescription(const security_state::SafetyTipInfo& info,
                                      bool memento_status,
-                                     std::string memento_datetime);
+                                     std::string memento_datetime,
+                                     std::vector<std::string> memento_dates);
 
   // Sets cookie information.
   virtual void SetCookieInfo(const CookieInfoList& cookie_info_list) = 0;
