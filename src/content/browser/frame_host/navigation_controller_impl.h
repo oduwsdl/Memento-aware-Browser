@@ -467,6 +467,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // the given NavigationRequest's pending_nav_entry_id.
   bool PendingEntryMatchesRequest(NavigationRequest* request) const;
 
+  std::string GetCurrentDateString();
+
   // Classifies the given renderer navigation (see the NavigationType enum).
   NavigationType ClassifyNavigation(
       RenderFrameHostImpl* rfh,

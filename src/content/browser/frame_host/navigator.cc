@@ -6,6 +6,8 @@
 
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <ctime> 
 
 #include "base/check_op.h"
 #include "base/debug/dump_without_crashing.h"
@@ -330,7 +332,8 @@ void Navigator::DidNavigate(
 
   }
 
-  root->SetIterations(root->GetIterations() + 1);
+  int iterations = root->GetIterations() + 1;
+  root->SetIterations(iterations);
 
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;

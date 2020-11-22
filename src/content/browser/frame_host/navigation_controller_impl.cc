@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <regex>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -1212,17 +1213,18 @@ bool NavigationControllerImpl::RendererDidNavigate(
 
 
 
-  if (datetime != "" && (active_entry->GetMementoDatetime() != "Block" || navigation_request->GetReloadType() == ReloadType::NONE)) {
+  if (datetime != "" && (active_entry->GetMementoDatetime() != "None" || navigation_request->GetReloadType() == ReloadType::NONE)) {
     active_entry->SetMementoDatetime(datetime);
     active_entry->SetMementoInfo(true);
-  } else if (params.memento_datetime != "" && (active_entry->GetMementoDatetime() != "Block" || navigation_request->GetReloadType() == ReloadType::NONE)) {
+  } else if (params.memento_datetime != "" && (active_entry->GetMementoDatetime() != "None" || navigation_request->GetReloadType() == ReloadType::NONE)) {
     active_entry->SetMementoDatetime(params.memento_datetime);
     active_entry->SetMementoInfo(true);
   }
 
   active_entry->SetIterations(iterations);
   active_entry->SetIsMixedMementoLiveWeb(mixed_memento_live_web);
-  active_entry->SetAllFramesLoaded(true);
+  //active_entry->SetAllFramesLoaded(true);
+  active_entry->SetCurrentDatetime(GetCurrentDateString());
 
   // TODO(altimin, crbug.com/933147): Remove this logic after we are done with
   // implementing back-forward cache.
@@ -1302,6 +1304,47 @@ bool NavigationControllerImpl::RendererDidNavigate(
   for (FrameTreeNode* node : delegate_->GetFrameTree()->Nodes())
     node->current_frame_host()->set_nav_entry_id(nav_entry_id);
   return true;
+}
+
+std::string NavigationControllerImpl::GetCurrentDateString() {
+
+  time_t now = time(0);
+  tm* gmtm = gmtime(&now);
+
+  const std::string s = asctime(gmtm);
+
+  // Get the day of the week
+  std::regex dayOfWeekRGX("(^[A-Z]{1}[a-z]{2})");
+  std::smatch dayOfWeekMatch;
+  std::regex_search(s.begin(), s.end(), dayOfWeekMatch, dayOfWeekRGX);
+
+  // Get the month
+  std::regex monthRGX("[\\ ]([A-Z]{1}[a-z]{2})[\\ ]");
+  std::smatch monthMatch;
+  std::regex_search(s.begin(), s.end(), monthMatch, monthRGX);
+
+  // Get the day number
+  std::regex daynumRGX("[\\ ](\\d{2})[\\ ]");
+  std::smatch daynumMatch;
+  std::regex_search(s.begin(), s.end(), daynumMatch, daynumRGX);
+
+  // Get the year
+  std::regex yearnumRGX("[\\ ](\\d{4})");
+  std::smatch yearnumMatch;
+  std::regex_search(s.begin(), s.end(), yearnumMatch, yearnumRGX);
+
+  // Get the time
+  std::regex timeRGX("(\\d{2}:\\d{2}:\\d{2})");
+  std::smatch timeMatch;
+  std::regex_search(s.begin(), s.end(), timeMatch, timeRGX);
+
+  std::string date_string = std::string(dayOfWeekMatch[1]) + ", " +
+                            std::string(daynumMatch[1]) + " " +
+                            std::string(monthMatch[1]) + " " +
+                            std::string(yearnumMatch[1]) + " " +
+                            std::string(timeMatch[1]) + " GMT";
+
+  return date_string;
 }
 
 NavigationType NavigationControllerImpl::ClassifyNavigation(

@@ -30,6 +30,8 @@ blink::SecurityStyle GetSecurityStyle(
     const security_state::VisibleSecurityState& visible_security_state,
     content::SecurityStyleExplanations* security_style_explanations);
 
+//std::string GetCurrentDateString();
+
 }  // namespace security_state
 
 #endif  // COMPONENTS_SECURITY_STATE_CONTENT_CONTENT_UTILS_H_
