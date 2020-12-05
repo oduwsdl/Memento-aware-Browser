@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/bookmarks/browser/bookmark_codec.h"
+#include "components/bookmarks/browser/archive_codec.h"
 
 #include <stddef.h>
 
@@ -26,49 +26,47 @@ using base::Time;
 
 namespace bookmarks {
 
-const char BookmarkCodec::kRootsKey[] = "roots";
-const char BookmarkCodec::kRootFolderNameKey[] = "bookmark_bar";
-const char BookmarkCodec::kArchiveTodayNameKey[] = "archive_today";
-const char BookmarkCodec::kOtherBookmarkFolderNameKey[] = "other";
+const char ArchiveCodec::kRootsKey[] = "roots";
+const char ArchiveCodec::kRootFolderNameKey[] = "bookmark_bar";
+const char ArchiveCodec::kOtherBookmarkFolderNameKey[] = "other";
 // The value is left as 'synced' for historical reasons.
-const char BookmarkCodec::kMobileBookmarkFolderNameKey[] = "synced";
-const char BookmarkCodec::kVersionKey[] = "version";
-const char BookmarkCodec::kChecksumKey[] = "checksum";
-const char BookmarkCodec::kIdKey[] = "id";
-const char BookmarkCodec::kTypeKey[] = "type";
-const char BookmarkCodec::kNameKey[] = "name";
-const char BookmarkCodec::kGuidKey[] = "guid";
-const char BookmarkCodec::kDateAddedKey[] = "date_added";
-const char BookmarkCodec::kURLKey[] = "url";
-const char BookmarkCodec::kDateModifiedKey[] = "date_modified";
-const char BookmarkCodec::kChildrenKey[] = "children";
-const char BookmarkCodec::kMetaInfo[] = "meta_info";
-const char BookmarkCodec::kTypeURL[] = "url";
-const char BookmarkCodec::kTypeFolder[] = "folder";
-const char BookmarkCodec::kSyncMetadata[] = "sync_metadata";
+const char ArchiveCodec::kMobileBookmarkFolderNameKey[] = "synced";
+const char ArchiveCodec::kVersionKey[] = "version";
+const char ArchiveCodec::kChecksumKey[] = "checksum";
+const char ArchiveCodec::kIdKey[] = "id";
+const char ArchiveCodec::kTypeKey[] = "type";
+const char ArchiveCodec::kNameKey[] = "name";
+const char ArchiveCodec::kGuidKey[] = "guid";
+const char ArchiveCodec::kDateAddedKey[] = "date_added";
+const char ArchiveCodec::kURLKey[] = "url";
+const char ArchiveCodec::kDateModifiedKey[] = "date_modified";
+const char ArchiveCodec::kChildrenKey[] = "children";
+const char ArchiveCodec::kMetaInfo[] = "meta_info";
+const char ArchiveCodec::kTypeURL[] = "url";
+const char ArchiveCodec::kTypeFolder[] = "folder";
+const char ArchiveCodec::kSyncMetadata[] = "sync_metadata";
 
 // Current version of the file.
 static const int kCurrentVersion = 1;
 
-BookmarkCodec::BookmarkCodec()
+ArchiveCodec::ArchiveCodec()
     : ids_reassigned_(false),
       guids_reassigned_(false),
       ids_valid_(true),
       maximum_id_(0) {}
 
-BookmarkCodec::~BookmarkCodec() = default;
+ArchiveCodec::~ArchiveCodec() = default;
 
-std::unique_ptr<base::Value> BookmarkCodec::Encode(
+std::unique_ptr<base::Value> ArchiveCodec::Encode(
     BookmarkModel* model,
     const std::string& sync_metadata_str) {
-  return Encode(model->bookmark_bar_node(), model->archive_today_node(), model->other_node(),
+  return Encode(model->bookmark_bar_node(), model->other_node(),
                 model->mobile_node(), model->root_node()->GetMetaInfoMap(),
                 sync_metadata_str);
 }
 
-std::unique_ptr<base::Value> BookmarkCodec::Encode(
+std::unique_ptr<base::Value> ArchiveCodec::Encode(
     const BookmarkNode* bookmark_bar_node,
-    const BookmarkNode* archive_today_node,
     const BookmarkNode* other_folder_node,
     const BookmarkNode* mobile_folder_node,
     const BookmarkNode::MetaInfoMap* model_meta_info_map,
@@ -78,7 +76,6 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
   InitializeChecksum();
   auto roots = std::make_unique<base::DictionaryValue>();
   roots->Set(kRootFolderNameKey, EncodeNode(bookmark_bar_node));
-  roots->Set(kArchiveTodayNameKey, EncodeNode(archive_today_node));
   roots->Set(kOtherBookmarkFolderNameKey, EncodeNode(other_folder_node));
   roots->Set(kMobileBookmarkFolderNameKey, EncodeNode(mobile_folder_node));
   if (model_meta_info_map)
@@ -100,9 +97,8 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
   return std::move(main);
 }
 
-bool BookmarkCodec::Decode(const base::Value& value,
+bool ArchiveCodec::Decode(const base::Value& value,
                            BookmarkNode* bb_node,
-                           BookmarkNode* archive_today_node,
                            BookmarkNode* other_folder_node,
                            BookmarkNode* mobile_folder_node,
                            int64_t* max_id,
@@ -118,18 +114,18 @@ bool BookmarkCodec::Decode(const base::Value& value,
   maximum_id_ = 0;
   stored_checksum_.clear();
   InitializeChecksum();
-  bool success = DecodeHelper(bb_node, archive_today_node, other_folder_node, mobile_folder_node,
+  bool success = DecodeHelper(bb_node, other_folder_node, mobile_folder_node,
                               value, sync_metadata_str);
   FinalizeChecksum();
   // If either the checksums differ or some IDs were missing/not unique,
   // reassign IDs.
   if (!ids_valid_ || computed_checksum() != stored_checksum())
-    ReassignIDs(bb_node, archive_today_node, other_folder_node, mobile_folder_node);
+    ReassignIDs(bb_node, other_folder_node, mobile_folder_node);
   *max_id = maximum_id_ + 1;
   return success;
 }
 
-std::unique_ptr<base::Value> BookmarkCodec::EncodeNode(
+std::unique_ptr<base::Value> ArchiveCodec::EncodeNode(
     const BookmarkNode* node) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   std::string id = base::NumberToString(node->id());
@@ -163,7 +159,7 @@ std::unique_ptr<base::Value> BookmarkCodec::EncodeNode(
   return std::move(value);
 }
 
-std::unique_ptr<base::Value> BookmarkCodec::EncodeMetaInfo(
+std::unique_ptr<base::Value> ArchiveCodec::EncodeMetaInfo(
     const BookmarkNode::MetaInfoMap& meta_info_map) {
   auto meta_info = std::make_unique<base::DictionaryValue>();
   for (const auto& item : meta_info_map) {
@@ -172,15 +168,14 @@ std::unique_ptr<base::Value> BookmarkCodec::EncodeMetaInfo(
   return std::move(meta_info);
 }
 
-bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
-                                 BookmarkNode* archive_today_node,
+bool ArchiveCodec::DecodeHelper(BookmarkNode* bb_node,
                                  BookmarkNode* other_folder_node,
                                  BookmarkNode* mobile_folder_node,
                                  const base::Value& value,
                                  std::string* sync_metadata_str) {
 
   DVLOG(0) << "-------------------------------------";
-  DVLOG(0) << "BookmarkCodec";
+  DVLOG(0) << "ArchiveCodec";
   DVLOG(0) << "DecodeHelper";
   DVLOG(0) << "-------------------------------------";
 
@@ -208,22 +203,17 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
   if (!roots->GetAsDictionary(&roots_d_value))
     return false;  // Invalid type for roots.
   const base::Value* root_folder_value;
-  const base::Value* archive_today_value;
   const base::Value* other_folder_value = nullptr;
   const base::DictionaryValue* root_folder_d_value = nullptr;
-  const base::DictionaryValue* archive_today_d_value = nullptr;
   const base::DictionaryValue* other_folder_d_value = nullptr;
   if (!roots_d_value->Get(kRootFolderNameKey, &root_folder_value) ||
       !root_folder_value->GetAsDictionary(&root_folder_d_value) ||
       !roots_d_value->Get(kOtherBookmarkFolderNameKey, &other_folder_value) ||
-      !other_folder_value->GetAsDictionary(&other_folder_d_value) ||
-      !roots_d_value->Get(kArchiveTodayNameKey, &archive_today_value) ||
-      !archive_today_value->GetAsDictionary(&archive_today_d_value)) {
+      !other_folder_value->GetAsDictionary(&other_folder_d_value)) {
     return false;  // Invalid type for root folder and/or other
                    // folder.
   }
   DecodeNode(*root_folder_d_value, nullptr, bb_node);
-  DecodeNode(*archive_today_d_value, nullptr, archive_today_node);
   DecodeNode(*other_folder_d_value, nullptr, other_folder_node);
 
   // Fail silently if we can't deserialize mobile bookmarks. We can't require
@@ -255,9 +245,7 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
 
   // Need to reset the title as the title is persisted and restored from
   // the file.
-  //bb_node->SetTitle(l10n_util::GetStringUTF16(IDS_ARCHIVE_TODAY_SELECTION));
   bb_node->SetTitle(l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_FOLDER_NAME));
-  archive_today_node->SetTitle(l10n_util::GetStringUTF16(IDS_ARCHIVE_TODAY_SELECTION));
   other_folder_node->SetTitle(
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME));
   mobile_folder_node->SetTitle(
@@ -266,14 +254,14 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
   return true;
 }
 
-bool BookmarkCodec::DecodeChildren(const base::ListValue& child_value_list,
+bool ArchiveCodec::DecodeChildren(const base::ListValue& child_value_list,
                                    BookmarkNode* parent) {
 
   DVLOG(0) << "-------------------------------------";
-  DVLOG(0) << "BookmarkCodec";
+  DVLOG(0) << "ArchiveCodec";
   DVLOG(0) << "DecodeChildren";
   DVLOG(0) << "-------------------------------------";
-
+  
   for (size_t i = 0; i < child_value_list.GetSize(); ++i) {
     const base::Value* child_value;
     if (!child_value_list.Get(i, &child_value))
@@ -287,7 +275,7 @@ bool BookmarkCodec::DecodeChildren(const base::ListValue& child_value_list,
   return true;
 }
 
-bool BookmarkCodec::DecodeNode(const base::DictionaryValue& value,
+bool ArchiveCodec::DecodeNode(const base::DictionaryValue& value,
                                BookmarkNode* parent,
                                BookmarkNode* node) {
   // If no |node| is specified, we'll create one and add it to the |parent|.
@@ -413,7 +401,7 @@ bool BookmarkCodec::DecodeNode(const base::DictionaryValue& value,
   }
 
   DVLOG(0) << "-------------------------------------";
-  DVLOG(0) << "BookmarkCodec";
+  DVLOG(0) << "ArchiveCodec";
   DVLOG(0) << title;
   DVLOG(0) << "-------------------------------------";
 
@@ -428,7 +416,7 @@ bool BookmarkCodec::DecodeNode(const base::DictionaryValue& value,
   return true;
 }
 
-bool BookmarkCodec::DecodeMetaInfo(const base::DictionaryValue& value,
+bool ArchiveCodec::DecodeMetaInfo(const base::DictionaryValue& value,
                                    BookmarkNode::MetaInfoMap* meta_info_map) {
   DCHECK(meta_info_map);
   meta_info_map->clear();
@@ -461,7 +449,7 @@ bool BookmarkCodec::DecodeMetaInfo(const base::DictionaryValue& value,
   return true;
 }
 
-void BookmarkCodec::DecodeMetaInfoHelper(
+void ArchiveCodec::DecodeMetaInfoHelper(
     const base::DictionaryValue& dict,
     const std::string& prefix,
     BookmarkNode::MetaInfoMap* meta_info_map) {
@@ -481,37 +469,35 @@ void BookmarkCodec::DecodeMetaInfoHelper(
   }
 }
 
-void BookmarkCodec::ReassignIDs(BookmarkNode* bb_node,
-                                BookmarkNode* archive_today_node,
+void ArchiveCodec::ReassignIDs(BookmarkNode* bb_node,
                                 BookmarkNode* other_node,
                                 BookmarkNode* mobile_node) {
   maximum_id_ = 0;
   ReassignIDsHelper(bb_node);
-  ReassignIDsHelper(archive_today_node);
   ReassignIDsHelper(other_node);
   ReassignIDsHelper(mobile_node);
   ids_reassigned_ = true;
 }
 
-void BookmarkCodec::ReassignIDsHelper(BookmarkNode* node) {
+void ArchiveCodec::ReassignIDsHelper(BookmarkNode* node) {
   DCHECK(node);
   node->set_id(++maximum_id_);
   for (const auto& child : node->children())
     ReassignIDsHelper(child.get());
 }
 
-void BookmarkCodec::UpdateChecksum(const std::string& str) {
+void ArchiveCodec::UpdateChecksum(const std::string& str) {
   base::MD5Update(&md5_context_, str);
 }
 
-void BookmarkCodec::UpdateChecksum(const base::string16& str) {
+void ArchiveCodec::UpdateChecksum(const base::string16& str) {
   base::MD5Update(&md5_context_,
                   base::StringPiece(
                       reinterpret_cast<const char*>(str.data()),
                       str.length() * sizeof(str[0])));
 }
 
-void BookmarkCodec::UpdateChecksumWithUrlNode(const std::string& id,
+void ArchiveCodec::UpdateChecksumWithUrlNode(const std::string& id,
                                               const base::string16& title,
                                               const std::string& url) {
   DCHECK(base::IsStringUTF8(url));
@@ -521,18 +507,18 @@ void BookmarkCodec::UpdateChecksumWithUrlNode(const std::string& id,
   UpdateChecksum(url);
 }
 
-void BookmarkCodec::UpdateChecksumWithFolderNode(const std::string& id,
+void ArchiveCodec::UpdateChecksumWithFolderNode(const std::string& id,
                                                  const base::string16& title) {
   UpdateChecksum(id);
   UpdateChecksum(title);
   UpdateChecksum(kTypeFolder);
 }
 
-void BookmarkCodec::InitializeChecksum() {
+void ArchiveCodec::InitializeChecksum() {
   base::MD5Init(&md5_context_);
 }
 
-void BookmarkCodec::FinalizeChecksum() {
+void ArchiveCodec::FinalizeChecksum() {
   base::MD5Digest digest;
   base::MD5Final(&digest, &md5_context_);
   computed_checksum_ = base::MD5DigestToBase16(digest);

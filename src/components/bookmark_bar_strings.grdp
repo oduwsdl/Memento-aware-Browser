@@ -5,6 +5,11 @@
       Bookmarks bar
     </message>
   </if>
+  <if expr="not is_ios and not use_titlecase">
+    <message name="IDS_ARCHIVE_TODAY_SELECTION" desc="Name shown in the tree for the Archive.today selection.">
+      Archive.today
+    </message>
+  </if>
   <if expr="not is_ios and use_titlecase">
     <message name="IDS_BOOKMARK_BAR_FOLDER_NAME" desc="In Title Case: Name shown in the tree for the Bookmarks Bar folder.">
       Bookmarks Bar

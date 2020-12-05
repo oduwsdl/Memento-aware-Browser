@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_NODE_H_
-#define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_NODE_H_
+#ifndef COMPONENTS_BOOKMARKS_BROWSER_ARCHIVE_NODE_H_
+#define COMPONENTS_BOOKMARKS_BROWSER_ARCHIVE_NODE_H_
 
 #include <stdint.h>
 
@@ -22,17 +22,16 @@ namespace bookmarks {
 
 class BookmarkModel;
 
-// BookmarkNode ---------------------------------------------------------------
+// ArchiveNode ---------------------------------------------------------------
 
-// BookmarkNode contains information about a starred entry: title, URL, favicon,
-// id and type. BookmarkNodes are returned from BookmarkModel.
-class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
+// ArchiveNode contains information about a starred entry: title, URL, favicon,
+// id and type. ArchiveNodes are returned from BookmarkModel.
+class ArchiveNode : public ui::TreeNode<ArchiveNode>, public TitledUrlNode {
  public:
   enum Type {
     URL,
     FOLDER,
     BOOKMARK_BAR,
-    ARCHIVE_TODAY,
     OTHER_NODE,
     MOBILE
   };
@@ -47,19 +46,18 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
 
   static const char kRootNodeGuid[];
   static const char kBookmarkBarNodeGuid[];
-  static const char kArchiveTodayNodeGuid[];
   static const char kOtherBookmarksNodeGuid[];
   static const char kMobileBookmarksNodeGuid[];
   static const char kManagedNodeGuid[];
 
   // Creates a new node with |id|, |guid| and |url|.
-  BookmarkNode(int64_t id, const std::string& guid, const GURL& url);
+  ArchiveNode(int64_t id, const std::string& guid, const GURL& url);
 
-  ~BookmarkNode() override;
+  ~ArchiveNode() override;
 
   static std::string RootNodeGuid();
 
-  // Returns true if the node is a BookmarkPermanentNode (which does not include
+  // Returns true if the node is a ArchivePermanentNode (which does not include
   // the root).
   bool is_permanent_node() const { return is_permanent_node_; }
 
@@ -135,7 +133,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   // HistoryContentsProvider.
 
  protected:
-  BookmarkNode(int64_t id,
+  ArchiveNode(int64_t id,
                const std::string& guid,
                const GURL& url,
                Type type,
@@ -174,7 +172,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   // The unique identifier for this node.
   int64_t id_;
 
-  // The GUID for this node. A BookmarkNode GUID is immutable and differs from
+  // The GUID for this node. A ArchiveNode GUID is immutable and differs from
   // the |id_| in that it is consistent across different clients and
   // stable throughout the lifetime of the bookmark, with the exception of nodes
   // added to the Managed Bookmarks folder, whose GUIDs are re-assigned at
@@ -217,25 +215,25 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
 
   const bool is_permanent_node_;
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarkNode);
+  DISALLOW_COPY_AND_ASSIGN(ArchiveNode);
 };
 
-// BookmarkPermanentNode -------------------------------------------------------
+// ArchivePermanentNode -------------------------------------------------------
 
 // Node used for the permanent folders (excluding the root).
-class BookmarkPermanentNode : public BookmarkNode {
+class ArchivePermanentNode : public ArchiveNode {
  public:
   // TODO(mastiz): Remove default value for |visible_when_empty|.
-  BookmarkPermanentNode(int64_t id, Type type, bool visible_when_empty = false);
-  ~BookmarkPermanentNode() override;
+  ArchivePermanentNode(int64_t id, Type type, bool visible_when_empty = false);
+  ~ArchivePermanentNode() override;
 
-  // BookmarkNode overrides:
+  // ArchiveNode overrides:
   bool IsVisible() const override;
 
  private:
   const bool visible_when_empty_;
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarkPermanentNode);
+  DISALLOW_COPY_AND_ASSIGN(ArchivePermanentNode);
 };
 
 // If you are looking for gMock printing via PrintTo(), please check

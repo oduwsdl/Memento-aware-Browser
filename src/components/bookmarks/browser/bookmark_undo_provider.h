@@ -10,6 +10,7 @@
 namespace bookmarks {
 
 class BookmarkNode;
+class ArchiveNode;
 
 // The interface for providing undo support.
 class BookmarkUndoProvider {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/archive_node.h"
 
 #include <map>
 #include <string>
@@ -23,19 +23,17 @@ const base::char16 kInvalidChars[] = {
   0
 };
 
-std::string PermanentNodeTypeToGuid(BookmarkNode::Type type) {
+std::string PermanentNodeTypeToGuid(ArchiveNode::Type type) {
   switch (type) {
-    case BookmarkNode::BOOKMARK_BAR:
-      return BookmarkNode::kBookmarkBarNodeGuid;
-    case BookmarkNode::ARCHIVE_TODAY:
-      return BookmarkNode::kArchiveTodayNodeGuid;
-    case BookmarkNode::OTHER_NODE:
-      return BookmarkNode::kOtherBookmarksNodeGuid;
-    case BookmarkNode::MOBILE:
-      return BookmarkNode::kMobileBookmarksNodeGuid;
-    case BookmarkNode::FOLDER:
-      return BookmarkNode::kManagedNodeGuid;
-    case BookmarkNode::URL:
+    case ArchiveNode::BOOKMARK_BAR:
+      return ArchiveNode::kBookmarkBarNodeGuid;
+    case ArchiveNode::OTHER_NODE:
+      return ArchiveNode::kOtherBookmarksNodeGuid;
+    case ArchiveNode::MOBILE:
+      return ArchiveNode::kMobileBookmarksNodeGuid;
+    case ArchiveNode::FOLDER:
+      return ArchiveNode::kManagedNodeGuid;
+    case ArchiveNode::URL:
       NOTREACHED();
       return std::string();
   }
@@ -45,32 +43,30 @@ std::string PermanentNodeTypeToGuid(BookmarkNode::Type type) {
 
 }  // namespace
 
-// BookmarkNode ---------------------------------------------------------------
+// ArchiveNode ---------------------------------------------------------------
 
 // static
-const char BookmarkNode::kRootNodeGuid[] =
+const char ArchiveNode::kRootNodeGuid[] =
     "00000000-0000-4000-a000-000000000001";
-const char BookmarkNode::kBookmarkBarNodeGuid[] =
+const char ArchiveNode::kBookmarkBarNodeGuid[] =
     "00000000-0000-4000-a000-000000000002";
-const char BookmarkNode::kArchiveTodayNodeGuid[] =
+const char ArchiveNode::kOtherBookmarksNodeGuid[] =
     "00000000-0000-4000-a000-000000000003";
-const char BookmarkNode::kOtherBookmarksNodeGuid[] =
+const char ArchiveNode::kMobileBookmarksNodeGuid[] =
     "00000000-0000-4000-a000-000000000004";
-const char BookmarkNode::kMobileBookmarksNodeGuid[] =
+const char ArchiveNode::kManagedNodeGuid[] =
     "00000000-0000-4000-a000-000000000005";
-const char BookmarkNode::kManagedNodeGuid[] =
-    "00000000-0000-4000-a000-000000000006";
 
-std::string BookmarkNode::RootNodeGuid() {
-  return BookmarkNode::kRootNodeGuid;
+std::string ArchiveNode::RootNodeGuid() {
+  return ArchiveNode::kRootNodeGuid;
 }
 
-BookmarkNode::BookmarkNode(int64_t id, const std::string& guid, const GURL& url)
-    : BookmarkNode(id, guid, url, url.is_empty() ? FOLDER : URL, false) {}
+ArchiveNode::ArchiveNode(int64_t id, const std::string& guid, const GURL& url)
+    : ArchiveNode(id, guid, url, url.is_empty() ? FOLDER : URL, false) {}
 
-BookmarkNode::~BookmarkNode() = default;
+ArchiveNode::~ArchiveNode() = default;
 
-void BookmarkNode::SetTitle(const base::string16& title) {
+void ArchiveNode::SetTitle(const base::string16& title) {
   // Replace newlines and other problematic whitespace characters in
   // folder/bookmark names with spaces.
 
@@ -79,18 +75,18 @@ void BookmarkNode::SetTitle(const base::string16& title) {
                      &trimmed_title);
 
   DVLOG(0) << "-------------------------------------";
-  DVLOG(0) << "BookmarkNode";
+  DVLOG(0) << "ArchiveNode";
   DVLOG(0) << trimmed_title;
   DVLOG(0) << "-------------------------------------";
   
-  ui::TreeNode<BookmarkNode>::SetTitle(trimmed_title);
+  ui::TreeNode<ArchiveNode>::SetTitle(trimmed_title);
 }
 
-bool BookmarkNode::IsVisible() const {
+bool ArchiveNode::IsVisible() const {
   return true;
 }
 
-bool BookmarkNode::GetMetaInfo(const std::string& key,
+bool ArchiveNode::GetMetaInfo(const std::string& key,
                                std::string* value) const {
   if (!meta_info_map_)
     return false;
@@ -103,7 +99,7 @@ bool BookmarkNode::GetMetaInfo(const std::string& key,
   return true;
 }
 
-bool BookmarkNode::SetMetaInfo(const std::string& key,
+bool ArchiveNode::SetMetaInfo(const std::string& key,
                                const std::string& value) {
   if (!meta_info_map_)
     meta_info_map_.reset(new MetaInfoMap);
@@ -120,7 +116,7 @@ bool BookmarkNode::SetMetaInfo(const std::string& key,
   return true;
 }
 
-bool BookmarkNode::DeleteMetaInfo(const std::string& key) {
+bool ArchiveNode::DeleteMetaInfo(const std::string& key) {
   if (!meta_info_map_)
     return false;
   bool erased = meta_info_map_->erase(key) != 0;
@@ -129,26 +125,26 @@ bool BookmarkNode::DeleteMetaInfo(const std::string& key) {
   return erased;
 }
 
-void BookmarkNode::SetMetaInfoMap(const MetaInfoMap& meta_info_map) {
+void ArchiveNode::SetMetaInfoMap(const MetaInfoMap& meta_info_map) {
   if (meta_info_map.empty())
     meta_info_map_.reset();
   else
     meta_info_map_.reset(new MetaInfoMap(meta_info_map));
 }
 
-const BookmarkNode::MetaInfoMap* BookmarkNode::GetMetaInfoMap() const {
+const ArchiveNode::MetaInfoMap* ArchiveNode::GetMetaInfoMap() const {
   return meta_info_map_.get();
 }
 
-const base::string16& BookmarkNode::GetTitledUrlNodeTitle() const {
+const base::string16& ArchiveNode::GetTitledUrlNodeTitle() const {
   return GetTitle();
 }
 
-const GURL& BookmarkNode::GetTitledUrlNodeUrl() const {
+const GURL& ArchiveNode::GetTitledUrlNodeUrl() const {
   return url_;
 }
 
-BookmarkNode::BookmarkNode(int64_t id,
+ArchiveNode::ArchiveNode(int64_t id,
                            const std::string& guid,
                            const GURL& url,
                            Type type,
@@ -164,19 +160,19 @@ BookmarkNode::BookmarkNode(int64_t id,
   DCHECK(base::IsValidGUIDOutputString(guid));
 }
 
-void BookmarkNode::InvalidateFavicon() {
+void ArchiveNode::InvalidateFavicon() {
   icon_url_.reset();
   favicon_ = gfx::Image();
   favicon_type_ = favicon_base::IconType::kInvalid;
   favicon_state_ = INVALID_FAVICON;
 }
 
-// BookmarkPermanentNode -------------------------------------------------------
+// ArchivePermanentNode -------------------------------------------------------
 
-BookmarkPermanentNode::BookmarkPermanentNode(int64_t id,
+ArchivePermanentNode::ArchivePermanentNode(int64_t id,
                                              Type type,
                                              bool visible_when_empty)
-    : BookmarkNode(id,
+    : ArchiveNode(id,
                    PermanentNodeTypeToGuid(type),
                    GURL(),
                    type,
@@ -185,9 +181,9 @@ BookmarkPermanentNode::BookmarkPermanentNode(int64_t id,
   DCHECK(type != URL);
 }
 
-BookmarkPermanentNode::~BookmarkPermanentNode() = default;
+ArchivePermanentNode::~ArchivePermanentNode() = default;
 
-bool BookmarkPermanentNode::IsVisible() const {
+bool ArchivePermanentNode::IsVisible() const {
   return visible_when_empty_ || !children().empty();
 }
 

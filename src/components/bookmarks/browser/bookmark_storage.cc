@@ -115,7 +115,7 @@ void LoadBookmarks(const base::FilePath& path,
       std::string sync_metadata_str;
       BookmarkCodec codec;
       TimeTicks start_time = TimeTicks::Now();
-      codec.Decode(*root, details->bb_node(), details->other_folder_node(),
+      codec.Decode(*root, details->bb_node(), details->archive_today_node(), details->other_folder_node(),
                    details->mobile_folder_node(), &max_node_id,
                    &sync_metadata_str);
       details->set_sync_metadata_str(std::move(sync_metadata_str));
@@ -179,6 +179,7 @@ BookmarkLoadDetails::BookmarkLoadDetails(BookmarkClient* client)
   // constant (but can vary between embedders with the initial visibility
   // of permanent nodes).
   bb_node_ = CreatePermanentNode(client, BookmarkNode::BOOKMARK_BAR);
+  archive_today_node_ = CreatePermanentNode(client, BookmarkNode::ARCHIVE_TODAY);
   other_folder_node_ = CreatePermanentNode(client, BookmarkNode::OTHER_NODE);
   mobile_folder_node_ = CreatePermanentNode(client, BookmarkNode::MOBILE);
 }
@@ -207,6 +208,7 @@ BookmarkPermanentNode* BookmarkLoadDetails::CreatePermanentNode(
     BookmarkClient* client,
     BookmarkNode::Type type) {
   DCHECK(type == BookmarkNode::BOOKMARK_BAR ||
+         type == BookmarkNode::ARCHIVE_TODAY ||
          type == BookmarkNode::OTHER_NODE || type == BookmarkNode::MOBILE);
   std::unique_ptr<BookmarkPermanentNode> node =
       std::make_unique<BookmarkPermanentNode>(
@@ -217,6 +219,9 @@ BookmarkPermanentNode* BookmarkLoadDetails::CreatePermanentNode(
   switch (type) {
     case BookmarkNode::BOOKMARK_BAR:
       title_id = IDS_BOOKMARK_BAR_FOLDER_NAME;
+      break;
+    case BookmarkNode::ARCHIVE_TODAY:
+      title_id = IDS_ARCHIVE_TODAY_SELECTION;
       break;
     case BookmarkNode::OTHER_NODE:
       title_id = IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME;

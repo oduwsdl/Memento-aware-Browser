@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_MODEL_H_
-#define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_MODEL_H_
+#ifndef COMPONENTS_BOOKMARKS_BROWSER_ARCHIVE_MODEL_H_
+#define COMPONENTS_BOOKMARKS_BROWSER_ARCHIVE_MODEL_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,7 +22,7 @@
 #include "base/sequence_checker.h"
 #include "base/strings/string16.h"
 #include "components/bookmarks/browser/bookmark_client.h"
-#include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/archive_node.h"
 #include "components/bookmarks/browser/bookmark_undo_provider.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "ui/gfx/image/image.h"
@@ -48,7 +48,7 @@ namespace bookmarks {
 class BookmarkCodecTest;
 class BookmarkExpandedStateTracker;
 class BookmarkLoadDetails;
-class BookmarkModelObserver;
+class ArchiveModelObserver;
 class BookmarkStorage;
 class BookmarkUndoDelegate;
 class ModelLoader;
@@ -60,23 +60,23 @@ class UrlIndex;
 struct UrlAndTitle;
 struct TitledUrlMatch;
 
-// BookmarkModel --------------------------------------------------------------
+// ArchiveModel --------------------------------------------------------------
 
-// BookmarkModel provides a directed acyclic graph of URLs and folders.
+// ArchiveModel provides a directed acyclic graph of URLs and folders.
 // Three graphs are provided for the three entry points: those on the 'bookmarks
 // bar', those in the 'other bookmarks' folder and those in the 'mobile' folder.
 //
 // An observer may be attached to observe relevant events.
 //
-// You should NOT directly create a BookmarkModel, instead go through the
-// BookmarkModelFactory.
-class BookmarkModel : public BookmarkUndoProvider,
+// You should NOT directly create a ArchiveModel, instead go through the
+// ArchiveModelFactory.
+class ArchiveModel : public BookmarkUndoProvider,
                       public KeyedService {
  public:
-  explicit BookmarkModel(std::unique_ptr<BookmarkClient> client);
-  ~BookmarkModel() override;
+  explicit ArchiveModel(std::unique_ptr<BookmarkClient> client);
+  ~ArchiveModel() override;
 
-  // Loads the bookmarks. This is called upon creation of the BookmarkModel. You
+  // Loads the bookmarks. This is called upon creation of the ArchiveModel. You
   // need not invoke this directly. All load operations will be executed on
   // |io_task_runner|. |ui_task_runner| is the task runner the model runs on.
   void Load(PrefService* pref_service,
@@ -90,45 +90,35 @@ class BookmarkModel : public BookmarkUndoProvider,
     return loaded_;
   }
 
-  bool archive() const {
-    return archive_;
-  }
-
   // Returns the object responsible for tracking loading.
   scoped_refptr<ModelLoader> model_loader();
 
   // Returns the root node. The 'bookmark bar' node and 'other' node are
   // children of the root node.
-  const BookmarkNode* root_node() const {
+  const ArchiveNode* root_node() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return root_;
   }
 
   // Returns the 'bookmark bar' node. This is NULL until loaded.
-  const BookmarkNode* bookmark_bar_node() const {
+  const ArchiveNode* bookmark_bar_node() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return bookmark_bar_node_;
   }
 
-  // Returns the 'bookmark bar' node. This is NULL until loaded.
-  const BookmarkNode* archive_today_node() const {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return archive_today_node_;
-  }
-
   // Returns the 'other' node. This is NULL until loaded.
-  const BookmarkNode* other_node() const {
+  const ArchiveNode* other_node() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return other_node_;
   }
 
   // Returns the 'mobile' node. This is NULL until loaded.
-  const BookmarkNode* mobile_node() const {
+  const ArchiveNode* mobile_node() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return mobile_node_;
   }
 
-  bool is_root_node(const BookmarkNode* node) const {
+  bool is_root_node(const ArchiveNode* node) const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return node == root_;
   }
@@ -136,13 +126,13 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Returns whether the given |node| is one of the permanent nodes - root node,
   // 'bookmark bar' node, 'other' node or 'mobile' node, or one of the root
   // nodes supplied by the |client_|.
-  bool is_permanent_node(const BookmarkNode* node) const {
+  bool is_permanent_node(const ArchiveNode* node) const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return node && (node == root_ || node->parent() == root_);
   }
 
-  void AddObserver(BookmarkModelObserver* observer);
-  void RemoveObserver(BookmarkModelObserver* observer);
+  void AddObserver(ArchiveModelObserver* observer);
+  void RemoveObserver(ArchiveModelObserver* observer);
 
   // Notifies the observers that an extensive set of changes is about to happen,
   // such as during import or sync, so they can delay any expensive UI updates
@@ -159,7 +149,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Removes |node| from the model and deletes it. Removing a folder node
   // recursively removes all nodes. Observers are notified immediately. |node|
   // must not be a permanent node.
-  void Remove(const BookmarkNode* node);
+  void Remove(const ArchiveNode* node);
 
   // Removes all the non-permanent bookmark nodes that are editable by the user.
   // Observers are only notified when all nodes have been removed. There is no
@@ -167,13 +157,13 @@ class BookmarkModel : public BookmarkUndoProvider,
   void RemoveAllUserBookmarks();
 
   // Moves |node| to |new_parent| and inserts it at the given |index|.
-  void Move(const BookmarkNode* node,
-            const BookmarkNode* new_parent,
+  void Move(const ArchiveNode* node,
+            const ArchiveNode* new_parent,
             size_t index);
 
   // Inserts a copy of |node| into |new_parent| at |index|.
-  void Copy(const BookmarkNode* node,
-            const BookmarkNode* new_parent,
+  void Copy(const ArchiveNode* node,
+            const ArchiveNode* new_parent,
             size_t index);
 
   // Returns the favicon for |node|. If the favicon has not yet been loaded,
@@ -181,30 +171,28 @@ class BookmarkModel : public BookmarkUndoProvider,
   // This also means that, on return, the node's state is guaranteed to be
   // either LOADED_FAVICON (if it was already loaded prior to the call) or
   // LOADING_FAVICON (with the exception of folders, where the call is a no-op).
-  const gfx::Image& GetFavicon(const BookmarkNode* node);
+  const gfx::Image& GetFavicon(const ArchiveNode* node);
 
   // Returns the type of the favicon for |node|. If the favicon has not yet
   // been loaded, it returns |favicon_base::IconType::kInvalid|.
-  favicon_base::IconType GetFaviconType(const BookmarkNode* node);
-
-  void SetArchive(bool archive);
+  favicon_base::IconType GetFaviconType(const ArchiveNode* node);
 
   // Sets the title of |node|.
-  void SetTitle(const BookmarkNode* node, const base::string16& title);
+  void SetTitle(const ArchiveNode* node, const base::string16& title);
 
   // Sets the URL of |node|.
-  void SetURL(const BookmarkNode* node, const GURL& url);
+  void SetURL(const ArchiveNode* node, const GURL& url);
 
   // Sets the date added time of |node|.
-  void SetDateAdded(const BookmarkNode* node, base::Time date_added);
+  void SetDateAdded(const ArchiveNode* node, base::Time date_added);
 
   // Returns the set of nodes with the |url|.
-  void GetNodesByURL(const GURL& url, std::vector<const BookmarkNode*>* nodes);
+  void GetNodesByURL(const GURL& url, std::vector<const ArchiveNode*>* nodes);
 
   // Returns the most recently added user node for the |url|; urls from any
   // nodes that are not editable by the user are never returned by this call.
   // Returns NULL if |url| is not bookmarked.
-  const BookmarkNode* GetMostRecentlyAddedUserNodeForURL(const GURL& url);
+  const ArchiveNode* GetMostRecentlyAddedUserNodeForURL(const GURL& url);
 
   // Returns true if there are bookmarks, otherwise returns false.
   bool HasBookmarks();
@@ -224,43 +212,43 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Adds a new folder node at the specified position with the given |guid| and
   // |meta_info|. If a GUID is provided, it must be a valid version 4 GUID,
   // otherwise a new one is generated to replace it.
-  const BookmarkNode* AddFolder(
-      const BookmarkNode* parent,
+  const ArchiveNode* AddFolder(
+      const ArchiveNode* parent,
       size_t index,
       const base::string16& title,
-      const BookmarkNode::MetaInfoMap* meta_info = nullptr,
+      const ArchiveNode::MetaInfoMap* meta_info = nullptr,
       base::Optional<std::string> guid = base::nullopt);
 
   // Adds a url at the specified position with the given |creation_time|,
   // |meta_info| and |guid|. If a GUID is provided, it must be a valid version 4
   // GUID, otherwise a new one is generated to replace it.
-  const BookmarkNode* AddURL(
-      const BookmarkNode* parent,
+  const ArchiveNode* AddURL(
+      const ArchiveNode* parent,
       size_t index,
       const base::string16& title,
       const GURL& url,
-      const BookmarkNode::MetaInfoMap* meta_info = nullptr,
+      const ArchiveNode::MetaInfoMap* meta_info = nullptr,
       base::Optional<base::Time> creation_time = base::nullopt,
       base::Optional<std::string> guid = base::nullopt);
 
   // Sorts the children of |parent|, notifying observers by way of the
-  // BookmarkNodeChildrenReordered method.
-  void SortChildren(const BookmarkNode* parent);
+  // ArchiveNodeChildrenReordered method.
+  void SortChildren(const ArchiveNode* parent);
 
   // Order the children of |parent| as specified in |ordered_nodes|.  This
   // function should only be used to reorder the child nodes of |parent| and
   // is not meant to move nodes between different parent. Notifies observers
-  // using the BookmarkNodeChildrenReordered method.
-  void ReorderChildren(const BookmarkNode* parent,
-                       const std::vector<const BookmarkNode*>& ordered_nodes);
+  // using the ArchiveNodeChildrenReordered method.
+  void ReorderChildren(const ArchiveNode* parent,
+                       const std::vector<const ArchiveNode*>& ordered_nodes);
 
   // Sets the date when the folder was modified.
-  void SetDateFolderModified(const BookmarkNode* node, const base::Time time);
+  void SetDateFolderModified(const ArchiveNode* node, const base::Time time);
 
   // Resets the 'date modified' time of the node to 0. This is used during
   // importing to exclude the newly created folders from showing up in the
   // combobox of most recently modified folders.
-  void ResetDateFolderModified(const BookmarkNode* node);
+  void ResetDateFolderModified(const ArchiveNode* node);
 
   // Returns up to |max_count| of bookmarks containing each term from |text|
   // in either the title or the URL. It uses default matching algorithm.
@@ -275,7 +263,7 @@ class BookmarkModel : public BookmarkUndoProvider,
                             query_parser::MatchingAlgorithm matching_algorithm,
                             std::vector<TitledUrlMatch>* matches);
 
-  // Sets the store to NULL, making it so the BookmarkModel does not persist
+  // Sets the store to NULL, making it so the ArchiveModel does not persist
   // any changes to disk. This is only useful during testing to speed up
   // testing.
   void ClearStore();
@@ -290,12 +278,12 @@ class BookmarkModel : public BookmarkUndoProvider,
   }
 
   // Sets/deletes meta info of |node|.
-  void SetNodeMetaInfo(const BookmarkNode* node,
+  void SetNodeMetaInfo(const ArchiveNode* node,
                        const std::string& key,
                        const std::string& value);
-  void SetNodeMetaInfoMap(const BookmarkNode* node,
-                          const BookmarkNode::MetaInfoMap& meta_info_map);
-  void DeleteNodeMetaInfo(const BookmarkNode* node,
+  void SetNodeMetaInfoMap(const ArchiveNode* node,
+                          const ArchiveNode::MetaInfoMap& meta_info_map);
+  void DeleteNodeMetaInfo(const ArchiveNode* node,
                           const std::string& key);
 
   // Adds |key| to the set of meta info keys that are not copied when a node is
@@ -308,7 +296,7 @@ class BookmarkModel : public BookmarkUndoProvider,
     return non_cloned_keys_;
   }
 
-  // Notify BookmarkModel that the favicons for the given page URLs (e.g.
+  // Notify ArchiveModel that the favicons for the given page URLs (e.g.
   // http://www.google.com) and the given icon URL (e.g.
   // http://www.google.com/favicon.ico) have changed. It is valid to call
   // OnFaviconsChanged() with non-empty |page_urls| and an empty |icon_url| and
@@ -316,67 +304,62 @@ class BookmarkModel : public BookmarkUndoProvider,
   void OnFaviconsChanged(const std::set<GURL>& page_urls,
                          const GURL& icon_url);
 
-  // Returns the client used by this BookmarkModel.
+  // Returns the client used by this ArchiveModel.
   BookmarkClient* client() const { return client_.get(); }
 
   void SetUndoDelegate(BookmarkUndoDelegate* undo_delegate);
 
-  base::WeakPtr<BookmarkModel> AsWeakPtr() {
+  base::WeakPtr<ArchiveModel> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
  private:
   friend class BookmarkCodecTest;
-  friend class BookmarkModelFaviconTest;
+  friend class ArchiveModelFaviconTest;
   friend class BookmarkStorage;
   friend class ScopedGroupBookmarkActions;
   friend class TestBookmarkClient;
 
-  // BookmarkUndoProvider:
-  void RestoreRemovedNode(const BookmarkNode* parent,
-                          size_t index,
-                          std::unique_ptr<BookmarkNode> node) override;
-
   // Notifies the observers for adding every descedent of |node|.
-  void NotifyNodeAddedForAllDescendents(const BookmarkNode* node);
+  void NotifyNodeAddedForAllDescendents(const ArchiveNode* node);
 
   // Removes the node from internal maps and recurses through all children. If
   // the node is a url, its url is added to removed_urls.
   //
   // This does NOT delete the node.
-  void RemoveNodeFromIndexRecursive(BookmarkNode* node);
+  void RemoveNodeFromIndexRecursive(ArchiveNode* node);
 
   // Called when done loading. Updates internal state and notifies observers.
   void DoneLoading(std::unique_ptr<BookmarkLoadDetails> details);
 
   // Adds the |node| at |parent| in the specified |index| and notifies its
   // observers.
-  BookmarkNode* AddNode(BookmarkNode* parent,
+  ArchiveNode* AddNode(ArchiveNode* parent,
                         size_t index,
-                        std::unique_ptr<BookmarkNode> node);
+                        std::unique_ptr<ArchiveNode> node);
 
   // Adds |node| to |index_| and recursisvely invokes this for all children.
-  void AddNodeToIndexRecursive(BookmarkNode* node);
+  void AddNodeToIndexRecursive(ArchiveNode* node);
 
   // Returns true if the parent and index are valid.
-  bool IsValidIndex(const BookmarkNode* parent, size_t index, bool allow_end);
+  bool IsValidIndex(const ArchiveNode* parent, size_t index, bool allow_end);
 
   // Notification that a favicon has finished loading. If we can decode the
   // favicon, FaviconLoaded is invoked.
   void OnFaviconDataAvailable(
-      BookmarkNode* node,
+      ArchiveNode* node,
       favicon_base::IconType icon_type,
       const favicon_base::FaviconImageResult& image_result);
 
   // Invoked from the node to load the favicon. Requests the favicon from the
   // favicon service.
-  void LoadFavicon(BookmarkNode* node, favicon_base::IconType icon_type);
+  void LoadFavicon(ArchiveNode* node, favicon_base::IconType icon_type);
 
   // Called to notify the observers that the favicon has been loaded.
-  void FaviconLoaded(const BookmarkNode* node);
+  void FaviconLoaded(const ArchiveNode* node);
 
   // If we're waiting on a favicon for node, the load request is canceled.
-  void CancelPendingFaviconLoadRequests(BookmarkNode* node);
+  void CancelPendingFaviconLoadRequests(ArchiveNode* node);
 
   // Notifies the observers that a set of changes initiated by a single user
   // action is about to happen and has completed.
@@ -398,29 +381,25 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Whether the initial set of data has been loaded.
   bool loaded_ = false;
 
-  // Whether the model is for bookmark as archive
-  bool archive_ = false;
-
   // See |root_| for details.
-  std::unique_ptr<BookmarkNode> owned_root_;
+  std::unique_ptr<ArchiveNode> owned_root_;
 
   // The root node. This contains the bookmark bar node, the 'other' node and
   // the mobile node as children. The value of |root_| is initially that of
   // |owned_root_|. Once loading has completed, |owned_root_| is destroyed and
   // this is set to url_index_->root(). |owned_root_| is done as lots of
   // existing code assumes the root is non-null while loading.
-  BookmarkNode* root_ = nullptr;
+  ArchiveNode* root_ = nullptr;
 
-  BookmarkPermanentNode* bookmark_bar_node_ = nullptr;
-  BookmarkPermanentNode* archive_today_node_ = nullptr;
-  BookmarkPermanentNode* other_node_ = nullptr;
-  BookmarkPermanentNode* mobile_node_ = nullptr;
+  ArchivePermanentNode* bookmark_bar_node_ = nullptr;
+  ArchivePermanentNode* other_node_ = nullptr;
+  ArchivePermanentNode* mobile_node_ = nullptr;
 
   // The maximum ID assigned to the bookmark nodes in the model.
   int64_t next_node_id_ = 1;
 
   // The observers.
-  base::ObserverList<BookmarkModelObserver>::Unchecked observers_;
+  base::ObserverList<ArchiveModelObserver>::Unchecked observers_;
 
   // Used for loading favicons.
   base::CancelableTaskTracker cancelable_task_tracker_;
@@ -456,9 +435,9 @@ class BookmarkModel : public BookmarkUndoProvider,
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  base::WeakPtrFactory<BookmarkModel> weak_factory_{this};
+  base::WeakPtrFactory<ArchiveModel> weak_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarkModel);
+  DISALLOW_COPY_AND_ASSIGN(ArchiveModel);
 };
 
 }  // namespace bookmarks

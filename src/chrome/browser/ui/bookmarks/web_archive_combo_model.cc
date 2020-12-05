@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/bookmarks/recently_used_folders_combo_model.h"
+#include "chrome/browser/ui/bookmarks/web_archive_combo_model.h"
 
 #include <stddef.h>
 
@@ -23,7 +23,7 @@ const size_t kMaxMRUFolders = 5;
 
 }  // namespace
 
-struct RecentlyUsedFoldersComboModel::Item {
+struct WebArchiveComboModel::Item {
   enum Type {
     TYPE_NODE,
     TYPE_SEPARATOR,
@@ -39,24 +39,30 @@ struct RecentlyUsedFoldersComboModel::Item {
   Type type;
 };
 
-RecentlyUsedFoldersComboModel::Item::Item(const BookmarkNode* node,
+WebArchiveComboModel::Item::Item(const BookmarkNode* node,
                                           Type type)
     : node(node),
       type(type) {
 }
 
-RecentlyUsedFoldersComboModel::Item::~Item() {}
+WebArchiveComboModel::Item::~Item() {}
 
-bool RecentlyUsedFoldersComboModel::Item::operator==(const Item& item) const {
+bool WebArchiveComboModel::Item::operator==(const Item& item) const {
   return item.node == node && item.type == type;
 }
 
-RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
+WebArchiveComboModel::WebArchiveComboModel(
     BookmarkModel* model,
     const BookmarkNode* node)
     : bookmark_model_(model),
       node_parent_index_(0) {
   bookmark_model_->AddObserver(this);
+
+  DVLOG(0) << "-------------------------------------";
+  DVLOG(0) << "WebArchiveComboModel";
+  DVLOG(0) << "Getting most recently modified folders.";
+  DVLOG(0) << "-------------------------------------";
+
   // Use + 2 to account for bookmark bar and other node.
   std::vector<const BookmarkNode*> nodes =
       bookmarks::GetMostRecentlyModifiedUserFolders(model, kMaxMRUFolders + 2);
@@ -95,15 +101,15 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
   node_parent_index_ = static_cast<int>(it - items_.begin());
 }
 
-RecentlyUsedFoldersComboModel::~RecentlyUsedFoldersComboModel() {
+WebArchiveComboModel::~WebArchiveComboModel() {
   bookmark_model_->RemoveObserver(this);
 }
 
-int RecentlyUsedFoldersComboModel::GetItemCount() const {
+int WebArchiveComboModel::GetItemCount() const {
   return static_cast<int>(items_.size());
 }
 
-base::string16 RecentlyUsedFoldersComboModel::GetItemAt(int index) const {
+base::string16 WebArchiveComboModel::GetItemAt(int index) const {
   switch (items_[index].type) {
     case Item::TYPE_NODE:
       return items_[index].node->GetTitle();
@@ -119,44 +125,44 @@ base::string16 RecentlyUsedFoldersComboModel::GetItemAt(int index) const {
   return base::string16();
 }
 
-bool RecentlyUsedFoldersComboModel::IsItemSeparatorAt(int index) const {
+bool WebArchiveComboModel::IsItemSeparatorAt(int index) const {
   return items_[index].type == Item::TYPE_SEPARATOR;
 }
 
-int RecentlyUsedFoldersComboModel::GetDefaultIndex() const {
+int WebArchiveComboModel::GetDefaultIndex() const {
   return node_parent_index_;
 }
 
-void RecentlyUsedFoldersComboModel::AddObserver(
+void WebArchiveComboModel::AddObserver(
     ui::ComboboxModelObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void RecentlyUsedFoldersComboModel::RemoveObserver(
+void WebArchiveComboModel::RemoveObserver(
     ui::ComboboxModelObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void RecentlyUsedFoldersComboModel::BookmarkModelLoaded(BookmarkModel* model,
+void WebArchiveComboModel::BookmarkModelLoaded(BookmarkModel* model,
                                                         bool ids_reassigned) {}
 
-void RecentlyUsedFoldersComboModel::BookmarkModelBeingDeleted(
+void WebArchiveComboModel::BookmarkModelBeingDeleted(
     BookmarkModel* model) {
 }
 
-void RecentlyUsedFoldersComboModel::BookmarkNodeMoved(
+void WebArchiveComboModel::BookmarkNodeMoved(
     BookmarkModel* model,
     const BookmarkNode* old_parent,
     size_t old_index,
     const BookmarkNode* new_parent,
     size_t new_index) {}
 
-void RecentlyUsedFoldersComboModel::BookmarkNodeAdded(
+void WebArchiveComboModel::BookmarkNodeAdded(
     BookmarkModel* model,
     const BookmarkNode* parent,
     size_t index) {}
 
-void RecentlyUsedFoldersComboModel::OnWillRemoveBookmarks(
+void WebArchiveComboModel::OnWillRemoveBookmarks(
     BookmarkModel* model,
     const BookmarkNode* parent,
     size_t old_index,
@@ -178,29 +184,29 @@ void RecentlyUsedFoldersComboModel::OnWillRemoveBookmarks(
   }
 }
 
-void RecentlyUsedFoldersComboModel::BookmarkNodeRemoved(
+void WebArchiveComboModel::BookmarkNodeRemoved(
     BookmarkModel* model,
     const BookmarkNode* parent,
     size_t old_index,
     const BookmarkNode* node,
     const std::set<GURL>& removed_urls) {}
 
-void RecentlyUsedFoldersComboModel::BookmarkNodeChanged(
+void WebArchiveComboModel::BookmarkNodeChanged(
     BookmarkModel* model,
     const BookmarkNode* node) {
 }
 
-void RecentlyUsedFoldersComboModel::BookmarkNodeFaviconChanged(
+void WebArchiveComboModel::BookmarkNodeFaviconChanged(
     BookmarkModel* model,
     const BookmarkNode* node) {
 }
 
-void RecentlyUsedFoldersComboModel::BookmarkNodeChildrenReordered(
+void WebArchiveComboModel::BookmarkNodeChildrenReordered(
       BookmarkModel* model,
       const BookmarkNode* node) {
 }
 
-void RecentlyUsedFoldersComboModel::BookmarkAllUserNodesRemoved(
+void WebArchiveComboModel::BookmarkAllUserNodesRemoved(
     BookmarkModel* model,
     const std::set<GURL>& removed_urls) {
   // Changing is rare enough that we don't attempt to readjust the contents.
@@ -221,7 +227,7 @@ void RecentlyUsedFoldersComboModel::BookmarkAllUserNodesRemoved(
   }
 }
 
-void RecentlyUsedFoldersComboModel::MaybeChangeParent(
+void WebArchiveComboModel::MaybeChangeParent(
     const BookmarkNode* node,
     int selected_index) {
   if (items_[selected_index].type != Item::TYPE_NODE)
@@ -234,13 +240,13 @@ void RecentlyUsedFoldersComboModel::MaybeChangeParent(
   }
 }
 
-const BookmarkNode* RecentlyUsedFoldersComboModel::GetNodeAt(int index) {
+const BookmarkNode* WebArchiveComboModel::GetNodeAt(int index) {
   if (index < 0 || index >= static_cast<int>(items_.size()))
     return NULL;
   return items_[index].node;
 }
 
-void RecentlyUsedFoldersComboModel::RemoveNode(const BookmarkNode* node) {
+void WebArchiveComboModel::RemoveNode(const BookmarkNode* node) {
   auto it =
       std::find(items_.begin(), items_.end(), Item(node, Item::TYPE_NODE));
   if (it != items_.end())

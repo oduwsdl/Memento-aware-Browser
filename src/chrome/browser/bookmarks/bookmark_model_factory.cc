@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/webui/bookmarks/bookmarks_ui.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/bookmarks/browser/archive_model.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
@@ -29,11 +30,19 @@
 #include "content/public/browser/browser_thread.h"
 
 using bookmarks::BookmarkModel;
+using bookmarks::ArchiveModel;
 
 // static
 BookmarkModel* BookmarkModelFactory::GetForBrowserContext(
     content::BrowserContext* context) {
   return static_cast<BookmarkModel*>(
+      GetInstance()->GetServiceForBrowserContext(context, true));
+}
+
+// static
+ArchiveModel* BookmarkModelFactory::GetArchivesForBrowserContext(
+    content::BrowserContext* context) {
+  return static_cast<ArchiveModel*>(
       GetInstance()->GetServiceForBrowserContext(context, true));
 }
 

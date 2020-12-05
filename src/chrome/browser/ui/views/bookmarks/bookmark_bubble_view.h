@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/bookmarks/recently_used_folders_combo_model.h"
+#include "chrome/browser/ui/bookmarks/web_archive_combo_model.h"
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "ui/views/controls/button/button.h"
@@ -92,6 +93,12 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
         parent_combobox_->model());
   }
 
+  // Returns the model used to initialize |parent_combobox_|.
+  WebArchiveComboModel* archive_model() {
+    return static_cast<WebArchiveComboModel*>(
+        parent_combobox2_->model());
+  }
+
   // Shows the BookmarkEditor.
   void ShowEditor();
 
@@ -124,6 +131,10 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
   // Combobox showing a handful of folders the user can choose from, including
   // the current parent.
   views::Combobox* parent_combobox_ = nullptr;
+
+  // Combobox showing a handful of folders the user can choose from, including
+  // the current parent.
+  views::Combobox* parent_combobox2_ = nullptr;
 
   // The regular bookmark bubble contents, with all the edit fields and dialog
   // buttons. TODO(tapted): Move the buttons to the DialogClientView.

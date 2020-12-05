@@ -57,6 +57,7 @@ class BookmarkLoadDetails {
 
   BookmarkNode* root_node() { return root_node_ptr_; }
   BookmarkPermanentNode* bb_node() { return bb_node_; }
+  BookmarkPermanentNode* archive_today_node() { return archive_today_node_; }
   BookmarkPermanentNode* mobile_folder_node() { return mobile_folder_node_; }
   BookmarkPermanentNode* other_folder_node() { return other_folder_node_; }
 
@@ -116,6 +117,7 @@ class BookmarkLoadDetails {
   std::unique_ptr<BookmarkNode> root_node_;
   BookmarkNode* root_node_ptr_;
   BookmarkPermanentNode* bb_node_ = nullptr;
+  BookmarkPermanentNode* archive_today_node_ = nullptr;
   BookmarkPermanentNode* other_folder_node_ = nullptr;
   BookmarkPermanentNode* mobile_folder_node_ = nullptr;
   LoadManagedNodeCallback load_managed_node_callback_;

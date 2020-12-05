@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_CODEC_H_
-#define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_CODEC_H_
+#ifndef COMPONENTS_BOOKMARKS_BROWSER_ARCHIVE_CODEC_H_
+#define COMPONENTS_BOOKMARKS_BROWSER_ARCHIVE_CODEC_H_
 
 #include <stdint.h>
 
@@ -14,7 +14,7 @@
 #include "base/hash/md5.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/archive_node.h"
 
 namespace base {
 class DictionaryValue;
@@ -26,17 +26,17 @@ namespace bookmarks {
 
 class BookmarkModel;
 
-// BookmarkCodec is responsible for encoding and decoding the BookmarkModel
+// ArchiveCodec is responsible for encoding and decoding the BookmarkModel
 // into JSON values. The encoded values are written to disk via the
 // BookmarkStorage.
-class BookmarkCodec {
+class ArchiveCodec {
  public:
   // Creates an instance of the codec. During decoding, if the IDs in the file
   // are not unique, we will reassign IDs to make them unique. There are no
   // guarantees on how the IDs are reassigned or about doing minimal
   // reassignments to achieve uniqueness.
-  BookmarkCodec();
-  ~BookmarkCodec();
+  ArchiveCodec();
+  ~ArchiveCodec();
 
   // Encodes the model to a JSON value. It's up to the caller to delete the
   // returned object. This is invoked to encode the contents of the bookmark bar
@@ -48,7 +48,6 @@ class BookmarkCodec {
   // Encodes the bookmark bar and other folders returning the JSON value.
   std::unique_ptr<base::Value> Encode(
       const BookmarkNode* bookmark_bar_node,
-      const BookmarkNode* archive_today_node,
       const BookmarkNode* other_folder_node,
       const BookmarkNode* mobile_folder_node,
       const BookmarkNode::MetaInfoMap* model_meta_info_map,
@@ -61,7 +60,6 @@ class BookmarkCodec {
   // |max_node_id| is set to the max id of the nodes.
   bool Decode(const base::Value& value,
               BookmarkNode* bb_node,
-              BookmarkNode* archive_today_node,
               BookmarkNode* other_folder_node,
               BookmarkNode* mobile_folder_node,
               int64_t* max_node_id,
@@ -93,7 +91,6 @@ class BookmarkCodec {
   // Names of the various keys written to the Value.
   static const char kRootsKey[];
   static const char kRootFolderNameKey[];
-  static const char kArchiveTodayNameKey[];
   static const char kOtherBookmarkFolderNameKey[];
   static const char kMobileBookmarkFolderNameKey[];
   static const char kVersionKey[];
@@ -125,7 +122,6 @@ class BookmarkCodec {
 
   // Helper to perform decoding.
   bool DecodeHelper(BookmarkNode* bb_node,
-                    BookmarkNode* archive_today_node,
                     BookmarkNode* other_folder_node,
                     BookmarkNode* mobile_folder_node,
                     const base::Value& value,
@@ -137,7 +133,6 @@ class BookmarkCodec {
 
   // Reassigns bookmark IDs for all nodes.
   void ReassignIDs(BookmarkNode* bb_node,
-                   BookmarkNode* archive_today_node,
                    BookmarkNode* other_node,
                    BookmarkNode* mobile_node);
 
@@ -215,7 +210,7 @@ class BookmarkCodec {
   // Meta info set on bookmark model root.
   BookmarkNode::MetaInfoMap model_meta_info_map_;
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarkCodec);
+  DISALLOW_COPY_AND_ASSIGN(ArchiveCodec);
 };
 
 }  // namespace bookmarks

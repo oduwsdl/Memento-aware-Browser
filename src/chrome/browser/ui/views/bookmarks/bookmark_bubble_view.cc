@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/views/textfield_layout.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+//#include "components/bookmarks/browser/archive_model.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -38,6 +39,7 @@
 
 using base::UserMetricsAction;
 using bookmarks::BookmarkModel;
+//using bookmarks::ArchiveModel;
 using bookmarks::BookmarkNode;
 
 BookmarkBubbleView* BookmarkBubbleView::bookmark_bubble_ = nullptr;
@@ -62,7 +64,7 @@ views::Widget* BookmarkBubbleView::ShowBubble(
     Profile* profile,
     const GURL& url,
     bool already_bookmarked) {
-  /*if (bookmark_bubble_)
+  if (bookmark_bubble_)
     return nullptr;
 
   bookmark_bubble_ =
@@ -81,8 +83,7 @@ views::Widget* BookmarkBubbleView::ShowBubble(
     const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
     bookmark_bubble_->observer_->OnBookmarkBubbleShown(node);
   }
-  return bubble_widget;*/
-  return nullptr;
+  return bubble_widget;
 }
 
 // static
@@ -168,14 +169,34 @@ void BookmarkBubbleView::Init() {
       l10n_util::GetStringUTF16(IDS_BOOKMARK_AX_BUBBLE_NAME_LABEL));
 
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
+  BookmarkModel* archive_model = BookmarkModelFactory::GetForBrowserContext(profile_);
+  archive_model->SetArchive(true);
+  //ArchiveModel* archive_model = BookmarkModelFactory::GetArchivesForBrowserContext(profile_);
+
+  DVLOG(0) << "-------------------------------------";
+  DVLOG(0) << "BookmarkBubbleView";
+  DVLOG(0) << "URL:  " << url_;
+  //DVLOG(0) << "Has bookmarks: " << archive_model->HasBookmarks();
+  DVLOG(0) << "-------------------------------------";
+
   auto parent_folder_model = std::make_unique<RecentlyUsedFoldersComboModel>(
       model, model->GetMostRecentlyAddedUserNodeForURL(url_));
+
+  auto parent_folder_model2 = std::make_unique<WebArchiveComboModel>(
+      archive_model, archive_model->GetMostRecentlyAddedUserNodeForURL(url_));
 
   parent_combobox_ = AddComboboxRow(
       layout, l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_FOLDER_LABEL),
       std::move(parent_folder_model), kColumnId);
   parent_combobox_->set_listener(this);
   parent_combobox_->SetAccessibleName(
+      l10n_util::GetStringUTF16(IDS_BOOKMARK_AX_BUBBLE_FOLDER_LABEL));
+
+  parent_combobox2_ = AddComboboxRow(
+      layout, l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_ARCHIVE_LABEL),
+      std::move(parent_folder_model2), kColumnId);
+  parent_combobox2_->set_listener(this);
+  parent_combobox2_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_BOOKMARK_AX_BUBBLE_FOLDER_LABEL));
 
   bookmark_contents_view_ = AddChildView(std::move(bookmark_contents_view));
@@ -264,6 +285,8 @@ void BookmarkBubbleView::ApplyEdits() {
     }
     folder_model()->MaybeChangeParent(node,
                                       parent_combobox_->GetSelectedIndex());
+    archive_model()->MaybeChangeParent(node,
+                                      parent_combobox2_->GetSelectedIndex());
   }
 }
 

@@ -14,6 +14,7 @@ template <typename T> struct DefaultSingletonTraits;
 
 namespace bookmarks {
 class BookmarkModel;
+class ArchiveModel;
 }
 
 // Singleton that owns all BookmarkModels and associates them with
@@ -21,6 +22,9 @@ class BookmarkModel;
 class BookmarkModelFactory : public BrowserContextKeyedServiceFactory {
  public:
   static bookmarks::BookmarkModel* GetForBrowserContext(
+      content::BrowserContext* browser_context);
+
+  static bookmarks::ArchiveModel* GetArchivesForBrowserContext(
       content::BrowserContext* browser_context);
 
   static bookmarks::BookmarkModel* GetForBrowserContextIfExists(
