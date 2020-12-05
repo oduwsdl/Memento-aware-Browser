@@ -48,6 +48,7 @@ class BookmarkCodec {
   // Encodes the bookmark bar and other folders returning the JSON value.
   std::unique_ptr<base::Value> Encode(
       const BookmarkNode* bookmark_bar_node,
+      const BookmarkNode* no_archive_node,
       const BookmarkNode* archive_today_node,
       const BookmarkNode* other_folder_node,
       const BookmarkNode* mobile_folder_node,
@@ -61,6 +62,7 @@ class BookmarkCodec {
   // |max_node_id| is set to the max id of the nodes.
   bool Decode(const base::Value& value,
               BookmarkNode* bb_node,
+              BookmarkNode* no_archive_node,
               BookmarkNode* archive_today_node,
               BookmarkNode* other_folder_node,
               BookmarkNode* mobile_folder_node,
@@ -93,6 +95,7 @@ class BookmarkCodec {
   // Names of the various keys written to the Value.
   static const char kRootsKey[];
   static const char kRootFolderNameKey[];
+  static const char kNoArchiveNameKey[];
   static const char kArchiveTodayNameKey[];
   static const char kOtherBookmarkFolderNameKey[];
   static const char kMobileBookmarkFolderNameKey[];
@@ -125,6 +128,7 @@ class BookmarkCodec {
 
   // Helper to perform decoding.
   bool DecodeHelper(BookmarkNode* bb_node,
+                    BookmarkNode* no_archive_node,
                     BookmarkNode* archive_today_node,
                     BookmarkNode* other_folder_node,
                     BookmarkNode* mobile_folder_node,
@@ -137,6 +141,7 @@ class BookmarkCodec {
 
   // Reassigns bookmark IDs for all nodes.
   void ReassignIDs(BookmarkNode* bb_node,
+                   BookmarkNode* no_archive_node,
                    BookmarkNode* archive_today_node,
                    BookmarkNode* other_node,
                    BookmarkNode* mobile_node);

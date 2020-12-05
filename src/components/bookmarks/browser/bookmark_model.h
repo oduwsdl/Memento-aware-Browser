@@ -111,6 +111,12 @@ class BookmarkModel : public BookmarkUndoProvider,
   }
 
   // Returns the 'bookmark bar' node. This is NULL until loaded.
+  const BookmarkNode* no_archive_node() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return no_archive_node_;
+  }
+
+  // Returns the 'bookmark bar' node. This is NULL until loaded.
   const BookmarkNode* archive_today_node() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return archive_today_node_;
@@ -412,6 +418,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   BookmarkNode* root_ = nullptr;
 
   BookmarkPermanentNode* bookmark_bar_node_ = nullptr;
+  BookmarkPermanentNode* no_archive_node_ = nullptr;
   BookmarkPermanentNode* archive_today_node_ = nullptr;
   BookmarkPermanentNode* other_node_ = nullptr;
   BookmarkPermanentNode* mobile_node_ = nullptr;

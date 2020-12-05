@@ -179,6 +179,9 @@
   <message name="IDS_BOOKMARK_BUBBLE_FOLDER_LABEL" desc="Text preceding the folder selector">
     Folder
   </message>
+  <message name="IDS_BOOKMARK_BUBBLE_ARCHIVE_LABEL" desc="Text preceding archive selector">
+    Archive
+  </message>
   <message name="IDS_BOOKMARK_AX_BUBBLE_FOLDER_LABEL" desc="Text preceding the folder selector">
     Bookmark folder
   </message>

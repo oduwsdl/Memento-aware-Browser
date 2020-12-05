@@ -6,6 +6,11 @@
     </message>
   </if>
   <if expr="not is_ios and not use_titlecase">
+    <message name="IDS_NO_ARCHIVE_SELECTION" desc="Name shown in the tree for not selecting any archive.">
+      None
+    </message>
+  </if>
+  <if expr="not is_ios and not use_titlecase">
     <message name="IDS_ARCHIVE_TODAY_SELECTION" desc="Name shown in the tree for the Archive.today selection.">
       Archive.today
     </message>

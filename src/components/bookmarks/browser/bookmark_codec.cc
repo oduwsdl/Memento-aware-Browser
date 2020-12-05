@@ -28,6 +28,7 @@ namespace bookmarks {
 
 const char BookmarkCodec::kRootsKey[] = "roots";
 const char BookmarkCodec::kRootFolderNameKey[] = "bookmark_bar";
+const char BookmarkCodec::kNoArchiveNameKey[] = "no_archive";
 const char BookmarkCodec::kArchiveTodayNameKey[] = "archive_today";
 const char BookmarkCodec::kOtherBookmarkFolderNameKey[] = "other";
 // The value is left as 'synced' for historical reasons.
@@ -61,13 +62,15 @@ BookmarkCodec::~BookmarkCodec() = default;
 std::unique_ptr<base::Value> BookmarkCodec::Encode(
     BookmarkModel* model,
     const std::string& sync_metadata_str) {
-  return Encode(model->bookmark_bar_node(), model->archive_today_node(), model->other_node(),
+  return Encode(model->bookmark_bar_node(), model->no_archive_node(), 
+                model->archive_today_node(), model->other_node(),
                 model->mobile_node(), model->root_node()->GetMetaInfoMap(),
                 sync_metadata_str);
 }
 
 std::unique_ptr<base::Value> BookmarkCodec::Encode(
     const BookmarkNode* bookmark_bar_node,
+    const BookmarkNode* no_archive_node,
     const BookmarkNode* archive_today_node,
     const BookmarkNode* other_folder_node,
     const BookmarkNode* mobile_folder_node,
@@ -78,6 +81,7 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
   InitializeChecksum();
   auto roots = std::make_unique<base::DictionaryValue>();
   roots->Set(kRootFolderNameKey, EncodeNode(bookmark_bar_node));
+  roots->Set(kNoArchiveNameKey, EncodeNode(no_archive_node));
   roots->Set(kArchiveTodayNameKey, EncodeNode(archive_today_node));
   roots->Set(kOtherBookmarkFolderNameKey, EncodeNode(other_folder_node));
   roots->Set(kMobileBookmarkFolderNameKey, EncodeNode(mobile_folder_node));
@@ -102,6 +106,7 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
 
 bool BookmarkCodec::Decode(const base::Value& value,
                            BookmarkNode* bb_node,
+                           BookmarkNode* no_archive_node,
                            BookmarkNode* archive_today_node,
                            BookmarkNode* other_folder_node,
                            BookmarkNode* mobile_folder_node,
@@ -118,13 +123,18 @@ bool BookmarkCodec::Decode(const base::Value& value,
   maximum_id_ = 0;
   stored_checksum_.clear();
   InitializeChecksum();
-  bool success = DecodeHelper(bb_node, archive_today_node, other_folder_node, mobile_folder_node,
-                              value, sync_metadata_str);
+  bool success = DecodeHelper(bb_node, 
+                              no_archive_node, 
+                              archive_today_node, 
+                              other_folder_node, 
+                              mobile_folder_node,
+                              value, 
+                              sync_metadata_str);
   FinalizeChecksum();
   // If either the checksums differ or some IDs were missing/not unique,
   // reassign IDs.
   if (!ids_valid_ || computed_checksum() != stored_checksum())
-    ReassignIDs(bb_node, archive_today_node, other_folder_node, mobile_folder_node);
+    ReassignIDs(bb_node, no_archive_node, archive_today_node, other_folder_node, mobile_folder_node);
   *max_id = maximum_id_ + 1;
   return success;
 }
@@ -173,6 +183,7 @@ std::unique_ptr<base::Value> BookmarkCodec::EncodeMetaInfo(
 }
 
 bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
+                                 BookmarkNode* no_archive_node,
                                  BookmarkNode* archive_today_node,
                                  BookmarkNode* other_folder_node,
                                  BookmarkNode* mobile_folder_node,
@@ -208,21 +219,26 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
   if (!roots->GetAsDictionary(&roots_d_value))
     return false;  // Invalid type for roots.
   const base::Value* root_folder_value;
+  const base::Value* no_archive_value;
   const base::Value* archive_today_value;
   const base::Value* other_folder_value = nullptr;
   const base::DictionaryValue* root_folder_d_value = nullptr;
+  const base::DictionaryValue* no_archive_d_value = nullptr;
   const base::DictionaryValue* archive_today_d_value = nullptr;
   const base::DictionaryValue* other_folder_d_value = nullptr;
   if (!roots_d_value->Get(kRootFolderNameKey, &root_folder_value) ||
       !root_folder_value->GetAsDictionary(&root_folder_d_value) ||
       !roots_d_value->Get(kOtherBookmarkFolderNameKey, &other_folder_value) ||
       !other_folder_value->GetAsDictionary(&other_folder_d_value) ||
+      !roots_d_value->Get(kNoArchiveNameKey, &no_archive_value) ||
+      !no_archive_value->GetAsDictionary(&no_archive_d_value) ||
       !roots_d_value->Get(kArchiveTodayNameKey, &archive_today_value) ||
       !archive_today_value->GetAsDictionary(&archive_today_d_value)) {
     return false;  // Invalid type for root folder and/or other
                    // folder.
   }
   DecodeNode(*root_folder_d_value, nullptr, bb_node);
+  DecodeNode(*no_archive_d_value, nullptr, no_archive_node);
   DecodeNode(*archive_today_d_value, nullptr, archive_today_node);
   DecodeNode(*other_folder_d_value, nullptr, other_folder_node);
 
@@ -255,8 +271,8 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
 
   // Need to reset the title as the title is persisted and restored from
   // the file.
-  //bb_node->SetTitle(l10n_util::GetStringUTF16(IDS_ARCHIVE_TODAY_SELECTION));
   bb_node->SetTitle(l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_FOLDER_NAME));
+  no_archive_node->SetTitle(l10n_util::GetStringUTF16(IDS_NO_ARCHIVE_SELECTION));
   archive_today_node->SetTitle(l10n_util::GetStringUTF16(IDS_ARCHIVE_TODAY_SELECTION));
   other_folder_node->SetTitle(
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME));
@@ -482,11 +498,13 @@ void BookmarkCodec::DecodeMetaInfoHelper(
 }
 
 void BookmarkCodec::ReassignIDs(BookmarkNode* bb_node,
+                                BookmarkNode* no_archive_node,
                                 BookmarkNode* archive_today_node,
                                 BookmarkNode* other_node,
                                 BookmarkNode* mobile_node) {
   maximum_id_ = 0;
   ReassignIDsHelper(bb_node);
+  ReassignIDsHelper(no_archive_node);
   ReassignIDsHelper(archive_today_node);
   ReassignIDsHelper(other_node);
   ReassignIDsHelper(mobile_node);

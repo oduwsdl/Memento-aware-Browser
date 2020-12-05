@@ -67,34 +67,30 @@ WebArchiveComboModel::WebArchiveComboModel(
   std::vector<const BookmarkNode*> nodes =
       bookmarks::GetMostRecentlyModifiedUserFolders(model, kMaxMRUFolders + 2);
 
-  for (size_t i = 0; i < nodes.size(); ++i)
-    items_.push_back(Item(nodes[i], Item::TYPE_NODE));
+  //for (size_t i = 0; i < nodes.size(); ++i)
+    //items_.push_back(Item(nodes[i], Item::TYPE_NODE));
 
   // We special case the placement of these, so remove them from the list, then
   // fix up the order.
-  RemoveNode(model->bookmark_bar_node());
+  /*RemoveNode(model->bookmark_bar_node());
   RemoveNode(model->archive_today_node());
   RemoveNode(model->mobile_node());
   RemoveNode(model->other_node());
-  RemoveNode(node->parent());
+  RemoveNode(node->parent());*/
 
   // Make the parent the first item, unless it's a permanent node, which is
   // added below.
-  if (!model->is_permanent_node(node->parent()))
-    items_.insert(items_.begin(), Item(node->parent(), Item::TYPE_NODE));
+  //if (!model->is_permanent_node(node->parent()))
+    //items_.insert(items_.begin(), Item(node->parent(), Item::TYPE_NODE));
 
   // Make sure we only have kMaxMRUFolders in the first chunk.
-  if (items_.size() > kMaxMRUFolders)
-    items_.erase(items_.begin() + kMaxMRUFolders, items_.end());
+  //if (items_.size() > kMaxMRUFolders)
+    //items_.erase(items_.begin() + kMaxMRUFolders, items_.end());
 
   // And put the bookmark bar and other nodes at the end of the list.
-  items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
+  //items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
+  items_.push_back(Item(model->no_archive_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->archive_today_node(), Item::TYPE_NODE));
-  items_.push_back(Item(model->other_node(), Item::TYPE_NODE));
-  if (model->mobile_node()->IsVisible())
-    items_.push_back(Item(model->mobile_node(), Item::TYPE_NODE));
-  items_.push_back(Item(NULL, Item::TYPE_SEPARATOR));
-  items_.push_back(Item(NULL, Item::TYPE_CHOOSE_ANOTHER_FOLDER));
 
   auto it = std::find(items_.begin(), items_.end(),
                       Item(node->parent(), Item::TYPE_NODE));
@@ -130,7 +126,7 @@ bool WebArchiveComboModel::IsItemSeparatorAt(int index) const {
 }
 
 int WebArchiveComboModel::GetDefaultIndex() const {
-  return node_parent_index_;
+  return 0;
 }
 
 void WebArchiveComboModel::AddObserver(

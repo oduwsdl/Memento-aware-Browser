@@ -67,6 +67,7 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
   // We special case the placement of these, so remove them from the list, then
   // fix up the order.
   RemoveNode(model->bookmark_bar_node());
+  RemoveNode(model->no_archive_node());
   RemoveNode(model->archive_today_node());
   RemoveNode(model->mobile_node());
   RemoveNode(model->other_node());
@@ -83,7 +84,6 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
 
   // And put the bookmark bar and other nodes at the end of the list.
   items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
-  items_.push_back(Item(model->archive_today_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->other_node(), Item::TYPE_NODE));
   if (model->mobile_node()->IsVisible())
     items_.push_back(Item(model->mobile_node(), Item::TYPE_NODE));

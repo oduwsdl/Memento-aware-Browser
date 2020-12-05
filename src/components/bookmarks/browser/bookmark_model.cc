@@ -839,6 +839,7 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
   // See declaration for details on why |owned_root_| is reset.
   owned_root_.reset();
   bookmark_bar_node_ = details->bb_node();
+  no_archive_node_ = details->no_archive_node();
   archive_today_node_ = details->archive_today_node();
   other_node_ = details->other_folder_node();
   mobile_node_ = details->mobile_folder_node();

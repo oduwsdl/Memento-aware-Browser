@@ -32,6 +32,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
     URL,
     FOLDER,
     BOOKMARK_BAR,
+    NO_ARCHIVE,
     ARCHIVE_TODAY,
     OTHER_NODE,
     MOBILE
@@ -47,6 +48,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
 
   static const char kRootNodeGuid[];
   static const char kBookmarkBarNodeGuid[];
+  static const char kNoArchiveNodeGuid[];
   static const char kArchiveTodayNodeGuid[];
   static const char kOtherBookmarksNodeGuid[];
   static const char kMobileBookmarksNodeGuid[];
