@@ -322,8 +322,13 @@ void Navigator::DidNavigate(
     DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
     DVLOG(0) << "Depth: " << frame_tree_node->depth();*/
 
+    std::string root_host = root->current_url().host();
+    std::string new_frame_host = frame_tree_node->current_url().host();
+
     if (frame_tree_node->current_url().host().length() > 3 && 
-        frame_tree_node->current_url().host() != root->current_url().host() &&
+
+        (root_host.find(new_frame_host) == std::string::npos) &&
+
         frame_tree_node->current_frame_host()->last_http_status_code() == 200) {
 
       root->SetIsMixedMementoLiveWeb(true);
