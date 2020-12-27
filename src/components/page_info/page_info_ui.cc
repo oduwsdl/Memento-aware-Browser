@@ -212,7 +212,7 @@ std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
   else if (memento_status && memento_datetime == "") {
     security_description->memento_summary = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MIXED_MEMENTO_SUMMARY);
 
-    std::string memento_info_string = "The current page contains web archived content. \n\n\n\n\n\n";
+    std::string memento_info_string = "The current page contains web archived content. \n";
     for (std::vector<std::string>::const_iterator i = memento_dates.begin(); i != memento_dates.end(); ++i)
       memento_info_string += *i + "\n";
 

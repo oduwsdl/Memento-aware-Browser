@@ -285,8 +285,8 @@ void BookmarkBubbleView::ApplyEdits() {
     }
     folder_model()->MaybeChangeParent(node,
                                       parent_combobox_->GetSelectedIndex());
-    //archive_model()->MaybeChangeParent(node,
-    //                                  parent_combobox2_->GetSelectedIndex());
+    archive_model()->MaybeChangeParent(node,
+                                      parent_combobox2_->GetSelectedIndex());
   }
 }
 

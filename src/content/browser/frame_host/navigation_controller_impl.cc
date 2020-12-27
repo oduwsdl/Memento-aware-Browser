@@ -1145,14 +1145,15 @@ bool NavigationControllerImpl::RendererDidNavigate(
           visible_entry->SetMementoDates(root->GetMementoDates());
 
 
-          /*DVLOG(0) << "-------------------------------------------";
+          DVLOG(0) << "-------------------------------------------";
+          DVLOG(0) << "NAVIGATION_TYPE_AUTO_SUBFRAME";
           DVLOG(0) << "The datetime is: " << datetime;
           DVLOG(0) << "Host: " << frame_tree_node->current_url().host();
           DVLOG(0) << "URL: " << frame_tree_node->current_url();
           DVLOG(0) << "Root: " << root->current_url().host();
           DVLOG(0) << "Status code: " << frame_tree_node->current_frame_host()->last_http_status_code();
           DVLOG(0) << "Depth: " << frame_tree_node->depth();
-          DVLOG(0) << "-------------------------------------------";*/
+          DVLOG(0) << "-------------------------------------------";
         }
 
         visible_entry->SetIterations(iterations);

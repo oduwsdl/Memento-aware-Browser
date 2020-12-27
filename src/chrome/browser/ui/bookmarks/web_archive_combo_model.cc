@@ -229,11 +229,17 @@ void WebArchiveComboModel::MaybeChangeParent(
   if (items_[selected_index].type != Item::TYPE_NODE)
     return;
 
-  const BookmarkNode* new_parent = GetNodeAt(selected_index);
+  DVLOG(0) << "-------------------------------";
+  DVLOG(0) << "Title of selected archive: " << items_[selected_index].node->GetTitle();
+  DVLOG(0) << "-------------------------------";
+  system("python3 ~/MemAwareBrowser/src/chrome/browser/ui/bookmarks/test.py");
+
+
+  /*const BookmarkNode* new_parent = GetNodeAt(selected_index);
   if (new_parent != node->parent()) {
     base::RecordAction(base::UserMetricsAction("BookmarkBubble_ChangeParent"));
     bookmark_model_->Move(node, new_parent, new_parent->children().size());
-  }
+  }*/
 }
 
 const BookmarkNode* WebArchiveComboModel::GetNodeAt(int index) {
