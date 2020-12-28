@@ -16,6 +16,7 @@
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
+
 namespace {
 
 // Max number of most recently used folders.
