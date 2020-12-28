@@ -13,6 +13,14 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model_observer.h"
 
+#ifdef WINDOWS
+#include <direct.h>
+#define GetCurrentDir _getcwd
+#else
+#include <unistd.h>
+#define GetCurrentDir getcwd
+#endif
+
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
@@ -224,6 +232,13 @@ void WebArchiveComboModel::BookmarkAllUserNodesRemoved(
   }
 }
 
+std::string get_current_dir() {
+   char buff[FILENAME_MAX]; //create string buffer to hold path
+   GetCurrentDir( buff, FILENAME_MAX );
+   std::string current_working_dir(buff);
+   return current_working_dir;
+}
+
 void WebArchiveComboModel::MaybeChangeParent(
     const BookmarkNode* node,
     int selected_index) {
@@ -233,7 +248,11 @@ void WebArchiveComboModel::MaybeChangeParent(
   DVLOG(0) << "-------------------------------";
   DVLOG(0) << "Title of selected archive: " << items_[selected_index].node->GetTitle();
   DVLOG(0) << "-------------------------------";
-  system("python3 ~/MemAwareBrowser/src/chrome/browser/ui/bookmarks/test.py");
+  DVLOG(0) << get_current_dir() << std::endl;
+
+  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/test.py";
+
+  system(("python3 " + location).c_str());
 
 
   /*const BookmarkNode* new_parent = GetNodeAt(selected_index);
