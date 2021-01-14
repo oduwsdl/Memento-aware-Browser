@@ -250,7 +250,7 @@ void WebArchiveComboModel::MaybeChangeParent(
   DVLOG(0) << "-------------------------------";
   DVLOG(0) << get_current_dir() << std::endl;
 
-  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/test.py";
+  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/test.py &";
 
   system(("python3 " + location).c_str());
 
