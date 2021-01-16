@@ -13,7 +13,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model_observer.h"
 
-#ifdef WINDOWS
+#if defined(OS_WIN)
 #include <direct.h>
 #define GetCurrentDir _getcwd
 #else
@@ -250,7 +250,11 @@ void WebArchiveComboModel::MaybeChangeParent(
   DVLOG(0) << "-------------------------------";
   DVLOG(0) << get_current_dir() << std::endl;
 
-  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/test.py &";
+  #if defined(OS_WIN)
+  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/test.py";
+  #else
+  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/test.py";
+  #endif
 
   system(("python3 " + location).c_str());
 
