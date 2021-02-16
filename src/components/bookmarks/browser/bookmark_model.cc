@@ -227,6 +227,8 @@ void BookmarkModel::Remove(const BookmarkNode* node) {
   size_t index = size_t{parent->GetIndexOf(node)};
   DCHECK_NE(size_t{-1}, index);
 
+  DVLOG(0) << "Removing bookmark.";
+
   // Removing a permanent node is problematic and can cause crashes elsewhere
   // that are difficult to trace back.
   CHECK(!is_permanent_node(node)) << "for type " << node->type();
@@ -307,6 +309,7 @@ void BookmarkModel::Move(const BookmarkNode* node,
   DCHECK(!is_permanent_node(node));
   DCHECK(!new_parent->HasAncestor(node));
 
+  DVLOG(0) << "NODE PARENT ---- " << node->parent();
   const BookmarkNode* old_parent = node->parent();
   size_t old_index = old_parent->GetIndexOf(node);
 
@@ -315,6 +318,9 @@ void BookmarkModel::Move(const BookmarkNode* node,
     // Node is already in this position, nothing to do.
     return;
   }
+
+  DVLOG(0) << "Old index ---- " << old_index;
+  DVLOG(0) << "New index ---- " << index;
 
   SetDateFolderModified(new_parent, Time::Now());
 
@@ -636,7 +642,16 @@ const BookmarkNode* BookmarkModel::AddURL(
     const GURL& url,
     const BookmarkNode::MetaInfoMap* meta_info,
     base::Optional<base::Time> creation_time,
-    base::Optional<std::string> guid) {
+    base::Optional<std::string> guid,
+    base::Optional<std::string> archived_guid,
+    const BookmarkNode* archived_parent) {
+
+  DVLOG(0) << "****************************";
+  DVLOG(0) << "Adding URL at index " << index;
+  DVLOG(0) << "Into parent at GUID " << parent->guid();
+  if (archived_parent)
+    DVLOG(0) << "and archived parent at GUID " << archived_parent->guid();
+  DVLOG(0) << "****************************";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(loaded_);
   DCHECK(url.is_valid());
@@ -647,8 +662,10 @@ const BookmarkNode* BookmarkModel::AddURL(
 
   if (guid)
     DCHECK(base::IsValidGUIDOutputString(*guid));
-  else
+  else {
     guid = base::GenerateGUID();
+    archived_guid = base::GenerateGUID();
+  }
 
   if (!creation_time)
     creation_time = Time::Now();
@@ -659,12 +676,18 @@ const BookmarkNode* BookmarkModel::AddURL(
 
   auto new_node =
       std::make_unique<BookmarkNode>(generate_next_node_id(), *guid, url);
+  auto new_archived_node =
+      std::make_unique<BookmarkNode>(generate_next_node_id(), *archived_guid, url);
   new_node->SetTitle(title);
   new_node->set_date_added(*creation_time);
+  //new_archived_node->SetTitle(title);
+  //new_archived_node->set_date_added(*creation_time);
   if (meta_info)
     new_node->SetMetaInfoMap(*meta_info);
+  //if (meta_info)
+    //new_archived_node->SetMetaInfoMap(*meta_info);
 
-  return AddNode(AsMutable(parent), index, std::move(new_node));
+  return  AddNode(AsMutable(parent), index, std::move(new_node), AsMutable(archived_parent), std::move(new_archived_node));
 }
 
 void BookmarkModel::SortChildren(const BookmarkNode* parent) {
@@ -871,16 +894,25 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
 
 BookmarkNode* BookmarkModel::AddNode(BookmarkNode* parent,
                                      size_t index,
-                                     std::unique_ptr<BookmarkNode> node) {
+                                     std::unique_ptr<BookmarkNode> node,
+                                     BookmarkNode* archived_parent,
+                                     std::unique_ptr<BookmarkNode> archived_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  DVLOG(0) << "888888888888888888";
+  DVLOG(0) << "Add node to parent with guid ---- " << parent->guid();
+  DVLOG(0) << "888888888888888888";
+
   BookmarkNode* node_ptr = node.get();
+  //BookmarkNode* archived_node_ptr = archived_node.get();
   url_index_->Add(parent, index, std::move(node));
+  //url_index_->Add(archived_parent, 0, std::move(archived_node));
 
   if (store_)
     store_->ScheduleSave();
 
   AddNodeToIndexRecursive(node_ptr);
+  //AddNodeToIndexRecursive(archived_node_ptr);
 
   for (BookmarkModelObserver& observer : observers_)
     observer.BookmarkNodeAdded(this, parent, index);

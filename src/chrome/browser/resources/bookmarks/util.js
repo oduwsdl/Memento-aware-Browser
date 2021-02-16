@@ -67,6 +67,11 @@ export function normalizeNodes(rootNode) {
     });
   }
 
+  // Remove the None folder
+  delete nodeMap[2];
+  // Remove the Archive Today folder
+  delete nodeMap[3];
+
   return nodeMap;
 }
 

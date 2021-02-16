@@ -102,6 +102,9 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
   // Shows the BookmarkEditor.
   void ShowEditor();
 
+  void UpdateArchiveNode(const bookmarks::BookmarkNode* archived_node, 
+                         const bookmarks::BookmarkNode* node);
+
   // Sets the bookmark name and parent of the node.
   void ApplyEdits();
 

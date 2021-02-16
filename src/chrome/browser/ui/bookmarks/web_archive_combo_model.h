@@ -68,9 +68,12 @@ class WebArchiveComboModel : public ui::ComboboxModel,
   void BookmarkAllUserNodesRemoved(bookmarks::BookmarkModel* model,
                                    const std::set<GURL>& removed_urls) override;
 
+  void UpdateArchiveNode(const bookmarks::BookmarkNode* archived_node, 
+                         const bookmarks::BookmarkNode* node);
+
   // If necessary this function moves |node| into the corresponding folder for
   // the given |selected_index|.
-  void MaybeChangeParent(const bookmarks::BookmarkNode* node,
+  const bookmarks::BookmarkNode* MaybeChangeParent(const bookmarks::BookmarkNode* node,
                          int selected_index);
 
  private:

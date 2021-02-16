@@ -365,7 +365,10 @@ Polymer({
    * @return {boolean}
    */
   isFolder_(itemId) {
-    return !this.getState().nodes[itemId].url;
+    if(itemId != 2 && itemId != 3)
+      return !this.getState().nodes[itemId].url;
+    else
+      return false;
   },
 
   /**

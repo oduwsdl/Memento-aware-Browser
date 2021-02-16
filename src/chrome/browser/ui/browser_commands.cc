@@ -976,6 +976,7 @@ void BookmarkCurrentTab(Browser* browser) {
         ->SaveFaviconEvenIfInIncognito();
   }
   bool was_bookmarked_by_user = bookmarks::IsBookmarkedByUser(model, url);
+  DVLOG(0) << "Adding if not bookmarked.";
   bookmarks::AddIfNotBookmarked(model, url, title);
   bool is_bookmarked_by_user = bookmarks::IsBookmarkedByUser(model, url);
   // Make sure the model actually added a bookmark before showing the star. A

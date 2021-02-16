@@ -247,7 +247,9 @@ class BookmarkModel : public BookmarkUndoProvider,
       const GURL& url,
       const BookmarkNode::MetaInfoMap* meta_info = nullptr,
       base::Optional<base::Time> creation_time = base::nullopt,
-      base::Optional<std::string> guid = base::nullopt);
+      base::Optional<std::string> guid = base::nullopt,
+      base::Optional<std::string> archived_guid = base::nullopt,
+      const BookmarkNode* archived_parent = nullptr);
 
   // Sorts the children of |parent|, notifying observers by way of the
   // BookmarkNodeChildrenReordered method.
@@ -359,7 +361,9 @@ class BookmarkModel : public BookmarkUndoProvider,
   // observers.
   BookmarkNode* AddNode(BookmarkNode* parent,
                         size_t index,
-                        std::unique_ptr<BookmarkNode> node);
+                        std::unique_ptr<BookmarkNode> node,
+                        BookmarkNode* archived_parent = nullptr,
+                        std::unique_ptr<BookmarkNode> archived_node = nullptr);
 
   // Adds |node| to |index_| and recursisvely invokes this for all children.
   void AddNodeToIndexRecursive(BookmarkNode* node);

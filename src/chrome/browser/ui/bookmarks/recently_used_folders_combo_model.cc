@@ -90,10 +90,62 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
   items_.push_back(Item(NULL, Item::TYPE_SEPARATOR));
   items_.push_back(Item(NULL, Item::TYPE_CHOOSE_ANOTHER_FOLDER));
 
+  auto it = std::find(items_.begin(), items_.end(),Item(node->parent(), Item::TYPE_NODE));
+  node_parent_index_ = static_cast<int>(it - items_.begin());
+
+  DVLOG(0) << "Node URL ---- " << node->url();
+  DVLOG(0) << "node->parent() ---- " << node->parent();
+  DVLOG(0) << "items_ length ---- " << items_.size();
+  DVLOG(0) << "Index: ---- " << node_parent_index_;
+}
+
+/*RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
+    BookmarkModel* model,
+    const BookmarkNode* node)
+    : bookmark_model_(model),
+      node_parent_index_(0) {
+  bookmark_model_->AddObserver(this);
+  // Use + 2 to account for bookmark bar and other node.
+  std::vector<const BookmarkNode*> nodes =
+      bookmarks::GetMostRecentlyModifiedUserFolders(model, kMaxMRUFolders + 2);
+
+  for (size_t i = 0; i < nodes.size(); ++i)
+    items_.push_back(Item(nodes[i], Item::TYPE_NODE));
+
+  // We special case the placement of these, so remove them from the list, then
+  // fix up the order.
+  RemoveNode(model->bookmark_bar_node());
+  RemoveNode(model->no_archive_node());
+  RemoveNode(model->archive_today_node());
+  RemoveNode(model->mobile_node());
+  RemoveNode(model->other_node());
+  RemoveNode(node->parent());
+
+  // Make the parent the first item, unless it's a permanent node, which is
+  // added below.
+  if (!model->is_permanent_node(node->parent()))
+    items_.insert(items_.begin(), Item(node->parent(), Item::TYPE_NODE));
+
+  // Make sure we only have kMaxMRUFolders in the first chunk.
+  if (items_.size() > kMaxMRUFolders)
+    items_.erase(items_.begin() + kMaxMRUFolders, items_.end());
+
+  // And put the bookmark bar and other nodes at the end of the list.
+  items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
+  items_.push_back(Item(model->other_node(), Item::TYPE_NODE));
+  if (model->mobile_node()->IsVisible())
+    items_.push_back(Item(model->mobile_node(), Item::TYPE_NODE));
+  items_.push_back(Item(NULL, Item::TYPE_SEPARATOR));
+  items_.push_back(Item(NULL, Item::TYPE_CHOOSE_ANOTHER_FOLDER));
+
+  DVLOG(0) << "node->parent() ---- " << node->parent();
+  DVLOG(0) << "items_ length ---- " << items_.size();
+
   auto it = std::find(items_.begin(), items_.end(),
                       Item(node->parent(), Item::TYPE_NODE));
-  node_parent_index_ = static_cast<int>(it - items_.begin());
-}
+  node_parent_index_ = static_cast<int>(it - items_.begin() - 1);
+  DVLOG(0) << "Index: ---- " << node_parent_index_;
+}*/
 
 RecentlyUsedFoldersComboModel::~RecentlyUsedFoldersComboModel() {
   bookmark_model_->RemoveObserver(this);
@@ -161,6 +213,9 @@ void RecentlyUsedFoldersComboModel::OnWillRemoveBookmarks(
     const BookmarkNode* parent,
     size_t old_index,
     const BookmarkNode* node) {
+
+  DVLOG(0) << "RecentlyUsedFoldersComboModel::OnWillRemoveBookmarks";
+
   // Changing is rare enough that we don't attempt to readjust the contents.
   // Update |items_| so we aren't left pointing to a deleted node.
   bool changed = false;

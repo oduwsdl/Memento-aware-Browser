@@ -21,6 +21,7 @@ const BookmarkNode* CreateNewNode(BookmarkModel* model,
                                   const BookmarkEditor::EditDetails& details,
                                   const base::string16& new_title,
                                   const GURL& new_url) {
+
   const BookmarkNode* node;
   // When create the new one to right-clicked folder, add it to the next to the
   // folder's position. Because |details.index| has a index of the folder when

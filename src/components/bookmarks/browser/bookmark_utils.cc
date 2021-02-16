@@ -500,11 +500,20 @@ void DeleteBookmarkFolders(BookmarkModel* model,
 void AddIfNotBookmarked(BookmarkModel* model,
                         const GURL& url,
                         const base::string16& title) {
+  DVLOG(0) << "****************************";
+  DVLOG(0) << "AddIfNotBookmarked";
+  DVLOG(0) << "****************************";
   if (IsBookmarkedByUser(model, url))
     return;  // Nothing to do, a user bookmark with that url already exists.
   model->client()->RecordAction(base::UserMetricsAction("BookmarkAdded"));
   const BookmarkNode* parent = GetParentForNewNodes(model);
-  model->AddURL(parent, parent->children().size(), title, url);
+  const BookmarkNode* archived_parent = model->no_archive_node();
+  model->AddURL(parent, parent->children().size(), title, url, nullptr, base::nullopt, base::nullopt, base::nullopt, archived_parent);
+
+  //model->client()->RecordAction(base::UserMetricsAction("BookmarkAdded"));
+  //const BookmarkNode* archived_parent = model->no_archive_node();
+  //model->AddURL(archived_parent, archived_parent->children().size(), title, url);
+  //DVLOG(0) << "archived_parent ---- " << archived_parent->guid();
 }
 
 void RemoveAllBookmarks(BookmarkModel* model, const GURL& url) {
@@ -584,5 +593,16 @@ const BookmarkNode* GetParentForNewNodes(BookmarkModel* model) {
   DCHECK(!nodes.empty());  // This list is always padded with default folders.
   return nodes[0];
 }
+
+/*const BookmarkNode* GetParentForNewNodes(BookmarkModel* model) {
+#if defined(OS_ANDROID)
+  if (!HasUserCreatedBookmarks(model))
+    return model->mobile_node();
+#endif
+  std::vector<const BookmarkNode*> nodes =
+      GetMostRecentlyModifiedUserFolders(model, 7);
+  DCHECK(!nodes.empty());  // This list is always padded with default folders.
+  return nodes[0];
+}*/
 
 }  // namespace bookmarks

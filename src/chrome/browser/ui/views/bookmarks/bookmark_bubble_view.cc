@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <thread>
+#include <fstream>
+
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 
 #include "base/metrics/user_metrics.h"
@@ -270,6 +273,40 @@ void BookmarkBubbleView::ShowEditor() {
                          BookmarkEditor::SHOW_TREE);
 }
 
+// The function we want to execute on the new thread.
+void BookmarkBubbleView::UpdateArchiveNode(const BookmarkNode* archived_node, const BookmarkNode* node)
+{
+    DVLOG(0) << "Thread waiting.";
+    clock_t wait_nanoseconds = (clock_t) 240000000;
+    clock_t start_time = clock();
+    while( clock() <= start_time + wait_nanoseconds ) {
+
+    }
+
+    std::string testing;
+    std::ifstream archive_file;
+    archive_file.open("/home/abigail/MemAwareBrowser/src/chrome/browser/ui/bookmarks/archive_url.txt");
+
+    if (!(archive_file.peek() == std::ifstream::traits_type::eof())) {
+
+      archive_file >> testing;
+
+      DVLOG(0) << testing;
+      DVLOG(0) << "I waited!";
+
+      BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
+
+      ApplyEdits();
+
+      model->SetTitle(archived_node, base::UTF8ToUTF16(std::string("new title")));
+
+    } else {
+      DVLOG(0) << "Waited but file was empty.";
+    }
+
+
+}
+
 void BookmarkBubbleView::ApplyEdits() {
   // Set this to make sure we don't attempt to apply edits again.
   apply_edits_ = false;
@@ -286,7 +323,11 @@ void BookmarkBubbleView::ApplyEdits() {
     folder_model()->MaybeChangeParent(node,
                                       parent_combobox_->GetSelectedIndex());
     archive_model()->MaybeChangeParent(node,
-                                      parent_combobox2_->GetSelectedIndex());
+                                       parent_combobox2_->GetSelectedIndex());
+
+
+
+
   }
 }
 
