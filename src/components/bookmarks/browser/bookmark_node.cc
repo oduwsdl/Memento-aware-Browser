@@ -31,6 +31,10 @@ std::string PermanentNodeTypeToGuid(BookmarkNode::Type type) {
       return BookmarkNode::kNoArchiveNodeGuid;
     case BookmarkNode::ARCHIVE_TODAY:
       return BookmarkNode::kArchiveTodayNodeGuid;
+    case BookmarkNode::INTERNET_ARCHIVE:
+      return BookmarkNode::kInternetArchiveNodeGuid;
+    case BookmarkNode::MEGALODON:
+      return BookmarkNode::kMegalodonNodeGuid;
     case BookmarkNode::OTHER_NODE:
       return BookmarkNode::kOtherBookmarksNodeGuid;
     case BookmarkNode::MOBILE:
@@ -58,12 +62,16 @@ const char BookmarkNode::kNoArchiveNodeGuid[] =
     "00000000-0000-4000-a000-000000000003";
 const char BookmarkNode::kArchiveTodayNodeGuid[] =
     "00000000-0000-4000-a000-000000000004";
-const char BookmarkNode::kOtherBookmarksNodeGuid[] =
+const char BookmarkNode::kInternetArchiveNodeGuid[] =
     "00000000-0000-4000-a000-000000000005";
-const char BookmarkNode::kMobileBookmarksNodeGuid[] =
+const char BookmarkNode::kMegalodonNodeGuid[] =
     "00000000-0000-4000-a000-000000000006";
-const char BookmarkNode::kManagedNodeGuid[] =
+const char BookmarkNode::kOtherBookmarksNodeGuid[] =
     "00000000-0000-4000-a000-000000000007";
+const char BookmarkNode::kMobileBookmarksNodeGuid[] =
+    "00000000-0000-4000-a000-000000000008";
+const char BookmarkNode::kManagedNodeGuid[] =
+    "00000000-0000-4000-a000-000000000009";
 
 std::string BookmarkNode::RootNodeGuid() {
   return BookmarkNode::kRootNodeGuid;

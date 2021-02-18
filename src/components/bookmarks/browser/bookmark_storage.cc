@@ -115,7 +115,7 @@ void LoadBookmarks(const base::FilePath& path,
       std::string sync_metadata_str;
       BookmarkCodec codec;
       TimeTicks start_time = TimeTicks::Now();
-      codec.Decode(*root, details->bb_node(), details->no_archive_node(), details->archive_today_node(), details->other_folder_node(),
+      codec.Decode(*root, details->bb_node(), details->no_archive_node(), details->archive_today_node(), details->internet_archive_node(), details->megalodon_node(), details->other_folder_node(),
                    details->mobile_folder_node(), &max_node_id,
                    &sync_metadata_str);
       details->set_sync_metadata_str(std::move(sync_metadata_str));
@@ -181,6 +181,8 @@ BookmarkLoadDetails::BookmarkLoadDetails(BookmarkClient* client)
   bb_node_ = CreatePermanentNode(client, BookmarkNode::BOOKMARK_BAR);
   no_archive_node_ = CreatePermanentNode(client, BookmarkNode::NO_ARCHIVE);
   archive_today_node_ = CreatePermanentNode(client, BookmarkNode::ARCHIVE_TODAY);
+  internet_archive_node_ = CreatePermanentNode(client, BookmarkNode::INTERNET_ARCHIVE);
+  megalodon_node_ = CreatePermanentNode(client, BookmarkNode::MEGALODON);
   other_folder_node_ = CreatePermanentNode(client, BookmarkNode::OTHER_NODE);
   mobile_folder_node_ = CreatePermanentNode(client, BookmarkNode::MOBILE);
 }
@@ -210,6 +212,8 @@ BookmarkPermanentNode* BookmarkLoadDetails::CreatePermanentNode(
     BookmarkNode::Type type) {
   DCHECK(type == BookmarkNode::BOOKMARK_BAR ||
          type == BookmarkNode::ARCHIVE_TODAY ||
+         type == BookmarkNode::INTERNET_ARCHIVE ||
+         type == BookmarkNode::MEGALODON ||
          type == BookmarkNode::OTHER_NODE || 
          type == BookmarkNode::NO_ARCHIVE || type == BookmarkNode::MOBILE);
   std::unique_ptr<BookmarkPermanentNode> node =
@@ -227,6 +231,12 @@ BookmarkPermanentNode* BookmarkLoadDetails::CreatePermanentNode(
       break;
     case BookmarkNode::ARCHIVE_TODAY:
       title_id = IDS_ARCHIVE_TODAY_SELECTION;
+      break;
+    case BookmarkNode::INTERNET_ARCHIVE:
+      title_id = IDS_INTERNET_ARCHIVE_SELECTION;
+      break;
+    case BookmarkNode::MEGALODON:
+      title_id = IDS_MEGALODON_SELECTION;
       break;
     case BookmarkNode::OTHER_NODE:
       title_id = IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME;

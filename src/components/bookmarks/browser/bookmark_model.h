@@ -116,10 +116,22 @@ class BookmarkModel : public BookmarkUndoProvider,
     return no_archive_node_;
   }
 
-  // Returns the 'bookmark bar' node. This is NULL until loaded.
+  // Returns the 'archive today' node. This is NULL until loaded.
   const BookmarkNode* archive_today_node() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return archive_today_node_;
+  }
+
+  // Returns the 'internet archive' node. This is NULL until loaded.
+  const BookmarkNode* internet_archive_node() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return internet_archive_node_;
+  }
+
+  // Returns the 'internet archive' node. This is NULL until loaded.
+  const BookmarkNode* megalodon_node() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return megalodon_node_;
   }
 
   // Returns the 'other' node. This is NULL until loaded.
@@ -424,6 +436,8 @@ class BookmarkModel : public BookmarkUndoProvider,
   BookmarkPermanentNode* bookmark_bar_node_ = nullptr;
   BookmarkPermanentNode* no_archive_node_ = nullptr;
   BookmarkPermanentNode* archive_today_node_ = nullptr;
+  BookmarkPermanentNode* internet_archive_node_ = nullptr;
+  BookmarkPermanentNode* megalodon_node_ = nullptr;
   BookmarkPermanentNode* other_node_ = nullptr;
   BookmarkPermanentNode* mobile_node_ = nullptr;
 

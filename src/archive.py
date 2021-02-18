@@ -8,12 +8,8 @@ def main():
 
 		archive = sys.argv[1]
 		URL = sys.argv[2]
+		
 
-		print(archive)
-
-		print(URL)
-
-		print("Pushing to archive...")
 		if archive == "Archive.Today":
 			handler = "is"
 		elif archive == "Internet Archive":
@@ -21,10 +17,15 @@ def main():
 		elif archive == "Megalodon":
 			handler = "mg"
 
-		result = archivenow.push(URL,handler)
+		print("Submitting " + URL + " to " + archive)
+
+		result = archivenow.push(URL, handler)
 		
-		print("Complete!")
-		f.write(result[0])
+		if len(result) > 0:
+			f.write(result[0])
+		else:
+			print("Unable to archive at this time")
+		f.write("\n")
 
 
 if __name__ == "__main__":

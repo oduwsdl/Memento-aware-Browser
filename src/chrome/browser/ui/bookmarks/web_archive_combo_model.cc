@@ -92,6 +92,8 @@ WebArchiveComboModel::WebArchiveComboModel(
   //items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->no_archive_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->archive_today_node(), Item::TYPE_NODE));
+  items_.push_back(Item(model->megalodon_node(), Item::TYPE_NODE));
+  items_.push_back(Item(model->internet_archive_node(), Item::TYPE_NODE));
 
   DVLOG(0) << "WebArchive node_parent_index_ ---- " << node_parent_index_;
 }
@@ -224,7 +226,7 @@ void WebArchiveComboModel::BookmarkAllUserNodesRemoved(
 
 std::string get_current_dir() {
    char buff[FILENAME_MAX]; //create string buffer to hold path
-   GetCurrentDir( buff, FILENAME_MAX );
+   (void)GetCurrentDir( buff, FILENAME_MAX );
    std::string current_working_dir(buff);
    return current_working_dir;
 }
@@ -261,29 +263,33 @@ void WebArchiveComboModel::UpdateArchiveNode(const BookmarkNode* archived_node,
 }
 
 
-const BookmarkNode* WebArchiveComboModel::MaybeChangeParent(
+void WebArchiveComboModel::MaybeChangeParent(
     const BookmarkNode* node,
     int selected_index) {
   if (items_[selected_index].type != Item::TYPE_NODE)
-    return NULL;
+    return;
 
   DVLOG(0) << "-------------------------------";
   DVLOG(0) << "Title of selected archive: " << items_[selected_index].node->GetTitle();
   DVLOG(0) << "-------------------------------";
   DVLOG(0) << get_current_dir() << std::endl;
 
-  #if defined(OS_WIN)
-  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/";
-  #else
-  std::string location = get_current_dir() + "/chrome/browser/ui/bookmarks/";
-  std::string command = ("python3 " + location + "test.py &");
-  #endif
-
-  DVLOG(0) << command;
-  system(command.c_str());
-
   if (items_[selected_index].node->GetTitle() != base::UTF8ToUTF16(std::string("None"))) {
     //const BookmarkNode* new_parent = GetNodeAt(selected_index);
+    std::string archive;
+    if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Internet Archive")))
+      archive = "\'Internet Archive\'";
+    else if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Archive.today")))
+      archive = "Archive.Today";
+    else if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Megalodon")))
+      archive = "Megalodon";
+
+    #if defined(OS_WIN)
+    std::string location = get_current_dir();
+    #else
+    std::string location = get_current_dir();
+    std::string command = ("python3 " + location + "/archive.py " + archive + " " + node->url().spec() + " " + "&");
+    #endif
 
     if (node->parent()->GetTitle() != base::UTF8ToUTF16(node->url().spec())) {
       const BookmarkNode* new_parent = bookmark_model_->AddFolder(node->parent(), 
@@ -291,11 +297,14 @@ const BookmarkNode* WebArchiveComboModel::MaybeChangeParent(
                                                                 base::UTF8ToUTF16(node->url().spec()));
       bookmark_model_->Move(node, new_parent, new_parent->children().size());
     }
+
+    DVLOG(0) << command;
+    (void)system(command.c_str());
     
     const BookmarkNode* new_parent = node->parent();
 
 
-    const BookmarkNode* archived_node = bookmark_model_->AddURL(new_parent, new_parent->children().size(), base::UTF8ToUTF16(std::string("Archiving " + node->url().spec())), node->url());
+    bookmark_model_->AddURL(new_parent, new_parent->children().size(), base::UTF8ToUTF16(std::string("Archiving " + node->url().spec())), node->url());
 
     // Constructs the new thread and runs it. Does not block execution.
     //std::thread t1(&WebArchiveComboModel::UpdateArchiveNode, this, archived_node, node);
@@ -321,11 +330,7 @@ const BookmarkNode* WebArchiveComboModel::MaybeChangeParent(
     }
 
     DVLOG(0) << "Waited but file was empty.";*/
-
-    return archived_node;
   }
-
-  return NULL;
 
   //if (items_[selected_index].node->GetTitle() != "None") {
     /*const BookmarkNode* new_parent = GetNodeAt(selected_index);

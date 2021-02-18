@@ -73,7 +73,7 @@ class WebArchiveComboModel : public ui::ComboboxModel,
 
   // If necessary this function moves |node| into the corresponding folder for
   // the given |selected_index|.
-  const bookmarks::BookmarkNode* MaybeChangeParent(const bookmarks::BookmarkNode* node,
+  void MaybeChangeParent(const bookmarks::BookmarkNode* node,
                          int selected_index);
 
  private:

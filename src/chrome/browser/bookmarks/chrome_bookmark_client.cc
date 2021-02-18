@@ -107,6 +107,8 @@ bool ChromeBookmarkClient::IsPermanentNodeVisibleWhenEmpty(
     case bookmarks::BookmarkNode::BOOKMARK_BAR:
     case bookmarks::BookmarkNode::NO_ARCHIVE:
     case bookmarks::BookmarkNode::ARCHIVE_TODAY:
+    case bookmarks::BookmarkNode::INTERNET_ARCHIVE:
+    case bookmarks::BookmarkNode::MEGALODON:
     case bookmarks::BookmarkNode::OTHER_NODE:
       return !is_mobile;
     case bookmarks::BookmarkNode::MOBILE:

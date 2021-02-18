@@ -50,6 +50,8 @@ class BookmarkCodec {
       const BookmarkNode* bookmark_bar_node,
       const BookmarkNode* no_archive_node,
       const BookmarkNode* archive_today_node,
+      const BookmarkNode* internet_archive_node,
+      const BookmarkNode* megalodon_node,
       const BookmarkNode* other_folder_node,
       const BookmarkNode* mobile_folder_node,
       const BookmarkNode::MetaInfoMap* model_meta_info_map,
@@ -64,6 +66,8 @@ class BookmarkCodec {
               BookmarkNode* bb_node,
               BookmarkNode* no_archive_node,
               BookmarkNode* archive_today_node,
+              BookmarkNode* internet_archive_node,
+              BookmarkNode* megalodon_node,
               BookmarkNode* other_folder_node,
               BookmarkNode* mobile_folder_node,
               int64_t* max_node_id,
@@ -97,6 +101,8 @@ class BookmarkCodec {
   static const char kRootFolderNameKey[];
   static const char kNoArchiveNameKey[];
   static const char kArchiveTodayNameKey[];
+  static const char kInternetArchiveNameKey[];
+  static const char kMegalodonNameKey[];
   static const char kOtherBookmarkFolderNameKey[];
   static const char kMobileBookmarkFolderNameKey[];
   static const char kVersionKey[];
@@ -130,6 +136,8 @@ class BookmarkCodec {
   bool DecodeHelper(BookmarkNode* bb_node,
                     BookmarkNode* no_archive_node,
                     BookmarkNode* archive_today_node,
+                    BookmarkNode* internet_archive_node,
+                    BookmarkNode* megalodon_node,
                     BookmarkNode* other_folder_node,
                     BookmarkNode* mobile_folder_node,
                     const base::Value& value,
@@ -143,6 +151,8 @@ class BookmarkCodec {
   void ReassignIDs(BookmarkNode* bb_node,
                    BookmarkNode* no_archive_node,
                    BookmarkNode* archive_today_node,
+                   BookmarkNode* internet_archive_node,
+                   BookmarkNode* megalodon_node,
                    BookmarkNode* other_node,
                    BookmarkNode* mobile_node);
 

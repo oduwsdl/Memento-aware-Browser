@@ -30,6 +30,8 @@ const char BookmarkCodec::kRootsKey[] = "roots";
 const char BookmarkCodec::kRootFolderNameKey[] = "bookmark_bar";
 const char BookmarkCodec::kNoArchiveNameKey[] = "no_archive";
 const char BookmarkCodec::kArchiveTodayNameKey[] = "archive_today";
+const char BookmarkCodec::kInternetArchiveNameKey[] = "internet_archive";
+const char BookmarkCodec::kMegalodonNameKey[] = "megalodon";
 const char BookmarkCodec::kOtherBookmarkFolderNameKey[] = "other";
 // The value is left as 'synced' for historical reasons.
 const char BookmarkCodec::kMobileBookmarkFolderNameKey[] = "synced";
@@ -63,7 +65,7 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
     BookmarkModel* model,
     const std::string& sync_metadata_str) {
   return Encode(model->bookmark_bar_node(), model->no_archive_node(), 
-                model->archive_today_node(), model->other_node(),
+                model->archive_today_node(), model->internet_archive_node(), model->megalodon_node(), model->other_node(),
                 model->mobile_node(), model->root_node()->GetMetaInfoMap(),
                 sync_metadata_str);
 }
@@ -72,6 +74,8 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
     const BookmarkNode* bookmark_bar_node,
     const BookmarkNode* no_archive_node,
     const BookmarkNode* archive_today_node,
+    const BookmarkNode* internet_archive_node,
+    const BookmarkNode* megalodon_node,
     const BookmarkNode* other_folder_node,
     const BookmarkNode* mobile_folder_node,
     const BookmarkNode::MetaInfoMap* model_meta_info_map,
@@ -83,6 +87,8 @@ std::unique_ptr<base::Value> BookmarkCodec::Encode(
   roots->Set(kRootFolderNameKey, EncodeNode(bookmark_bar_node));
   roots->Set(kNoArchiveNameKey, EncodeNode(no_archive_node));
   roots->Set(kArchiveTodayNameKey, EncodeNode(archive_today_node));
+  roots->Set(kInternetArchiveNameKey, EncodeNode(internet_archive_node));
+  roots->Set(kMegalodonNameKey, EncodeNode(megalodon_node));
   roots->Set(kOtherBookmarkFolderNameKey, EncodeNode(other_folder_node));
   roots->Set(kMobileBookmarkFolderNameKey, EncodeNode(mobile_folder_node));
   if (model_meta_info_map)
@@ -108,6 +114,8 @@ bool BookmarkCodec::Decode(const base::Value& value,
                            BookmarkNode* bb_node,
                            BookmarkNode* no_archive_node,
                            BookmarkNode* archive_today_node,
+                           BookmarkNode* internet_archive_node,
+                           BookmarkNode* megalodon_node,
                            BookmarkNode* other_folder_node,
                            BookmarkNode* mobile_folder_node,
                            int64_t* max_id,
@@ -125,7 +133,9 @@ bool BookmarkCodec::Decode(const base::Value& value,
   InitializeChecksum();
   bool success = DecodeHelper(bb_node, 
                               no_archive_node, 
-                              archive_today_node, 
+                              archive_today_node,
+                              internet_archive_node, 
+                              megalodon_node,
                               other_folder_node, 
                               mobile_folder_node,
                               value, 
@@ -134,7 +144,7 @@ bool BookmarkCodec::Decode(const base::Value& value,
   // If either the checksums differ or some IDs were missing/not unique,
   // reassign IDs.
   if (!ids_valid_ || computed_checksum() != stored_checksum())
-    ReassignIDs(bb_node, no_archive_node, archive_today_node, other_folder_node, mobile_folder_node);
+    ReassignIDs(bb_node, no_archive_node, archive_today_node, internet_archive_node, megalodon_node, other_folder_node, mobile_folder_node);
   *max_id = maximum_id_ + 1;
   return success;
 }
@@ -185,6 +195,8 @@ std::unique_ptr<base::Value> BookmarkCodec::EncodeMetaInfo(
 bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
                                  BookmarkNode* no_archive_node,
                                  BookmarkNode* archive_today_node,
+                                 BookmarkNode* internet_archive_node,
+                                 BookmarkNode* megalodon_node,
                                  BookmarkNode* other_folder_node,
                                  BookmarkNode* mobile_folder_node,
                                  const base::Value& value,
@@ -221,10 +233,14 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
   const base::Value* root_folder_value;
   const base::Value* no_archive_value;
   const base::Value* archive_today_value;
+  const base::Value* internet_archive_value;
+  const base::Value* megalodon_value;
   const base::Value* other_folder_value = nullptr;
   const base::DictionaryValue* root_folder_d_value = nullptr;
   const base::DictionaryValue* no_archive_d_value = nullptr;
   const base::DictionaryValue* archive_today_d_value = nullptr;
+  const base::DictionaryValue* internet_archive_d_value = nullptr;
+  const base::DictionaryValue* megalodon_d_value = nullptr;
   const base::DictionaryValue* other_folder_d_value = nullptr;
   if (!roots_d_value->Get(kRootFolderNameKey, &root_folder_value) ||
       !root_folder_value->GetAsDictionary(&root_folder_d_value) ||
@@ -233,13 +249,19 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
       !roots_d_value->Get(kNoArchiveNameKey, &no_archive_value) ||
       !no_archive_value->GetAsDictionary(&no_archive_d_value) ||
       !roots_d_value->Get(kArchiveTodayNameKey, &archive_today_value) ||
-      !archive_today_value->GetAsDictionary(&archive_today_d_value)) {
+      !archive_today_value->GetAsDictionary(&archive_today_d_value) ||
+      !roots_d_value->Get(kInternetArchiveNameKey, &internet_archive_value) ||
+      !internet_archive_value->GetAsDictionary(&internet_archive_d_value) ||
+      !roots_d_value->Get(kMegalodonNameKey, &megalodon_value) ||
+      !megalodon_value->GetAsDictionary(&megalodon_d_value)) {
     return false;  // Invalid type for root folder and/or other
                    // folder.
   }
   DecodeNode(*root_folder_d_value, nullptr, bb_node);
   DecodeNode(*no_archive_d_value, nullptr, no_archive_node);
   DecodeNode(*archive_today_d_value, nullptr, archive_today_node);
+  DecodeNode(*internet_archive_d_value, nullptr, internet_archive_node);
+  DecodeNode(*megalodon_d_value, nullptr, megalodon_node);
   DecodeNode(*other_folder_d_value, nullptr, other_folder_node);
 
   // Fail silently if we can't deserialize mobile bookmarks. We can't require
@@ -274,6 +296,8 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
   bb_node->SetTitle(l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_FOLDER_NAME));
   no_archive_node->SetTitle(l10n_util::GetStringUTF16(IDS_NO_ARCHIVE_SELECTION));
   archive_today_node->SetTitle(l10n_util::GetStringUTF16(IDS_ARCHIVE_TODAY_SELECTION));
+  internet_archive_node->SetTitle(l10n_util::GetStringUTF16(IDS_INTERNET_ARCHIVE_SELECTION));
+  megalodon_node->SetTitle(l10n_util::GetStringUTF16(IDS_MEGALODON_SELECTION));
   other_folder_node->SetTitle(
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_OTHER_FOLDER_NAME));
   mobile_folder_node->SetTitle(
@@ -500,12 +524,16 @@ void BookmarkCodec::DecodeMetaInfoHelper(
 void BookmarkCodec::ReassignIDs(BookmarkNode* bb_node,
                                 BookmarkNode* no_archive_node,
                                 BookmarkNode* archive_today_node,
+                                BookmarkNode* internet_archive_node,
+                                BookmarkNode* megalodon_node,
                                 BookmarkNode* other_node,
                                 BookmarkNode* mobile_node) {
   maximum_id_ = 0;
   ReassignIDsHelper(bb_node);
   ReassignIDsHelper(no_archive_node);
   ReassignIDsHelper(archive_today_node);
+  ReassignIDsHelper(internet_archive_node);
+  ReassignIDsHelper(megalodon_node);
   ReassignIDsHelper(other_node);
   ReassignIDsHelper(mobile_node);
   ids_reassigned_ = true;

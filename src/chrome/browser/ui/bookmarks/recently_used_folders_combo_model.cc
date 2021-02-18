@@ -69,6 +69,8 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
   RemoveNode(model->bookmark_bar_node());
   RemoveNode(model->no_archive_node());
   RemoveNode(model->archive_today_node());
+  RemoveNode(model->megalodon_node());
+  RemoveNode(model->internet_archive_node());
   RemoveNode(model->mobile_node());
   RemoveNode(model->other_node());
   RemoveNode(node->parent());

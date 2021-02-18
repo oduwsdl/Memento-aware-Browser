@@ -15,6 +15,16 @@
       Archive.today
     </message>
   </if>
+  <if expr="not is_ios and not use_titlecase">
+    <message name="IDS_INTERNET_ARCHIVE_SELECTION" desc="Name shown in the tree for the Internet Archive selection.">
+      Internet Archive
+    </message>
+  </if>
+  <if expr="not is_ios and not use_titlecase">
+    <message name="IDS_MEGALODON_SELECTION" desc="Name shown in the tree for the Archive.today selection.">
+      Megalodon
+    </message>
+  </if>
   <if expr="not is_ios and use_titlecase">
     <message name="IDS_BOOKMARK_BAR_FOLDER_NAME" desc="In Title Case: Name shown in the tree for the Bookmarks Bar folder.">
       Bookmarks Bar
