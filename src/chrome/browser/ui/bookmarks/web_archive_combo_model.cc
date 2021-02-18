@@ -286,6 +286,7 @@ void WebArchiveComboModel::MaybeChangeParent(
 
     #if defined(OS_WIN)
     std::string location = get_current_dir();
+    std::string command = ("Start-Process -NoNewWindow python3 " + location + "/archive.py " + archive + " " + node->url().spec());
     #else
     std::string location = get_current_dir();
     std::string command = ("python3 " + location + "/archive.py " + archive + " " + node->url().spec() + " " + "&");

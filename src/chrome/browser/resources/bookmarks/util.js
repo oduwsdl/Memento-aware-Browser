@@ -71,6 +71,10 @@ export function normalizeNodes(rootNode) {
   delete nodeMap[2];
   // Remove the Archive Today folder
   delete nodeMap[3];
+  // Remove the Internet Archive folder
+  delete nodeMap[4];
+  // Remove the Megalodon folder
+  delete nodeMap[5];
 
   return nodeMap;
 }
