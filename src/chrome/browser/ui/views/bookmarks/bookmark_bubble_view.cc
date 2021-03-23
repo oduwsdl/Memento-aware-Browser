@@ -267,44 +267,12 @@ void BookmarkBubbleView::ShowEditor() {
   ApplyEdits();
   GetWidget()->Close();
 
-  if (node && native_parent)
+  if (node && native_parent) {
+    DVLOG(0) << "node and parent";
     BookmarkEditor::Show(native_parent, profile,
                          BookmarkEditor::EditDetails::EditNode(node),
                          BookmarkEditor::SHOW_TREE);
-}
-
-// The function we want to execute on the new thread.
-void BookmarkBubbleView::UpdateArchiveNode(const BookmarkNode* archived_node, const BookmarkNode* node)
-{
-    DVLOG(0) << "Thread waiting.";
-    clock_t wait_nanoseconds = (clock_t) 240000000;
-    clock_t start_time = clock();
-    while( clock() <= start_time + wait_nanoseconds ) {
-
-    }
-
-    std::string testing;
-    std::ifstream archive_file;
-    archive_file.open("/home/abigail/MemAwareBrowser/src/chrome/browser/ui/bookmarks/archive_url.txt");
-
-    if (!(archive_file.peek() == std::ifstream::traits_type::eof())) {
-
-      archive_file >> testing;
-
-      DVLOG(0) << testing;
-      DVLOG(0) << "I waited!";
-
-      BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
-
-      ApplyEdits();
-
-      model->SetTitle(archived_node, base::UTF8ToUTF16(std::string("new title")));
-
-    } else {
-      DVLOG(0) << "Waited but file was empty.";
-    }
-
-
+  }
 }
 
 void BookmarkBubbleView::ApplyEdits() {
@@ -324,10 +292,6 @@ void BookmarkBubbleView::ApplyEdits() {
                                       parent_combobox_->GetSelectedIndex());
     archive_model()->MaybeChangeParent(node,
                                        parent_combobox2_->GetSelectedIndex());
-
-
-
-
   }
 }
 

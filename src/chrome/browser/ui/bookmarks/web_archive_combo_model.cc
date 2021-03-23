@@ -5,8 +5,10 @@
 #include "chrome/browser/ui/bookmarks/web_archive_combo_model.h"
 
 #include <stddef.h>
-#include <fstream>
-#include <thread>
+
+#include <ctime>
+#include <map>
+#include <string>
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/metrics/user_metrics.h"
@@ -68,32 +70,12 @@ WebArchiveComboModel::WebArchiveComboModel(
   DVLOG(0) << "Getting most recently modified folders.";
   DVLOG(0) << "-------------------------------------";
 
-  //for (size_t i = 0; i < nodes.size(); ++i)
-    //items_.push_back(Item(nodes[i], Item::TYPE_NODE));
-
-  // We special case the placement of these, so remove them from the list, then
-  // fix up the order.
-  /*RemoveNode(model->bookmark_bar_node());
-  RemoveNode(model->archive_today_node());
-  RemoveNode(model->mobile_node());
-  RemoveNode(model->other_node());
-  RemoveNode(node->parent());*/
-
-  // Make the parent the first item, unless it's a permanent node, which is
-  // added below.
-  //if (!model->is_permanent_node(node->parent()))
-    //items_.insert(items_.begin(), Item(node->parent(), Item::TYPE_NODE));
-
-  // Make sure we only have kMaxMRUFolders in the first chunk.
-  //if (items_.size() > kMaxMRUFolders)
-    //items_.erase(items_.begin() + kMaxMRUFolders, items_.end());
-
   // And put the bookmark bar and other nodes at the end of the list.
   //items_.push_back(Item(model->bookmark_bar_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->no_archive_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->archive_today_node(), Item::TYPE_NODE));
-  items_.push_back(Item(model->megalodon_node(), Item::TYPE_NODE));
   items_.push_back(Item(model->internet_archive_node(), Item::TYPE_NODE));
+  items_.push_back(Item(model->megalodon_node(), Item::TYPE_NODE));
 
   DVLOG(0) << "WebArchive node_parent_index_ ---- " << node_parent_index_;
 }
@@ -235,30 +217,6 @@ std::string get_current_dir() {
 void WebArchiveComboModel::UpdateArchiveNode(const BookmarkNode* archived_node, 
                        const BookmarkNode* node)
 {
-    DVLOG(0) << "Thread waiting.";
-    clock_t wait_nanoseconds = (clock_t) 240000000;
-    clock_t start_time = clock();
-    while( clock() <= start_time + wait_nanoseconds ) {
-
-    }
-
-    std::string testing;
-    std::ifstream archive_file;
-    archive_file.open("/home/abigail/MemAwareBrowser/src/chrome/browser/ui/bookmarks/archive_url.txt");
-
-    if (!(archive_file.peek() == std::ifstream::traits_type::eof())) {
-
-      archive_file >> testing;
-
-      DVLOG(0) << testing;
-      DVLOG(0) << "I waited!";
-
-      bookmark_model_->SetTitle(archived_node, base::UTF8ToUTF16(std::string("new title")));
-
-    } else {
-      DVLOG(0) << "Waited but file was empty.";
-    }
-
 
 }
 
@@ -269,27 +227,63 @@ void WebArchiveComboModel::MaybeChangeParent(
   if (items_[selected_index].type != Item::TYPE_NODE)
     return;
 
-  DVLOG(0) << "-------------------------------";
-  DVLOG(0) << "Title of selected archive: " << items_[selected_index].node->GetTitle();
-  DVLOG(0) << "-------------------------------";
-  DVLOG(0) << get_current_dir() << std::endl;
+  /*std::time_t ct = std::time(0);
+  char* cc = std::put_time(std::gmtime(&ct), "%c %Z");*/
+
+  time_t curr_time;
+  curr_time = time(NULL);
+
+  tm *tm_gmt = gmtime(&curr_time);
+
+  std::string year = std::to_string(tm_gmt->tm_year + 1900);
+  std::string month = std::to_string(tm_gmt->tm_mon + 1);
+  std::string day = std::to_string(tm_gmt->tm_mday);
+
+  std::string hour = std::to_string(tm_gmt->tm_hour);
+  std::string minutes = std::to_string(tm_gmt->tm_min);
+  std::string seconds = std::to_string(tm_gmt->tm_sec);
+
+  if (month.length() == 1) { month = "0" + month; }
+  if (day.length() == 1) { day = "0" + day; }
+  if (hour.length() == 1) { hour = "0" + hour; }
+  if (minutes.length() == 1) { minutes = "0" + minutes; }
+  if (seconds.length() == 1) { seconds = "0" + seconds; }
+
+  DVLOG(0) << year;
+  DVLOG(0) << month;
+  DVLOG(0) << day;
+  DVLOG(0) << hour;
+  DVLOG(0) << minutes;
+  DVLOG(0) << seconds;
+
+  std::string datestring = year + month + day + hour + minutes + seconds;
 
   if (items_[selected_index].node->GetTitle() != base::UTF8ToUTF16(std::string("None"))) {
     //const BookmarkNode* new_parent = GetNodeAt(selected_index);
     std::string archive;
-    if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Internet Archive")))
+    std::string domain;
+    std::string archive_node_url;
+    if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Internet Archive"))) {
       archive = "\'Internet Archive\'";
-    else if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Archive.today")))
+      domain = "https://web.archive.org/web/";
+      archive_node_url = domain + datestring + std::string("\\" + node->url().spec());
+    }
+    else if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Archive.today"))) {
       archive = "Archive.Today";
-    else if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Megalodon")))
+      domain = "https://archive.is/";
+      archive_node_url = domain + datestring + std::string("\\" + node->url().spec());
+    }
+    else if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Megalodon"))) {
       archive = "Megalodon";
+      archive_node_url = node->url().spec();
+    }
 
     #if defined(OS_WIN)
     std::string location = get_current_dir();
     std::string command = ("Start-Process -NoNewWindow python3 " + location + "/archive.py " + archive + " " + node->url().spec());
     #else
     std::string location = get_current_dir();
-    std::string command = ("python3 " + location + "/archive.py " + archive + " " + node->url().spec() + " " + "&");
+    std::string command = ("python3 " + location + "/archive.py " + archive + " \'" + node->url().spec() + "\' " + "&");
     #endif
 
     if (node->parent()->GetTitle() != base::UTF8ToUTF16(node->url().spec())) {
@@ -304,42 +298,10 @@ void WebArchiveComboModel::MaybeChangeParent(
     
     const BookmarkNode* new_parent = node->parent();
 
+    GURL url_to_archive = GURL(base::UTF8ToUTF16(archive_node_url));
 
-    bookmark_model_->AddURL(new_parent, new_parent->children().size(), base::UTF8ToUTF16(std::string("Archiving " + node->url().spec())), node->url());
-
-    // Constructs the new thread and runs it. Does not block execution.
-    //std::thread t1(&WebArchiveComboModel::UpdateArchiveNode, this, archived_node, node);
-    //t1.detach();
-
-    /*clock_t wait_nanoseconds = (clock_t) 180000000;
-    clock_t start_time = clock();
-    while( clock() <= start_time + wait_nanoseconds ) {
-      DVLOG(0) << "wait...";
-    }
-
-    std::string testing;
-    std::ifstream archive_file;
-    archive_file.open("/home/abigail/MemAwareBrowser/src/chrome/browser/ui/bookmarks/archive_url.txt");
-
-    if (!(archive_file.peek() == std::ifstream::traits_type::eof())) {
-
-      archive_file >> testing;
-
-      DVLOG(0) << testing;
-      DVLOG(0) << "I waited!";
-
-    }
-
-    DVLOG(0) << "Waited but file was empty.";*/
+    bookmark_model_->AddURL(new_parent, new_parent->children().size(), base::UTF8ToUTF16(std::string("Archiving " + node->url().spec())), url_to_archive);
   }
-
-  //if (items_[selected_index].node->GetTitle() != "None") {
-    /*const BookmarkNode* new_parent = GetNodeAt(selected_index);
-    if (new_parent != archived_node->parent()) {
-      base::RecordAction(base::UserMetricsAction("BookmarkBubble_ChangeParent"));
-      bookmark_model_->Move(archived_node, new_parent, new_parent->children().size());
-    }*/
-  //}
 }
 
 const BookmarkNode* WebArchiveComboModel::GetNodeAt(int index) {

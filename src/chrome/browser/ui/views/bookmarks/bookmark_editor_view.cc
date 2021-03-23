@@ -488,15 +488,16 @@ void BookmarkEditorView::ExpandAndSelect() {
 
 std::unique_ptr<BookmarkEditorView::EditorNode>
 BookmarkEditorView::CreateRootNode() {
+  DVLOG(0) << "CreateRootNode";
   std::unique_ptr<EditorNode> root_node =
       std::make_unique<EditorNode>(base::string16(), 0);
   const BookmarkNode* bb_root_node = bb_model_->root_node();
   CreateNodes(bb_root_node, root_node.get());
   DCHECK_GE(root_node->children().size(), 2u);
-  DCHECK_LE(root_node->children().size(), 4u);
+  DCHECK_LE(root_node->children().size(), 7u);
   DCHECK_EQ(BookmarkNode::BOOKMARK_BAR, bb_root_node->children()[0]->type());
-  DCHECK_EQ(BookmarkNode::OTHER_NODE, bb_root_node->children()[3]->type());
-  if (root_node->children().size() >= 5)
+  DCHECK_EQ(BookmarkNode::OTHER_NODE, bb_root_node->children()[5]->type());
+  if (root_node->children().size() >= 8)
     DCHECK_EQ(BookmarkNode::MOBILE, bb_root_node->children()[2]->type());
   return root_node;
 }
