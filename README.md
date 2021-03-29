@@ -29,6 +29,12 @@ The browser detects when an archived page is displaying a frame that is not arch
 
 ![](docs/images/memento-plus-live-content.png?raw=true)
 
+### Bookmark as archive
+
+When the user clicks the star icon to bookmark a page, the browser presents an edit bookmark popup that includes an archive drop down. The user can select an archive from this drop down and the browser will start a background process that utilizes [Archive Now](https://github.com/oduwsdl/archivenow) to archive the bookmarked page.
+
+![](docs/images/bookmark-as-archive.png?raw=true)
+
 ## Build and Run
 Build instructions for the Memento-aware Browser differ slightly from the [Chromium build instructions](https://www.chromium.org/developers/how-tos/get-the-code).
 Chromium uses a package of scripts called [depot_tools](https://dev.chromium.org/developers/how-tos/depottools). To build and run the Memento-aware Browser, you must [install depot_tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).
