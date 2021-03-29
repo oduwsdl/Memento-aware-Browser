@@ -4,13 +4,13 @@ A [Chromium](https://www.chromium.org/Home) based Memento-aware web Browser.
 
 ## Features
 
-A video demonstrating the current features can be found here: [https://youtu.be/s_xuSd6Qs98](https://youtu.be/s_xuSd6Qs98)
+A video demonstrating some of the features can be found here: [https://youtu.be/s_xuSd6Qs98](https://youtu.be/s_xuSd6Qs98)
 
 ### Alert the user of archived webpages
 
 The browser detects when a page returns the Memento-Datetime header and alerts the user by adding a Memento icon next to the HTTPS lock icon. The user may click the Memento icon to view the date the page was archived.
 
-<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/memento-popup.gif" width="500"></p>
+![](docs/GIFs/memento-popup.gif?raw=true)
 
 ### Alert the user of mixed live web and archived content
 
@@ -21,7 +21,13 @@ There are two scenarios where live web and archived content are mixed within the
   
 The browser detects both of these instances and alerts the user that there is a mix of live web content and archived content.
 
-<p align="center"><img src="https://github.com/a-mabe/Memento-aware-Browser/blob/master/docs/GIFs/mixed-archival-content.gif" width="500"></p>
+![](docs/GIFs/mixed-archival-content.gif?raw=true)
+
+### Alert the user of archived webpages that display live content
+
+The browser detects when an archived page is displaying a frame that is not archived.
+
+![](docs/images/memento-plus-live-content.png?raw=true)
 
 ## Build and Run
 Build instructions for the Memento-aware Browser differ slightly from the [Chromium build instructions](https://www.chromium.org/developers/how-tos/get-the-code).
@@ -32,6 +38,10 @@ $ git config http.postBuffer 524288000
 $ git clone https://github.com/a-mabe/Memento-aware-Browser.git
 $ cd Memento-aware-Browser/src
 ```
+
+### Installing Archive Now
+
+The Memento-aware Browser uses [Archive Now](https://github.com/oduwsdl/archivenow) for the bookmark as archive feature. In order to use this feature, Archive Now and its dependencies must be installed.
 
 ### Linux
 After you have installed depot_tools and cloned the repository, assuming you are using Ubuntu, run [install-build-deps.sh](https://chromium.googlesource.com/chromium/src/+/master/build/install-build-deps.sh).
