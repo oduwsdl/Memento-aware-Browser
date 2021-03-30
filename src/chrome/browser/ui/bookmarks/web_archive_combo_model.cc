@@ -264,7 +264,7 @@ void WebArchiveComboModel::MaybeChangeParent(
     std::string domain;
     std::string archive_node_url;
     if (items_[selected_index].node->GetTitle() == base::UTF8ToUTF16(std::string("Internet Archive"))) {
-      archive = "\'Internet Archive\'";
+      archive = "IA";
       domain = "https://web.archive.org/web/";
       archive_node_url = domain + datestring + std::string("\\" + node->url().spec());
     }
@@ -280,7 +280,7 @@ void WebArchiveComboModel::MaybeChangeParent(
 
     #if defined(OS_WIN)
     std::string location = get_current_dir();
-    std::string command = ("Start-Process -NoNewWindow python3 " + location + "/archive.py " + archive + " " + node->url().spec());
+    std::string command = ("Start-Process -NoNewWindow python3 " + location + "\\archive.py " + archive + " " + node->url().spec());
     #else
     std::string location = get_current_dir();
     std::string command = ("python3 " + location + "/archive.py " + archive + " \'" + node->url().spec() + "\' " + "&");
