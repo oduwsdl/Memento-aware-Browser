@@ -12,7 +12,7 @@ def main():
 
 		if archive == "Archive.Today":
 			handler = "is"
-		elif archive == "Internet Archive":
+		elif archive == "IA":
 			handler = "ia"
 		elif archive == "Megalodon":
 			handler = "mg"
