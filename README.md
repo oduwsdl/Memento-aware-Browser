@@ -41,7 +41,7 @@ Chromium uses a package of scripts called [depot_tools](https://dev.chromium.org
 After installing depot_tools, you can clone the repository and change into the src directory.
 ```
 $ git config http.postBuffer 524288000
-$ git clone https://github.com/a-mabe/Memento-aware-Browser.git
+$ git clone https://github.com/oduwsdl/Memento-aware-Browser.git
 $ cd Memento-aware-Browser/src
 ```
 
