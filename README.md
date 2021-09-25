@@ -4,7 +4,10 @@ A [Chromium](https://www.chromium.org/Home) based Memento-aware web Browser.
 
 ## Features
 
-A video demonstrating some of the features can be found here: [https://youtu.be/s_xuSd6Qs98](https://youtu.be/s_xuSd6Qs98)
+Videos demonstrating some of the features
+* Memento detection: <https://youtu.be/R8Hb3ATRwgk> (0:53)
+* Bookmark as archive: <https://youtu.be/qGSyaXJe2jQ> (0:48)
+* More examples of memento detection: <https://youtu.be/s_xuSd6Qs98> (4:55)
 
 ### Alert the user of archived webpages
 
