@@ -105,3 +105,11 @@ Finally, run the browser:
 ```
 $ out/Default/Chromium.app/Contents/MacOS/Chromium
 ```
+
+## Reference
+
+Please use the following reference for this work:
+
+Abigail Mabe, Michael L. Nelson, and Michele C. Weigle, "Extending Chromium: Memento-aware Browser," In *Proceedings of ACM/IEEE Joint Conference on Digital Libraries (JCDL)*. September 2021, poster.  
+
+(extended version available at https://arxiv.org/abs/2104.13361)
